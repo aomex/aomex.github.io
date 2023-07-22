@@ -1,0 +1,1 @@
+const t=JSON.parse('{"key":"v-09b31137","path":"/guide/why-not.html","title":"为什么不用koa","lang":"zh-CN","frontmatter":{},"headers":[],"git":{"updatedTime":1690025124000,"contributors":[{"name":"geekact","email":"fanwenhua1990@gmail.com","commits":1}]},"filePathRelative":"guide/why-not.md"}');export{t as data};
