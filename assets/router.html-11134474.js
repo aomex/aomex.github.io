@@ -1,1 +1,0 @@
-const e=JSON.parse('{"key":"v-248e34dc","path":"/web/router.html","title":"路由","lang":"zh-CN","frontmatter":{},"headers":[],"git":{"updatedTime":1690027237000,"contributors":[{"name":"geekact","email":"fanwenhua1990@gmail.com","commits":1}]},"filePathRelative":"web/router.md"}');export{e as data};
