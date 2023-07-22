@@ -1,1 +1,0 @@
-const a=JSON.parse('{"key":"v-8daa1a0e","path":"/","title":"Aomex","lang":"zh-CN","frontmatter":{},"headers":[],"git":{"updatedTime":1690025124000,"contributors":[{"name":"geekact","email":"fanwenhua1990@gmail.com","commits":1}]},"filePathRelative":"README.md"}');export{a as data};

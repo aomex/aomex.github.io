@@ -1,1 +1,0 @@
-import{_ as a,o as t,c as o,a as e,b as c}from"./app-a5bf9053.js";const n={},r=e("h1",{id:"aomex",tabindex:"-1"},[e("a",{class:"header-anchor",href:"#aomex","aria-hidden":"true"},"#"),c(" Aomex")],-1),s=[r];function _(d,i){return t(),o("div",null,s)}const l=a(n,[["render",_],["__file","index.html.vue"]]);export{l as default};
