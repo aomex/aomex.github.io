@@ -23,7 +23,7 @@ export default defineUserConfig({
         children: [
           {
             text: '是什么',
-            link: '/guide/index.html',
+            link: '/index.html',
           },
           {
             text: '为什么不是',
