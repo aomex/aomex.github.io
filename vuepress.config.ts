@@ -97,6 +97,7 @@ export default defineUserConfig({
           },
           {
             text: '模拟命令行',
+            link: '/console/mock.html',
           },
         ],
       },
