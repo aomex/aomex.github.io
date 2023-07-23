@@ -10,8 +10,8 @@ export default defineUserConfig({
     docsRepo: 'aomex/aomex-docs',
     editLink: true,
     editLinkText: '编辑这页文档',
-    lastUpdated: true,
-    lastUpdatedText: '最后编辑',
+    lastUpdated: false,
+    contributors: false,
     sidebarDepth: 3,
 
     // 侧边栏数组
