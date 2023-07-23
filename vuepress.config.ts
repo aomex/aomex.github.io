@@ -29,6 +29,9 @@ export default defineUserConfig({
             text: '为什么不是',
             link: '/guide/why-not.html',
           },
+          {
+            text: '快速开始',
+          },
         ],
       },
       {
@@ -68,6 +71,10 @@ export default defineUserConfig({
           {
             text: '上传文件',
             link: '/web/upload.html',
+          },
+          {
+            text: '链条的作用',
+            link: '/web/chain.html',
           },
         ],
       },
