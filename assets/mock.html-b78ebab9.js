@@ -1,0 +1,1 @@
+const e=JSON.parse('{"key":"v-482bd4fe","path":"/console/mock.html","title":"模拟命令行","lang":"zh-CN","frontmatter":{},"headers":[],"git":{"updatedTime":1690124354000},"filePathRelative":"console/mock.md"}');export{e as data};
