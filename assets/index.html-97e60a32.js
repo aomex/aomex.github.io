@@ -1,0 +1,1 @@
+const e=JSON.parse('{"key":"v-9662a09e","path":"/console/","title":"创建入口","lang":"zh-CN","frontmatter":{},"headers":[{"level":2,"title":"安装","slug":"安装","link":"#安装","children":[]},{"level":2,"title":"初始化","slug":"初始化","link":"#初始化","children":[]}],"git":{"updatedTime":1690096775000},"filePathRelative":"console/index.md"}');export{e as data};
