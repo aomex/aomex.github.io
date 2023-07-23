@@ -1,0 +1,1 @@
+const a=JSON.parse('{"key":"v-19b0af8c","path":"/web/chain.html","title":"链条的作用","lang":"zh-CN","frontmatter":{},"headers":[],"git":{"updatedTime":1690081092000,"contributors":[{"name":"geekact","email":"fanwenhua1990@gmail.com","commits":1}]},"filePathRelative":"web/chain.md"}');export{a as data};
