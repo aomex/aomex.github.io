@@ -12,7 +12,7 @@
 ## 安装
 
 [![npm](https://img.shields.io/npm/v/@aomex/console?logo=npm&label=@aomex/console)](https://www.npmjs.com/package/@aomex/console)
-[![npm](https://img.shields.io/npm/v/@aomex/console?logo=npm&label=@aomex/commander)](https://www.npmjs.com/package/@aomex/commander)
+[![npm](https://img.shields.io/npm/v/@aomex/commander?logo=npm&label=@aomex/commander)](https://www.npmjs.com/package/@aomex/commander)
 
 ```bash:no-line-numbers
 pnpm add @aomex/core @aomex/console @aomex/commander
