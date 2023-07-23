@@ -1,0 +1,1 @@
+const e=JSON.parse('{"key":"v-3f856492","path":"/console/commander.html","title":"创建指令","lang":"zh-CN","frontmatter":{},"headers":[],"git":{"updatedTime":1690096493000},"filePathRelative":"console/commander.md"}');export{e as data};

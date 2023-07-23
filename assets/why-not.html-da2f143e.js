@@ -1,1 +1,0 @@
-const t=JSON.parse('{"key":"v-09b31137","path":"/guide/why-not.html","title":"为什么不用koa","lang":"zh-CN","frontmatter":{},"headers":[],"git":{},"filePathRelative":"guide/why-not.md"}');export{t as data};
