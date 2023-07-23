@@ -10,7 +10,8 @@ export default defineUserConfig({
     docsRepo: 'aomex/aomex-docs',
     editLink: true,
     editLinkText: '编辑这页文档',
-    lastUpdated: false,
+    lastUpdated: true,
+    lastUpdatedText: '最后更新',
     contributors: false,
     sidebarDepth: 3,
 
@@ -81,11 +82,71 @@ export default defineUserConfig({
       {
         text: '终端应用',
         collapsible: true,
+        children: [
+          {
+            text: '创建入口',
+            link: '/console/index.html',
+          },
+          {
+            text: '创建指令',
+            link: '/console/commander.html',
+          },
+          {
+            text: '接收参数',
+            link: '/console/options.html',
+          },
+          {
+            text: '模拟命令行',
+          },
+        ],
       },
       {
         text: '官方插件',
         collapsible: true,
-        children: [],
+        children: [
+          {
+            text: '压缩内容 compress',
+          },
+          {
+            text: '跨域 cors',
+          },
+          {
+            text: '定时任务 cron',
+          },
+          {
+            text: 'etag',
+          },
+          {
+            text: '报头安全 helmet',
+          },
+          {
+            text: '令牌 JWT',
+          },
+          {
+            text: '日志 logger',
+          },
+          {
+            text: '生成文档 openapi',
+          },
+          {
+            text: '美化输出 pretty-json',
+          },
+          {
+            text: '数据模型层 prisma-model',
+          },
+          {
+            text: '限速 rate-limit',
+          },
+          {
+            text: '计算响应时间 response-time',
+          },
+          {
+            text: '服务层 service',
+          },
+          {
+            text: '静态文件 static',
+          },
+        ],
       },
     ],
   }),
