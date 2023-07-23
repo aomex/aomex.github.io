@@ -1,0 +1,1 @@
+const e=JSON.parse('{"key":"v-8daa1a0e","path":"/","title":"Aomex","lang":"zh-CN","frontmatter":{},"headers":[],"git":{"updatedTime":1690118374000},"filePathRelative":"README.md"}');export{e as data};
