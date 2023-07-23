@@ -1,4 +1,4 @@
-# 是什么
+# Aomex <!-- 被解析为 index.html 的 title -->
 
 aomex是一个流畅的现代化node.js框架，拥有一流的TypeScript类型支持，能同时满足`接口`、`静态文件服务`、`命令行`以及`定时任务`等功能。
 
