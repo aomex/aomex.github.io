@@ -9,7 +9,7 @@ export default defineUserConfig({
   plugins: [
     docsearchPlugin({
       appId: 'KTATXKGPDA',
-      apiKey: 'd32b010a1d9a1bf918dbc9599cbedfc9',
+      apiKey: 'e0abbeb47d518aaa5af5af838ab6dcdc',
       indexName: 'aomex-js',
       placeholder: '搜索文档',
     }),
