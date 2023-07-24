@@ -1,10 +1,19 @@
 import { defineUserConfig } from 'vuepress';
 import { defaultTheme } from '@vuepress/theme-default';
+import { docsearchPlugin } from '@vuepress/plugin-docsearch';
 
 export default defineUserConfig({
   lang: 'zh-CN',
   title: 'Aomex',
   description: '流畅的node.js框架',
+  plugins: [
+    docsearchPlugin({
+      appId: 'KTATXKGPDA',
+      apiKey: 'd32b010a1d9a1bf918dbc9599cbedfc9',
+      indexName: 'aomex-js',
+      placeholder: '搜索文档',
+    }),
+  ],
   theme: defaultTheme({
     repo: 'aomex/aomex',
     docsRepo: 'aomex/aomex-docs',
