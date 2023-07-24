@@ -106,46 +106,47 @@ export default defineUserConfig({
         collapsible: true,
         children: [
           {
-            text: '压缩内容 compress',
+            text: '压缩内容',
+            link: '/plugins/compress.html',
           },
           {
-            text: '跨域 cors',
+            text: '跨域',
           },
           {
-            text: '定时任务 cron',
+            text: '定时任务',
           },
           {
-            text: 'etag',
+            text: 'ETag报头',
           },
           {
-            text: '报头安全 helmet',
+            text: '报头安全',
           },
           {
-            text: '令牌 JWT',
+            text: 'JWT令牌',
           },
           {
-            text: '日志 logger',
+            text: '请求日志',
           },
           {
-            text: '生成文档 openapi',
+            text: '生成openapi文档',
           },
           {
-            text: '美化输出 pretty-json',
+            text: '美化JSON输出',
           },
           {
-            text: '数据模型层 prisma-model',
+            text: 'Prisma数据模型层',
           },
           {
-            text: '限速 rate-limit',
+            text: '速率限制',
           },
           {
-            text: '计算响应时间 response-time',
+            text: '计算API响应时间',
           },
           {
-            text: '服务层 service',
+            text: '服务层',
           },
           {
-            text: '静态文件 static',
+            text: '请求静态文件',
           },
         ],
       },
