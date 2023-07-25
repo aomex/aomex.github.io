@@ -119,7 +119,8 @@ export default defineUserConfig({
             link: '/plugins/compress.html',
           },
           {
-            text: '跨域',
+            text: '跨域资源共享',
+            link: '/plugins/cors.html',
           },
           {
             text: '定时任务',
