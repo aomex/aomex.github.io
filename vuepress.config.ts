@@ -56,10 +56,6 @@ export default defineUserConfig({
             text: '中间件',
             link: '/core/middleware.html',
           },
-          {
-            text: '缓存',
-            link: '/core/caching.html',
-          },
         ],
       },
       {
@@ -114,6 +110,10 @@ export default defineUserConfig({
         text: '官方插件',
         collapsible: true,
         children: [
+          {
+            text: '缓存',
+            link: '/plugins/caching.html',
+          },
           {
             text: '压缩内容',
             link: '/plugins/compress.html',

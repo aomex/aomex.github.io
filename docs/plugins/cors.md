@@ -38,7 +38,7 @@ export const appChain = chain.web.mount(cors());
 
 **类型：** `string[]` | `string`<br>
 
-响应标头 Access-Control-Expose-Headers 允许服务器指示那些响应标头可以暴露给浏览器中运行的脚本。默认情况下，只暴露安全列表的响应标头：
+响应报头 Access-Control-Expose-Headers 允许服务器指示那些响应报头可以暴露给浏览器中运行的脚本。默认情况下，只暴露安全列表的响应报头：
 
 - Cache-Control
 - Content-Language
@@ -48,7 +48,7 @@ export const appChain = chain.web.mount(cors());
 - Last-Modified
 - Pragma
 
-我们可以传入更多额外的标头作为补充：
+我们可以传入更多额外的报头作为补充：
 
 ```typescript
 cors({
@@ -109,7 +109,7 @@ axios.create({
 **类型：** `boolean`<br>
 **默认值：** false<br>
 
-响应头部增加 `Cross-Origin-Opener-Policy` 和 `Cross-Origin-Embedder-Policy` 这两个个报头
+响应头部增加 `Cross-Origin-Opener-Policy` 和 `Cross-Origin-Embedder-Policy` 这两个报头
 
 ### privateNetworkAccess
 
