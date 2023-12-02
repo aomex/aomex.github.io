@@ -150,7 +150,8 @@ export default defineUserConfig({
             text: '速率限制',
           },
           {
-            text: '计算API响应时间',
+            text: '服务响应时间',
+            link: '/plugins/response-time.html',
           },
           {
             text: '服务层',
