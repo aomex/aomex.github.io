@@ -1,59 +1,92 @@
-# 链条的作用
+# 中间件链条
 
-当我们写的接口越来越多，挂载的中间件的逻辑也可能出现重复劳动的情况。如果某些中间件不是所有路由都能使用，那么它就不能被挂载到app上，此时你需要在各个路由挨个挂载。繁琐不说，还容易遗漏，后期维护修改也得小心翼翼
+一般情况下，我们会把一些全局性质的中间件挂载到**应用入口**而不是路由，比如 `cors` 和 `compress` 这两个中间件，基本上每次请求都需要使用。因此我们可能会这么做：
 
-| 接口  | 挂载中间件                           |
-| ----- | ------------------------------------ |
-| api-1 | gzip - logger - cors - etag - custom |
-| api-2 | gzip - logger - cors - etag - custom |
-| api-3 | gzip - logger - cors - etag - jwt    |
-| api-4 | gzip - logger - cors - etag - jwt    |
-| api-5 | gzip - logger                        |
+```typescript{2}
+const app = new WebApp({
+  mount: middleware.web.mount(cors).mount(compress),
+});
 
-针对这几个接口，我们发现它们之间使用了重复的中间件，现在改造成链条试一试
-
-```typescript
-// ./src/chain/web.chain
-import { chain } from '@aomex/core';
-
-export const appChain = chain.web.mount(gzip).mount(logger);
-export const publicChain = appChain.mount(cors).mount(etag);
-export const authChain = publicChain.mount(jwt);
-
-// ./src/index.ts
-const app = new WebApp();
-app.mount(appChain);
+app.listen();
 ```
 
-| 接口  | 挂载中间件                               | 挂载链条             |
-| ----- | ---------------------------------------- | -------------------- |
-| api-1 | ~~gzip - logger - cors - etag - custom~~ | publicChain - custom |
-| api-2 | ~~gzip - logger - cors - etag - custom~~ | publicChain - custom |
-| api-3 | ~~gzip - logger - cors - etag - jwt~~    | authChain            |
-| api-4 | ~~gzip - logger - cors - etag - jwt~~    | authChain            |
-| api-5 | ~~gzip - logger~~                        | -                    |
-
-清爽多了，公共的中间件就应该抽取出来。**全局公共的中间件就用链条挂载到app上，而局部公共的中间件就设置新的链条等待路由挂载**
+而`compress`中间件其实是带有一个可配置属性的`{ needCompress?: boolean }`，在路由层使用可能就会出现类型不安全的问题
 
 ```typescript
-export const router1 = new Router({
-  // 组内共享
-  mount: publicChain.mount(custom).mount(otherChain),
-});
-router1.get('api-1');
-router1.get('api-2', {
-  mount: [localMiddleware],
-});
+export const router = new Router();
 
-export const router2 = new Router({
-  // 组内共享
-  mount: authChain.mount(otherMiddleware),
+router.get('/', {
+  action: (ctx) => {
+    // 手动触发压缩
+    ctx.needCompress = true;
+             ⤷ Property 'needCompress' does not exist on type 'object'. // [!code error]
+    ctx.send('small');
+  }
 });
-router2.get('api-3');
-router2.get('api-4');
-
-export const router3 = new Router();
-router3.get('api-5');
 ```
 
-> 链条属于中间件容器，初衷是为了让路由逻辑有完整的类型提示
+不在全局声明的话，想让全局中间件精准提示是个很棘手的问题（确实困扰作者很久）。在此环境下，链条概念孕育而生：
+
+::: code-group
+
+```typescript [middleware/web.chain.ts]
+import { mdchain } from '@aomex/core';
+
+// 假设有如下这些中间件
+const a!: WebMiddleware<{ needCompress?: boolean }>;
+const b!: WebMiddleware<{ data2: string }>;
+const c!: WebMiddleware<{ data3: number }>;
+const d!: WebMiddleware<{ data3: number }>;
+const e!: WebMiddleware<{ data3: number }>;
+
+// 组成链条
+export const appChain = mdchain.web.mount(a).mount(b);
+export const routerChain = appChain.mount(c).mount(d).mount(e);
+```
+
+```typescript{4} [web.ts]
+import { appChain } from './middleware/web.chain';
+
+const app = new WebApp({
+  mount: appChain,
+});
+
+app.listen();
+```
+
+```typescript{4} [routers/api.router.ts]
+import { routerChain } from '../middleware/web.chain';
+
+export const router = new Router({
+  mount: routerChain,
+});
+
+router.get('/', {
+  action: (ctx) => {
+    ctx.needCompress = true;
+    ctx.send('small');
+  }
+});
+```
+
+:::
+
+完美提示！！
+注意看，在创建链条时，我们创建了两个变量`appChain`和`routerChain`，接着appChain被挂载到了应用入口，而routerChain被挂载到了路由。现在我们看看这里包含的5个中间件分别是怎么分配的：
+
+- 全局 -> a,b
+- 路由 -> c,d,e
+
+怎么做到的？
+
+其实`appChain`和`routerChain`是拥有相同根节点的链条，前者是后者的子集。当链条的一部分被挂载到app上时，这部分的尾巴就会被打上一个`断点(point)`，当路由层挂载链条时，会利用断点把全局中间件剔除。这样既获得了类型提示，又保留了全局中间件，一箭双雕。
+
+```:no-line-numbers
+   全局挂载       断点              路由挂载
+╭─────┴─────╮     ↓     ╭───────────┴───────────╮
+a --------> b --------> c --------> d --------> e
+╰─────┬─────╯
+   appChain
+╰──────────────────────┬────────────────────────╯
+                  routerChain
+```

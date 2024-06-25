@@ -1,54 +1,143 @@
-# 路由
+# 接口路由
 
-不同的请求路径，代表着不同业务逻辑。我们不会傻到让你在中间件里手动判断`pathname`来确定要响应的内容，我们采用路径映射的方式，即`路由`模块
+在真实项目中，每个功能可能都有 增、删、改、查 的接口，如果全部放在应用入口，则难以管理。因此我们引入了路由，根据功能对接口进行模块化分类
+
+## 安装
+
+```bash
+pnpm add @aomex/router
+```
+
+## 第一个路由
 
 ```typescript
 // ./src/routers/user.ts
 import { Router, params } from '@aomex/router';
-
-export const router = new Router({ prefix: '/users' });
 
 const users = [
   { id: 1, name: 'user1' },
   { id: 2, name: 'user2' },
 ];
 
-// 映射路径：GET /users
-router.get('/', {
-  async action(ctx) {
+export const router = new Router();
+
+router.get('/users', {
+  action: async (ctx) => {
     ctx.send(users);
   },
 });
 
-// 映射路径：GET /users/1
-router.get('/:id', {
-  mount: [params({ id: rule.int() })],
-  async action(ctx) {
-    const user = users.find((item) => item.id === ctx.params.id);
-    if (user) {
-      ctx.send(200, user);
-    } else {
-      ctx.throw(404);
-    }
+router.get('/users/count', {
+  action: async (ctx) => {
+    ctx.send(users.length);
   },
 });
 ```
 
-写了两个接口，获取所有用户和获取单个用户，怎么挂载到入口呢？这个问题太简单了，等着：
+就在刚刚，我们写了两个接口
 
-```typescript{4,5}
-// ./src/index.ts
+- GET /users
+- GET /users/count
+
+## 注册
+
+在访问接口之前，别忘了一件很重要的事情，就是挂载路由。框架采用了自动寻找路由的方式注册接口，我们再也不用重复地导出到入口文件（枯燥且浪费生命），真正做到了一劳永逸！
+
+```typescript{6}
+// ./src/web.ts
+import { WebApp,mdchain } from '@aomex/core';
 import { routers } from '@aomex/router';
 
-const app = new WebApp();
-// 挂载目录和子目录下所有的路由文件
-app.mount(routers('./src/routers'));
+const app = new WebApp({
+  mount: mdchain.web.mount(routers('./src/routers'))
+});
 
 app.listen(3000);
 ```
 
-打开浏览器访问 [http://localhost:3000/users](http://localhost:3000/users) 和 [http://localhost:3000/users/1](http://localhost:3000/users/1) 看看效果
+现在，打开浏览器访问 [http://localhost:3000/users](http://localhost:3000/users) 看看效果
 
-是不是很简单？aomex框架会自动去找，而不需要像koa一样还要引入所有路由文件，然后挨个挂载到app上。我们不愿意看到你重复地做这些（或其它）琐事，你要做的就是在路由文件里使用`export const router =`，然后专心写出优质逻辑
+## 前缀
 
-> 使用官方插件就能轻松地把接口转换成openapi/swagger文档，这是前端开发者的福音
+我们开始把相同的功能放在同一个路由文件里，管理方便，阅读顺畅。因此，大概率会出现相同的路由前缀，
+
+- GET /users
+- GET /users/:id
+- GET /users/:id/posts
+- POST /users
+- PUT /users/:id
+- DELETE /users/:id
+
+现在，我们尝试把相同的前缀抽取出来
+
+```typescript{2}
+export const router = new Router({
+  prefix: '/users',
+});
+
+router.get('/', { action: () => {} });
+router.get('/:id', { action: () => {} });
+router.post('/', { action: () => {} });
+```
+
+文件开始变得清爽，这也进一步减少了写错单词的概率（比如如果混进去一个 /usre 路由）
+
+## 方法级中间件
+
+路由的每个接口都能挂载自己的中间件，互不影响
+
+```typescript{7-11}
+import { middleware } from '@aomex/core';
+import { Router } from '@aomex/router';
+
+export const router = new Router();
+
+router.get('/users', {
+  mount: [
+    middleware.web<{ foo: string }>((ctx, next) => {
+      ctx.foo = 'bar';
+      return next();
+    }),
+  ],
+  action: (ctx) => {
+    ctx.foo; // 'bar'
+  },
+});
+
+router.get('/users/:id', {
+  action: (ctx) => {
+    ctx.foo;
+          ⤷ Property 'foo' does not exist on type 'object'. // [!code error]
+  },
+});
+```
+
+## 路由级中间件
+
+如果所有的接口都需要使用某个中间件，则建议提取到路由级别。
+
+```typescript{5-9}
+import { mdchain } from '@aomex/core';
+import { Router } from '@aomex/router';
+
+export const router = new Router({
+  mount: mdchain.web.mount(
+    middleware.web<{ foo: string }>((ctx, next) => {
+      ctx.foo = 'bar';
+      return next();
+    }),
+  ),
+});
+
+router.get('/users', {
+  action: (ctx) => {
+    ctx.foo; // 'bar'
+  },
+});
+
+router.get('/users/:id', {
+  action: (ctx) => {
+    ctx.foo; // 'bar'
+  },
+});
+```

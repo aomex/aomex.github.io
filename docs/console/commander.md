@@ -1,66 +1,91 @@
-# 创建指令
+# 指令路由
 
-指令的创建其实和Web应用中的`路由`差不多，只不过换了一个库。在创建之前，我们先新建一个文件夹`src/commanders`，接着想想你的第一个指令应该做些什么？不然还是从Hello world开始吧^\_^
+像写接口一样写指令！
+
+## 安装
+
+```bash
+pnpm add @aomex/commander
+```
+
+## 使用
 
 ```typescript
-// ./src/commanders/say.ts
-import { Commander } from '@aomex/commander';
-
-export const commander = new Commander();
-
-commander.create('say', {
-  action(ctx) {
-    console.log('Hello world');
-  },
-});
-```
-
-看看能不能输出这段文字：
-
-```bash:no-line-numbers
-npx aomex say
-```
-
-不出意外，应该是报错了。抱歉，我们忘了告诉入口应该去哪里找指令
-
-```typescript:{3,6}
-// ./src/cli.ts
-import { ConsoleApp } from '@aomex/console';
+// ./src/middleware/console.chain.ts
+import { mdchain } from '@aomex/core';
 import { commanders } from '@aomex/commander';
 
-const app = new ConsoleApp();
-app.mount(commanders('./src/commanders'));
+const appChain = mdchain.console.mount(commanders('./src/commanders'));
+```
+
+别忘了把appChain挂载到应用入口
+
+```typescript
+// src/cli.ts
+import { ConsoleApp } from '@aomex/console';
+import { appChain } from './src/middleware/console.chain'; // [!code ++]
+
+const app = new ConsoleApp({
+  mount: appChain, // [!code ++]
+});
 
 const code = await app.run();
 process.exit(code);
 ```
 
-这下好了，再执行一次`npx aomex say`试试。你可能不太喜欢向全世界问好，反而更愿意问候身边的朋友，我们支持你的选择并对指令做出一些改变
+## 第一个指令
 
 ```typescript
 // ./src/commanders/say.ts
-import { rule } from '@aomex/core';
-import { options } from '@aomex/console';
 import { Commander } from '@aomex/commander';
 
 export const commander = new Commander();
 
 commander.create('say', {
-  mount: [
-    options({
-      name: rule.string().default('world'),
-    }),
-  ],
-  action(ctx) {
-    console.log(`Hello ${ctx.options.name}`);
+  action: (ctx) => {
+    console.log('Hello World');
   },
 });
 ```
 
-现在，指令开始允许接收一个叫`name`的参数，如果你不说问候谁，那就仍是全世界
+在终端执行这个指令看看会输出什么：
 
-```bash:no-line-numbers
-npx aomex say --name bill # Hello bill
-npx aomex say --name bro # Hello bro
-npx aomex say  # Hello world
+```bash
+npx aomex say
+```
+
+不出意外的话，终端打印了一行文字：**Hello World**
+
+## 快速查看指令
+
+我们不妨先补充一下路由的说明文档
+
+```typescript
+// ./src/commanders/say.ts
+import { Commander } from '@aomex/commander';
+
+export const commander = new Commander();
+
+commander.create('say', {
+  docs: {
+    summary: '打招呼',
+    description: '打招呼详情',
+  },
+  action: (ctx) => {
+    console.log('Hello World');
+  },
+});
+```
+
+接着执行`npx aomex -h`，可以看到下面一段文字
+
+```txt{4}
+aomex [指令] [选项]
+
+命令：
+  aomex say  打招呼
+
+选项：
+  -v, --version  显示aomex版本号     [布尔]
+  -h, --help     显示帮助信息         [布尔]
 ```

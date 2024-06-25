@@ -1,15 +1,22 @@
+---
+outline: 2
+---
+
 # 验证器
 
-有传递客户端参数的地方，就需要在执行业务逻辑之前验证数据是否符合业务的要求。对于不符合要求的参数，我们希望立即抛出异常。而通过验证时，得到的所有参数都是可信赖的。
+有传递参数的地方，就需要在执行业务逻辑之前验证输入是否符合业务的要求。对于不符合要求的参数，我们希望立即抛出异常。而通过验证时，则意味着得到的所有参数都是可信赖的。
 
-> 验证器是生成swagger文档的一部分
+## 验证
 
-首先我们看看验证器如何使用：
+框架提供最基础的`validate`函数，我们可以在任何地方使用它。
 
 ```typescript
 import { rule, validate } from '@aomex/core';
 
-const untrusted = { name: ' hello  ', danger: 'rm -rf *' };
+// 不安全数据
+const untrusted = { name: ' hello  ', title: 'rm -rf /' };
+
+// 安全数据
 const trusted = await validate(untrusted, {
   name: rule.string().trim(),
 });
@@ -17,237 +24,324 @@ const trusted = await validate(untrusted, {
 console.log(trusted); // { name: 'hello' }
 ```
 
-通常，你不需要使用直接`validate`函数，它会被集成到各个中间件中以满足不同的场景需求。同时`rule`集成了所有的验证器，我敢保证它你每天都需要和它打交道。
+## 通用的方法
 
-## string
+大部分验证器都有相同的方法，为了节省文笔，在此统一指出。
 
-**描述：** 字符串类型<br>
-**用法：** `rule.string()`<br>
-|扩展|说明|
-|--|--|
-|`.trim()`|删除字符串两边空格后再进行验证|
-|`.length(exact: number)`<br>`.length(min, max)`<br>`.length({min?,max?,exact?})`|设置字符串长度|
-|`.allowEmpty()`|把空字符串`''`设置为合法的值|
-|`.match(reg:RegExp)`|字符串需匹配正则表达式|
-|`.default(value:string)`|如果值为空或者没传入，则使用该默认值，而且无需验证。<br>执行该方法后无需再执行`optional()`|
-|`.optional()`|允许数据是 `undefined, null, ''`或者**不传**，统一转换成**undefined**|
-|`.nullable()`|把`null`识别成合法的值|
-|`.docs({ ... })`|扩展openapi的配置，允许多次调用，默认采用合并对象的形式收集配置。<br>如果需要覆盖原来的docs配置，则传递第二个参数为`replace`|
-|`.transform(fn)`|数据验证成功后触发，允许我们对数据进行最后的转换操作|
+### .optional()
 
-## number
+指定字段是选填的，允许数据是 `undefined, null, ''`或者不传，统一转换成**undefined**
 
-**描述：** 数字类型，包括整型和浮点数<br>
-**用法：** `rule.number()`<br>
-**宽松模式**: 默认开启。尝试将字符串转换为数字
-|扩展|说明|
-|--|--|
-|`.min(min,inclusive=true)`|设置最小值。如果第二个参数`inclusive`设置为true，则对比时使用`>=`判断，否则使用`>`判断|
-|`.max(max,inclusive=true)`|设置最小值。如果第二个参数`inclusive`设置为true，则对比时使用`<=`判断，否则使用`<`判断|
-|`.precision(decimals:number)`|设置数字精度|
-|`.default(value: number)`|如果值为空或者没传入，则使用该默认值，而且无需验证。<br>执行该方法后无需再执行`optional()`|
-|`.optional()`|允许数据是 `undefined, null, ''`或者**不传**，统一转换成**undefined**|
-|`.nullable()`|把`null`识别成合法的值|
-|`.docs({ ... })`|扩展openapi的配置，允许多次调用，默认采用合并对象的形式收集配置。<br>如果需要覆盖原来的docs配置，则传递第二个参数为`replace`|
-|`.strict(is=true)`|是否开启严格模式。开启后数据必须是数字类型|
-|`.transform(fn)`|数据验证成功后触发，允许我们对数据进行最后的转换操作|
+### .default(value)
 
-## int
+如果指定字段为空值，则为该字段提供默认的输入值。调用该方法意味着字段是选填的，即无需再执行`.optional()`
 
-**描述：** 整数类型<br>
-**用法：** `rule.int()`<br>
-**宽松模式**: 默认开启。尝试将字符串转换为数字
-|扩展|说明|
-|--|--|
-|`.min(min,inclusive=true)`|设置最小值。如果第二个参数`inclusive`设置为true，则对比时使用`>=`判断，否则使用`>`判断|
-|`.max(max,inclusive=true)`|设置最小值。如果第二个参数`inclusive`设置为true，则对比时使用`<=`判断，否则使用`<`判断|
-|`.default(value: number)`|如果值为空或者没传入，则使用该默认值，而且无需验证。<br>执行该方法后无需再执行`optional()`|
-|`.optional()`|允许数据是 `undefined, null, ''`或者**不传**，统一转换成**undefined**|
-|`.nullable()`|把`null`识别成合法的值|
-|`.docs({ ... })`|扩展openapi的配置，允许多次调用，默认采用合并对象的形式收集配置。<br>如果需要覆盖原来的docs配置，则传递第二个参数为`replace`|
-|`.strict(is=true)`|是否开启严格模式。开启后数据必须是数字类型|
-|`.transform(fn)`|数据验证成功后触发，允许我们对数据进行最后的转换操作|
+### .nullable()
 
-## bigint
+把`null`识别成`非空`值
 
-**描述：** 大整型类型<br>
-**用法：** `rule.bigint()`<br>
-**宽松模式**: 默认开启。尝试将字符串和数字转换为大整型
+### .strict(is=true)
 
-| 扩展                     | 说明                                                                                                                         |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| `.default(value:bigint)` | 如果值为空或者没传入，则使用该默认值，而且无需验证。<br>执行该方法后无需再执行`optional()`                                   |
-| `.optional()`            | 允许数据是 `undefined, null, ''`或者**不传**，统一转换成**undefined**                                                        |
-| `.nullable()`            | 把`null`识别成合法的值                                                                                                       |
-| `.docs({ ... })`         | 扩展openapi的配置，允许多次调用，默认采用合并对象的形式收集配置。<br>如果需要覆盖原来的docs配置，则传递第二个参数为`replace` |
-| `.strict(is=true)`       | 是否开启严格模式。开启后数据必须是大整型                                                                                     |
-| `.transform(fn)`         | 数据验证成功后触发，允许我们对数据进行最后的转换操作                                                                         |
+是否开启严格模式。输入渠道可能不支持多种数据类型，开启后可能无法转换类型，因此一般建议不开启
 
-## boolean
+### .transform(callback)
 
-**描述：** 布尔值类型<br>
-**用法：** `rule.boolean()`<br>
+指定字段验证成功后触发，允许我们对数据进行最后的转换操作
+
+### .docs(opts, mode)
+
+扩展openapi的配置，允许多次调用，默认采用合并对象的形式收集配置。<br>如果需要覆盖原来的docs配置，则传递 mode 为`replace`
+
+## rule.string()
+
+字符串类型
+
+### .trim(is=true)
+
+删除字符串两边空格后再进行验证，属于前置操作
+
+```typescript
+// 'ab c'
+await validate(' ab c   ', rule.string().trim());
+```
+
+### .length(...)
+
+设置字符串长度，该方法使用了函数重载：
+
+- `.length(exact: number)` 指定具体的长度
+- `.length({ min?: number, max?: number })` 对象，指定最小长度或者最大长度，都指定则为长度区间
+
+```typescript
+// 字符串长度必须是20
+rule.string().length(20);
+// 长度最长为20
+rule.string().length({ max: 20 });
+// 长度最短为3
+rule.string().length({ min: 3 });
+// 长度必须在3-20之间（包含）
+rule.string().length({ min: 3, max: 20 });
+```
+
+### .allowEmptyString()
+
+把空字符串`''`设置为`非空`值
+
+```typescript
+const allowEmpty = rule.string().allowEmptyString();
+const denyEmpty = rule.string();
+
+await validate('', allowEmpty); // ''
+await validate('abc', allowEmpty); // 'abc'
+
+await validate(undefined, allowEmpty); // 抛出异常
+await validate(null, allowEmpty); // 抛出异常
+await validate('', denyEmpty); // 抛出异常
+```
+
+### .match(reg)
+
+字符串需匹配正则表达式
+
+```typescript
+const match = rule.string().match(/^\d+$/);
+
+await validate('1234', match); // '1234'
+await validate('a1234', match); // 抛出异常
+```
+
+## rule.number()
+
+数字类型，包括整型和浮点数
+
+### .min(min,inclusive=true)
+
+设置最小值。如果第二个参数`inclusive`设置为true，则对比时使用`>=`判断，否则使用`>`判断
+
+### .max(max,inclusive=true)
+
+设置最大值。如果第二个参数`inclusive`设置为true，则对比时使用`<=`判断，否则使用`<`判断
+
+### .precision(maxDecimals:number)
+
+设置小数最大长度
+
+## rule.int()
+
+整数类型
+
+### .min(min,inclusive=true)
+
+设置最小值。如果第二个参数`inclusive`设置为true，则对比时使用`>=`判断，否则使用`>`判断
+
+### .max(max,inclusive=true)
+
+设置最大值。如果第二个参数`inclusive`设置为true，则对比时使用`<=`判断，否则使用`<`判断
+
+## rule.boolean()
+
+布尔值类型。预设了一些真假值，也可以自定义
+
 **真值:** `1, '1', true, 'true'`<br>
 **假值:** `0, '0', false, 'false'`<br>
-| 扩展 | 说明 |
-| ----------------- | ------------ |
-| `.trueValues([...])` | 设置新的真值 |
-| `.falseValues([...])` | 设置新的假值 |
-| `.default(value:boolean)` | 如果值为空或者没传入，则使用该默认值，而且无需验证。<br>执行该方法后无需再执行`optional()` |
-| `.optional()` | 允许数据是 `undefined, null, ''`或者**不传**，统一转换成**undefined** |
-| `.nullable()` | 把`null`识别成合法的值 |
-| `.docs({ ... })` | 扩展openapi的配置，允许多次调用，默认采用合并对象的形式收集配置。<br>如果需要覆盖原来的docs配置，则传递第二个参数为`replace` |
-| `.transform(fn)` | 数据验证成功后触发，允许我们对数据进行最后的转换操作 |
 
-## object
+### .setTruthyValues([...])
 
-**描述：** 对象类型，每个属性都是验证器<br>
-**用法：**
+重新设置真值
 
 ```typescript
-// 只验证是个纯对象类型，并保留所有属性
-rule.object();
-
-// 验证是个纯对象类型，并且只保留id和name这两个属性
-rule.object({ id: rule.int(), name: rule.string() });
+rule.boolean().setTruthyValues([true, 'yes']);
+rule.boolean().setTruthyValues(['on', 'good']);
 ```
 
-| 扩展                        | 说明                                                                                                                         |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `.parseFromString(is=true)` | 如果数据是字符串，则尝试使用`JSON.parse`转换为对象                                                                           |
-| `.default(value:object)`    | 如果值为空或者没传入，则使用该默认值，而且无需验证。<br>执行该方法后无需再执行`optional()`                                   |
-| `.optional()`               | 允许数据是 `undefined, null, ''`或者**不传**，统一转换成**undefined**                                                        |
-| `.nullable()`               | 把`null`识别成合法的值                                                                                                       |
-| `.docs({ ... })`            | 扩展openapi的配置，允许多次调用，默认采用合并对象的形式收集配置。<br>如果需要覆盖原来的docs配置，则传递第二个参数为`replace` |
-| `.strict(is=true)`          | 是否开启严格模式。**所有的子验证器都会同步为该状态**                                                                         |
-| `.transform(fn)`            | 数据验证成功后触发，允许我们对数据进行最后的转换操作                                                                         |
+### .setFalsyValues([...])
 
-## array
-
-**描述：** 数组类型，包含一个元素验证器<br>
-**用法：**
+重新设置假值
 
 ```typescript
-// 只验证是个数组类型
-rule.array();
+boolean.setFalsyValues([false, 'no']);
+rule.boolean().setFalsyValues(['off', 'bad']);
+```
 
-// 数字内每个元素都必须是字符串
+## rule.object(properties?)
+
+对象类型，每个属性都是验证器
+
+如果没有传递对象属性，则会返回所有的属性，这是不安全的。因此建议指定属性。
+
+```typescript
+const obj = { id: 1, name: 'foo', title: 'rm -rf /' };
+
+// 返回 { id: 1, name: 'foo', title: 'rm -rf /' }
+await validate(obj, rule.object());
+// 返回 { id: 1, name: 'foo' }
+await validate(obj, rule.object({ id: rule.int(), name: rule.string() }));
+```
+
+### .parseFromString(is=true)
+
+如果输入值是字符串，则尝试使用`JSON.parse`转换为对象
+
+```typescript
+const fromString = rule.object().parseFromString();
+const normal = rule.object();
+const str = JSON.stringify({ id: 1 });
+
+await validate(str, normal); // 抛出异常
+await validate(str, fromString); // { id: 1 }
+```
+
+## rule.array(item?)
+
+数组类型，包含一个元素验证器。
+
+```typescript
 rule.array(rule.string());
-
-// 数组的元素可以是空的，也可以是字符串类型
-rule.array(rule.string().optional());
-
-// 数组哪每个元素都必须是对象，对象必须包含id和name属性
-rule.array({
-  id: rule.int(),
-  name: rule.string(),
-});
 ```
 
-| 扩展                    | 说明                                                                                                                         |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `.forceToArray({...})`  | 如果数据不是数组类型，则强制转换为数组形式。[查看参数](validator.html#forcetoarray)                                          |
-| `.default(value:Array)` | 如果值为空或者没传入，则使用该默认值，而且无需验证。<br>执行该方法后无需再执行`optional()`                                   |
-| `.optional()`           | 允许数据是 `undefined, null, ''`或者**不传**，统一转换成**undefined**                                                        |
-| `.nullable()`           | 把`null`识别成合法的值                                                                                                       |
-| `.docs({ ... })`        | 扩展openapi的配置，允许多次调用，默认采用合并对象的形式收集配置。<br>如果需要覆盖原来的docs配置，则传递第二个参数为`replace` |
-| `.strict(is=true)`      | 是否开启严格模式。**元素验证器也会同步为该状态**                                                                             |
-| `.transform(fn)`        | 数据验证成功后触发，允许我们对数据进行最后的转换操作                                                                         |
-
-#### forceToArray
-
-| 属性                 | 类型                   | 说明                                                                                   |
-| -------------------- | ---------------------- | -------------------------------------------------------------------------------------- |
-| filter               | `(value:any)=>boolean` | 过滤允许转换为数组的数据，不设置则代表全部允许                                         |
-| transform            | `(value:any)=>any[]`   | 转换的方式。默认方式：<br>`(value) => {return [value]}`                                |
-| stringSeparator      | `string\|RegExp`       | 如果碰上字符串，则使用分割符转换为数组。优先级高于`transform`属性                      |
-| stringCommaSeparator | `boolean`              | 如果碰上字符串，则使用`/\s*,\s*/`这个正则表达式来分割。优先级高于`stringSeparator`属性 |
-
-## buffer
-
-**描述：** 缓冲区类型<br>
-**用法：** `rule.buffer()`<br>
-|扩展|说明|
-|--|--|
-| `.default(value:Buffer)` | 如果值为空或者没传入，则使用该默认值，而且无需验证。<br>执行该方法后无需再执行`optional()` |
-| `.optional()` | 允许数据是 `undefined, null, ''`或者**不传**，统一转换成**undefined** |
-| `.nullable()` | 把`null`识别成合法的值 |
-| `.docs({ ... })` | 扩展openapi的配置，允许多次调用，默认采用合并对象的形式收集配置。<br>如果需要覆盖原来的docs配置，则传递第二个参数为`replace` |
-| `.transform(fn)` | 数据验证成功后触发，允许我们对数据进行最后的转换操作 |
-
-## enum
-
-**描述：** 枚举类型<br>
-**用法：** `rule.enum(['a', 'b', 'c'])`<br>
-|扩展|说明|
-|--|--|
-| `.default(value:T)` | 如果值为空或者没传入，则使用该默认值，而且无需验证。<br>执行该方法后无需再执行`optional()` |
-| `.optional()` | 允许数据是 `undefined, null, ''`或者**不传**，统一转换成**undefined** |
-| `.nullable()` | 把`null`识别成合法的值 |
-| `.docs({ ... })` | 扩展openapi的配置，允许多次调用，默认采用合并对象的形式收集配置。<br>如果需要覆盖原来的docs配置，则传递第二个参数为`replace` |
-| `.transform(fn)` | 数据验证成功后触发，允许我们对数据进行最后的转换操作 |
-
-## ip
-
-**描述：** IP字符串类型，支持v4和v6版本<br>
-**用法：**
+如果只是验证数组类型而不关心元素，则无需传递参数
 
 ```typescript
-// ipv4
+rule.array();
+```
+
+### .forceToArray(mode, separator?)
+
+强制将`非数组`的值转换成数组类型。指令和查询字符串场景下，如果只传了一个元素，则有可能被识别为非数组，而传递多个元素时又变成了数组结构。
+
+不同的转换模式下会有不同的输出结果：
+
+- `separator` 使用分割符号，把字符串拆分成数组。此时可传递分隔符，默认：`/\s*,\s*/`
+- `block` 把输入当成一个整体，作为数组的一个元素
+
+```typescript
+const strArray = rule.array(rule.string());
+
+// ['a', 'b', 'c']
+await validate('a,b,c', strArray.forceToArray('separator'));
+// ['a,b,c']
+await validate('a,b,c', strArray.forceToArray('separator', '-'));
+// ['a', 'b,c']
+await validate('a-b,c', strArray.forceToArray('separator', '-'));
+// ['a,b,c']
+await validate('a,b,c', strArray.forceToArray('block'));
+// [123]
+await validate(123, rule.array(rule.number()).forceToArray('block'));
+```
+
+## rule.dateTime()
+
+时间类型
+
+### .min(date,inclusive=true)
+
+最小时间。如果第二个参数`inclusive`设置为true，则对比时使用`>=`判断，否则使用`>`判断
+
+### .max(date,inclusive=true)
+
+最大时间。如果第二个参数`inclusive`设置为true，则对比时使用`<=`判断，否则使用`<`判断
+
+### .parseFromTimestamp(is=true)
+
+尝试把时间戳数字解析成时间对象。支持如下格式：
+
+- 13位：1711257956199
+- 14位：1711257956.199
+- 10位：1711257956
+
+## rule.enum([...])
+
+枚举类型，必须是数字或者字符串。宽松模式下，如果没有匹配到枚举值，数字字符串会尝试转换为数字类型后再做对比
+
+```typescript
+const enums = rule.enum([1, 2, 'a']);
+
+await validate(1, enums); // 1
+await validate('2', enums); // 2
+await validate('a', enums); // 'a'
+await validate(3, enums); // 抛出异常
+```
+
+::: info
+
+:::
+
+## rule.ip(...)
+
+IP字符串类型，支持v4和v6版本
+
+```typescript
 rule.ip('v4');
 rule.ip(['v4']);
-
-// ipv6
 rule.ip('v6');
 rule.ip(['v6']);
-
-// ipv4 + ipv6
 rule.ip(['v4', 'v6']);
 ```
 
-| 扩展                     | 说明                                                                                                                         |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| `.trim()`                | 删除字符串两边空格后再进行验证                                                                                               |
-| `.match(reg:RegExp)`     | 字符串需匹配正则表达式                                                                                                       |
-| `.default(value:string)` | 如果值为空或者没传入，则使用该默认值，而且无需验证。<br>执行该方法后无需再执行`optional()`                                   |
-| `.optional()`            | 允许数据是 `undefined, null, ''`或者**不传**，统一转换成**undefined**                                                        |
-| `.nullable()`            | 把`null`识别成合法的值                                                                                                       |
-| `.docs({ ... })`         | 扩展openapi的配置，允许多次调用，默认采用合并对象的形式收集配置。<br>如果需要覆盖原来的docs配置，则传递第二个参数为`replace` |
-| `.transform(fn)`         | 数据验证成功后触发，允许我们对数据进行最后的转换操作                                                                         |
+### .match(reg)
 
-## email
+IP需匹配正则表达式
 
-**描述：** 电子邮件类型<br>
-**用法：** `rule.email()`<br>
-|扩展|说明|
-|--|--|
-| `.trim()` | 删除字符串两边空格后再进行验证 |
-| `.match(reg:RegExp)` | 字符串需匹配正则表达式 |
-| `.default(value:string)` | 如果值为空或者没传入，则使用该默认值，而且无需验证。<br>执行该方法后无需再执行`optional()` |
-| `.optional()` | 允许数据是 `undefined, null, ''`或者**不传**，统一转换成**undefined** |
-| `.nullable()` | 把`null`识别成合法的值 |
-| `.docs({ ... })` | 扩展openapi的配置，允许多次调用，默认采用合并对象的形式收集配置。<br>如果需要覆盖原来的docs配置，则传递第二个参数为`replace` |
-| `.transform(fn)` | 数据验证成功后触发，允许我们对数据进行最后的转换操作 |
+```typescript
+const match = rule.ip('v4').match(/^192\.168\.0\.\d+$/);
 
-## hash
+await validate('192.168.0.22', match); // '192.168.0.22'
+await validate('35.62.20.9', match); // 抛出异常
+```
 
-**描述：** 哈希串类型<br>
-**用法：** `rule.hash(algorithm: Hash)`<br>
-**哈希算法：** "md5" | "md4" | "sha1" | "sha256" | "sha384" | "sha512" | "ripemd128" | "ripemd160" | "tiger128" | "tiger160" | "tiger192" | "crc32" | "crc32b"
-|扩展|说明|
-|--|--|
-| `.trim()` | 删除字符串两边空格后再进行验证 |
-| `.match(reg:RegExp)` | 字符串需匹配正则表达式 |
-| `.default(value:Hash)` | 如果值为空或者没传入，则使用该默认值，而且无需验证。<br>执行该方法后无需再执行`optional()` |
-| `.optional()` | 允许数据是 `undefined, null, ''`或者**不传**，统一转换成**undefined** |
-| `.nullable()` | 把`null`识别成合法的值 |
-| `.docs({ ... })` | 扩展openapi的配置，允许多次调用，默认采用合并对象的形式收集配置。<br>如果需要覆盖原来的docs配置，则传递第二个参数为`replace` |
-| `.transform(fn)` | 数据验证成功后触发，允许我们对数据进行最后的转换操作 |
+## rule.email()
 
-## uuid
+电子邮箱类型
 
-**描述：** 通用唯一识别码，共有6个版本<br>
-**用法：**
+```typescript
+const email = rule.email();
+
+await validate('abc@qq.com', email); // abc@qq.com
+await validate('abc@qq.com.cn', email); // abc@qq.com.cn
+await validate('abc@', email); // 抛出异常
+```
+
+### .match(reg)
+
+邮箱需匹配正则表达式
+
+```typescript
+const match = rule.email().match(/@qq\.com$/);
+
+await validate('abc@qq.com', match); // abc@qq.com
+await validate('abc@qq.cn', match); // 抛出异常
+```
+
+## rule.hash(algorithm)
+
+哈希串类型，仅仅是判断长度是否与给定算法一致，不验证真实性。
+
+已支持的算法包括：
+
+- md5
+- md4
+- sha1
+- sha256
+- sha384
+- sha512
+- ripemd128
+- ripemd160
+- tiger128
+- tiger160
+- tiger192
+- crc32
+- crc32b
+
+```typescript
+// aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+await validate('a'.repeat(32), rule.hash('md5'));
+// 抛出异常
+await validate('a'.repeat(31), rule.hash('md5'));
+```
+
+## rule.uuid()
+
+通用唯一识别码，共有5个版本
 
 ```typescript
 // 单个版本
@@ -256,83 +350,63 @@ rule.uuid('v2');
 rule.uuid('v3');
 rule.uuid('v4');
 rule.uuid('v5');
-
 // 多版本一起支持
-rule.uuid(['v4', 'v5', 'v6']);
-
+rule.uuid(['v4', 'v5']);
 // 全部支持
 rule.uuid(['v1', 'v2', 'v3', 'v4', 'v5']);
 ```
 
-| 扩展                     | 说明                                                                                                                         |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| `.trim()`                | 删除字符串两边空格后再进行验证                                                                                               |
-| `.match(reg:RegExp)`     | 字符串需匹配正则表达式                                                                                                       |
-| `.default(value:string)` | 如果值为空或者没传入，则使用该默认值，而且无需验证。<br>执行该方法后无需再执行`optional()`                                   |
-| `.optional()`            | 允许数据是 `undefined, null, ''`或者**不传**，统一转换成**undefined**                                                        |
-| `.nullable()`            | 把`null`识别成合法的值                                                                                                       |
-| `.docs({ ... })`         | 扩展openapi的配置，允许多次调用，默认采用合并对象的形式收集配置。<br>如果需要覆盖原来的docs配置，则传递第二个参数为`replace` |
-| `.transform(fn)`         | 数据验证成功后触发，允许我们对数据进行最后的转换操作                                                                         |
+### .match(reg)
 
-## ulid
+字符串需匹配正则表达式
 
-**描述：** 可排序的全局唯一标识符，号称UUID的替代品<br>
-**用法：** `rule.ulid()`<br>
-|扩展|说明|
-|--|--|
-| `.trim()` | 删除字符串两边空格后再进行验证 |
-| `.match(reg:RegExp)` | 字符串需匹配正则表达式 |
-| `.default(value:string)` | 如果值为空或者没传入，则使用该默认值，而且无需验证。<br>执行该方法后无需再执行`optional()` |
-| `.optional()` | 允许数据是 `undefined, null, ''`或者**不传**，统一转换成**undefined** |
-| `.nullable()` | 把`null`识别成合法的值 |
-| `.docs({ ... })` | 扩展openapi的配置，允许多次调用，默认采用合并对象的形式收集配置。<br>如果需要覆盖原来的docs配置，则传递第二个参数为`replace` |
-| `.transform(fn)` | 数据验证成功后触发，允许我们对数据进行最后的转换操作 |
+## rule.ulid()
 
-## one-of
+可排序的全局唯一标识符，号称UUID的替代品
 
-**描述：** 从左往右匹配其中一种规则<br>
-**用法：**
+### .match(reg)
+
+字符串需匹配正则表达式
+
+## rule.bigint()
+
+大整型类型
+
+### .min(min,inclusive=true)
+
+设置最小值。如果第二个参数`inclusive`设置为true，则对比时使用`>=`判断，否则使用`>`判断
+
+### .max(max,inclusive=true)
+
+设置最大值。如果第二个参数`inclusive`设置为true，则对比时使用`<=`判断，否则使用`<`判断
+
+## rule.buffer()
+
+缓冲区类型
+
+### .parseFrom(...encodings)
+
+尝试从其他类型恢复为buffer类型：
+
+- `hex` 从十六进制字符串恢复
+- `base64` 从base64字符串恢复
+
+## rule.stream()
+
+数据流类型
+
+## rule.oneOf([...])
+
+从左往右匹配其中一种规则，至少传入两种规则
 
 ```typescript
-// 字符串或者数字
-rule.oneOf([rule.string(), rule.number()]);
+const oneOf = rule.oneOf([rule.string(), rule.number()]);
 
-// 哈希 | uuid | ulid
-rule.oneOf([rule.hash(), rule.uuid(), rule.ulid()]);
+await validate(123, oneOf); // 123
+await validate('abc', oneOf); // 'abc'
+await validate([], oneOf); // 抛出异常
 ```
 
-| 扩展                     | 说明                                                                                                                         |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| `.default(value:string)` | 如果值为空或者没传入，则使用该默认值，而且无需验证。<br>执行该方法后无需再执行`optional()`                                   |
-| `.optional()`            | 允许数据是 `undefined, null, ''`或者**不传**，统一转换成**undefined**                                                        |
-| `.nullable()`            | 把`null`识别成合法的值                                                                                                       |
-| `.docs({ ... })`         | 扩展openapi的配置，允许多次调用，默认采用合并对象的形式收集配置。<br>如果需要覆盖原来的docs配置，则传递第二个参数为`replace` |
-| `.strict(is=true)`       | 是否开启严格模式。**子验证器也会同步为该状态**                                                                               |
-| `.transform(fn)`         | 数据验证成功后触发，允许我们对数据进行最后的转换操作                                                                         |
+## rule.any()
 
-## date-time
-
-**描述：** 时间类型<br>
-**用法：** `rule.dateTime()`<br>
-|扩展|说明|
-|--|--|
-|`.min(date,inclusive=true)`|最小时间。如果第二个参数`inclusive`设置为true，则对比时使用`>=`判断，否则使用`>`判断|
-|`.max(date,inclusive=true)`|最大时间。如果第二个参数`inclusive`设置为true，则对比时使用`<=`判断，否则使用`<`判断|
-| `.default(value:Date)` | 如果值为空或者没传入，则使用该默认值，而且无需验证。<br>执行该方法后无需再执行`optional()` |
-| `.optional()` | 允许数据是 `undefined, null, ''`或者**不传**，统一转换成**undefined** |
-| `.nullable()` | 把`null`识别成合法的值 |
-| `.docs({ ... })` | 扩展openapi的配置，允许多次调用，默认采用合并对象的形式收集配置。<br>如果需要覆盖原来的docs配置，则传递第二个参数为`replace` |
-| `.transform(fn)` | 数据验证成功后触发，允许我们对数据进行最后的转换操作 |
-
-## any
-
-**描述：** 任意类型<br>
-**用法：** `rule.any()`<br>
-**类型限制：** number | string | boolean | any[] | object | bigint | Buffer
-|扩展|说明|
-|--|--|
-| `.default(value:T)` | 如果值为空或者没传入，则使用该默认值，而且无需验证。<br>执行该方法后无需再执行`optional()` |
-| `.optional()` | 允许数据是 `undefined, null, ''`或者**不传**，统一转换成**undefined** |
-| `.nullable()` | 把`null`识别成合法的值 |
-| `.docs({ ... })` | 扩展openapi的配置，允许多次调用，默认采用合并对象的形式收集配置。<br>如果需要覆盖原来的docs配置，则传递第二个参数为`replace` |
-| `.transform(fn)` | 数据验证成功后触发，允许我们对数据进行最后的转换操作 |
+任意类型，不做任何运行时检测，请谨慎使用

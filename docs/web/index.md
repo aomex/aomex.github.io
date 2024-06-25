@@ -1,52 +1,54 @@
-# 创建服务
+# 应用入口
 
 对于web开发者，服务端最重要的能力就是提供接口(API)给客户端调用，这也是框架重点发力的一个环节。通过安装特定的插件，我们就能快速地实现接口能力
 
 ## 安装
 
-[![npm](https://img.shields.io/npm/v/@aomex/web?logo=npm&label=@aomex/web)](https://www.npmjs.com/package/@aomex/web)
-[![npm](https://img.shields.io/npm/v/@aomex/router?logo=npm&label=@aomex/router)](https://www.npmjs.com/package/@aomex/router)
-
 ```bash
-pnpm add @aomex/core @aomex/web @aomex/router
-pnpm add typescript @types/node -D
+pnpm add @aomex/web
+pnpm add tsx -D
 ```
 
-## 脚本命令
+## 使用
 
-`@aomex/web`内置了[ts-node](https://www.npmjs.com/package/ts-node)，因此可以直接运行.ts文件
+框架需要监听宿主机上的某个端口，才能接收客户端请求
 
-```json
+```typescript
+// src/web.ts
+import { middleware, mdchain } from '@aomex/core';
+import { WebApp } from '@aomex/web';
+
+const app = new WebApp({
+  mount: mdchain.web.mount(
+    middleware.web(async (ctx, next) => {
+      await next();
+      ctx.send(200, 'Hello World');
+    }),
+  ),
+});
+
+app.listen(3000, () => {
+  console.log('服务已启动');
+});
+```
+
+在终端输入指令
+
+```bash
+node --import tsx/esm --watch src/web.ts
+```
+
+接着在浏览器输入地址[http://localhost:3000](http://localhost:3000)，可以看到网页上输出文字 **Hello World**
+
+启动脚本建议放到`package.json`里统一调用
+
+```json{4}
 // package.json
 {
   "scripts": {
-    "start": "aomex-ts-node src/index.ts"
-  },
-  "dependencies": {}
+    "start": "node --import tsx/esm --watch src/web.ts"
+  }
 }
-```
-
-## 监听端口
-
-```typescript
-// src/index.ts
-import { middleware } from '@aomex/core';
-import { WebApp } from '@aomex/web';
-
-const app = new WebApp();
-
-// 挂载中间件
-app.mount(
-  middleware.web(async (ctx, next) => {
-    await next();
-    ctx.send(200, 'Hello world');
-  }),
-);
-
-// 启动node服务
-app.listen(3000, () => {
-  console.log('Server started');
-});
 ```
 
 接着在终端输入命令
@@ -55,11 +57,19 @@ app.listen(3000, () => {
 pnpm start
 ```
 
-打开浏览器访问：[http://localhost:3000](http://localhost:3000)，不出意外你能看见一行文字`Hello world`。
-恭喜，服务已经启动，等下我就告诉你如何写接口。
+## i18n
 
-但是等等，我们找到了一个未知的东西`middleware.web`。这我得解释一下，`middleware.pure`的意思就是纯粹，它的context不依赖于任何一个应用平台，所以别妄想它会提示什么有用的TS类型给你。而`middleware.web`是定制的，它携带了**app**、**request**、**response** 等与web平台相关的属性和方法（在类型提示方面）。因此，如果不是制作通用的适用于各个应用的中间件，我建议你最好使用定制的中间件。
+应用默认采用`中文(zh_CN)`作为主要语言。如果需要切换到英文，则直接指定为`en_US`
 
-- common -> middleware.pure
-- **web** &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-> middleware.web
-- **console** &nbsp;&nbsp;-> middleware.console
+```typescript{5}
+import { middleware } from '@aomex/core';
+import { WebApp } from '@aomex/web';
+
+const app = new WebApp({
+  locale: 'en_US',
+});
+
+app.listen(3000, () => {
+  console.log('服务已启动');
+});
+```

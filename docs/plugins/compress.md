@@ -4,22 +4,21 @@ Web请求响应体积太大时，会消耗额外的服务器带宽以及花费�
 
 ## 安装
 
-[![npm](https://img.shields.io/npm/v/@aomex/compress?logo=npm&label=@aomex/compress)](https://www.npmjs.com/package/@aomex/compress)
-
-```bash:no-line-numbers
+```bash
 pnpm add @aomex/compress
 ```
 
 ## 使用
 
 ```typescript
-// ./src/chains/web.chain.ts
+// ./src/middleware/web.chain.ts
+import { mdchain } from '@aomex/core';
 import { compress } from '@aomex/compress';
 
-export const appChain = chain.web.mount(compress());
+export const appChain = mdchain.web.mount(compress());
 ```
 
-## 设置属性
+## 参数
 
 ### filter
 
@@ -30,7 +29,7 @@ export const appChain = chain.web.mount(compress());
 
 ### threshold
 
-**类型：** `number` | `string`<br>
+**类型：** `number | string`<br>
 **默认值：** 1024<br>
 最低要求的压缩体积。数字或者不带单位时，单位为`byte`。也可以传入带单位的字符串。
 
@@ -41,7 +40,7 @@ export const appChain = chain.web.mount(compress());
 - '1024mb'
 - '3gb'
 
-## 导出参数
+## 上下文
 
 ### needCompress
 
@@ -51,9 +50,12 @@ export const appChain = chain.web.mount(compress());
 插件暴露出来的属性，允许响应`强制开启`压缩功能<br>
 
 ```typescript
+export const router = new Router({ mount: appChain });
+
 router.get('/users', {
   action(ctx) {
     ctx.needCompress = true;
+    ctx.send('small');
   },
 });
 ```
