@@ -5,6 +5,7 @@ export default defineConfig({
   title: 'aomex.js',
   lang: 'zh-CN',
   description: '流畅的 node.js 框架',
+  ignoreDeadLinks: [/^https?:\/\/localhost/],
   themeConfig: {
     editLink: {
       pattern: 'https://github.com/aomex/aomex.github.io/tree/main/docs/:path',
