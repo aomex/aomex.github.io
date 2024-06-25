@@ -39,7 +39,7 @@ jobs:
           cache: pnpm
       - uses: actions/configure-pages@v4
       - run: pnpm install
-      - run: pnpm docs:build
+      - run: pnpm build
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs/.vitepress/dist
