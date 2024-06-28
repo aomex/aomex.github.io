@@ -11,11 +11,13 @@ pnpm add @aomex/rate-limit
 ## 使用
 
 ```typescript
-// ./src/middleware/web.chain.ts
-import { mdchain } from '@aomex/core';
+// src/web.ts
+import { WebApp } from '@aomex/core';
 import { rateLimit } from '@aomex/rate-limit';
 
-export const appChain = mdchain.web.mount(rateLimit());
+const app = new WebApp({
+  mount: [rateLimit()],
+});
 ```
 
 ## 参数

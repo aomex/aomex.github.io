@@ -16,16 +16,18 @@ pnpm add @aomex/async-trace
 ## 挂载
 
 ```typescript
-// ./src/middleware/web.chain.ts
-import { mdchain } from '@aomex/core';
+// src/web.ts
+import { WebApp } from '@aomex/core';
 import { traceMiddleware } from '@aomex/async-trace';
 
-export const appChain = mdchain.web.mount(
-  traceMiddleware('生命周期', (record) => {
-    record.delta; // 总耗时
-    record.children; // 子记录
-  }),
-);
+const app = new WebApp({
+  mount: [
+    traceMiddleware('生命周期', (record) => {
+      record.delta; // 总耗时
+      record.children; // 子记录
+    }),
+  ],
+});
 ```
 
 获得记录后考虑使用日志插件上报

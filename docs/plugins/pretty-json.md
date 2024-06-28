@@ -11,11 +11,13 @@ pnpm add @aomex/pretty-json
 ## 使用
 
 ```typescript
-// ./src/middleware/web.chain.ts
-import { mdchain } from '@aomex/core';
+// src/web.ts
+import { WebApp } from '@aomex/core';
 import { prettyJson } from '@aomex/pretty-json';
 
-export const appChain = mdchain.web.mount(prettyJson());
+const app = new WebApp({
+  mount: [prettyJson()],
+});
 ```
 
 ## 参数

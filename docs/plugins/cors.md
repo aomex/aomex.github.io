@@ -15,11 +15,13 @@ pnpm add @aomex/cors
 ## 使用
 
 ```typescript
-// ./src/middleware/web.chain.ts
-import { mdchain } from '@aomex/core';
+// src/web.ts
+import { WebApp } from '@aomex/core';
 import { cors } from '@aomex/cors';
 
-const appChain = mdchain.web.mount(cors());
+const app = new WebApp({
+  mount: [cors()],
+});
 ```
 
 ## 参数

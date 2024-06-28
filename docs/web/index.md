@@ -5,7 +5,7 @@
 ## 安装
 
 ```bash
-pnpm add @aomex/web
+pnpm add @aomex/core @aomex/web
 pnpm add tsx -D
 ```
 
@@ -15,21 +15,29 @@ pnpm add tsx -D
 
 ```typescript
 // src/web.ts
-import { middleware, mdchain } from '@aomex/core';
+import { middleware } from '@aomex/core';
 import { WebApp } from '@aomex/web';
 
 const app = new WebApp({
-  mount: mdchain.web.mount(
+  locale: 'zh_CN',
+  mount: [
     middleware.web(async (ctx, next) => {
       await next();
       ctx.send(200, 'Hello World');
     }),
-  ),
+  ],
 });
 
 app.listen(3000, () => {
   console.log('服务已启动');
 });
+
+declare module '@aomex/web' {
+  namespace WebApp {
+    type T = WebApp.Infer<typeof app>;
+    interface Props extends T {}
+  }
+}
 ```
 
 在终端输入指令

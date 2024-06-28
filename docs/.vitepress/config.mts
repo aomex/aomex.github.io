@@ -71,7 +71,6 @@ export default defineConfig({
             text: '接口路由',
             link: '/web/router',
           },
-          { text: '中间件链条', link: '/web/chain' },
           {
             text: '输入输出',
             items: [

@@ -11,32 +11,19 @@ pnpm add @aomex/commander
 ## 使用
 
 ```typescript
-// ./src/middleware/console.chain.ts
-import { mdchain } from '@aomex/core';
+// src/cli.ts
+import { ConsoleApp } from '@aomex/core';
 import { commanders } from '@aomex/commander';
 
-const appChain = mdchain.console.mount(commanders('./src/commanders'));
-```
-
-别忘了把appChain挂载到应用入口
-
-```typescript
-// src/cli.ts
-import { ConsoleApp } from '@aomex/console';
-import { appChain } from './src/middleware/console.chain'; // [!code ++]
-
 const app = new ConsoleApp({
-  mount: appChain, // [!code ++]
+  mount: commanders('./src/commanders'),
 });
-
-const code = await app.run();
-process.exit(code);
 ```
 
 ## 第一个指令
 
 ```typescript
-// ./src/commanders/say.ts
+// src/commanders/say.ts
 import { Commander } from '@aomex/commander';
 
 export const commander = new Commander();
@@ -61,7 +48,7 @@ npx aomex say
 我们不妨先补充一下路由的说明文档
 
 ```typescript
-// ./src/commanders/say.ts
+// src/commanders/say.ts
 import { Commander } from '@aomex/commander';
 
 export const commander = new Commander();

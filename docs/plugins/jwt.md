@@ -76,12 +76,20 @@ export const jwt = new JWT<{ userId: number }>();
 请挂载到需要授权的路由链上
 
 ```typescript
-// src/middleware/web.chain.ts
-import { mdchain } from '@aomex/core';
-import { jwt } from './jwt';
+// src/routers/post.router.ts
+import { WebApp } from '@aomex/core';
+import { jwt } from '../middleware/jwt.md';
 
-export const appChain = mdchain.web;
-export const authChain = appChain.mount(jwt.middleware);
+const router = new Router({
+  mount: [jwt.middleware],
+});
+
+router.get('/posts', {
+  action: async (ctx) => {
+    const { token, user } = ctx.jwt;
+    const { userId } = user;
+  },
+});
 ```
 
 ## 签名
@@ -91,10 +99,9 @@ export const authChain = appChain.mount(jwt.middleware);
 ```typescript{13}
 // src/routers/passport.router.ts
 import { Router } from '@aomex/router';
-import { jwt } from '../middleware/jwt';
-import { appChain } from '../middleware/web.chain';
+import { jwt } from '../middleware/jwt.md';
 
-export const router = new Router({  mount: appChain });
+export const router = new Router();
 
 router.post('/login', {
   action: async (ctx) => {
@@ -110,20 +117,3 @@ router.post('/login', {
 ::: warning
 签名不要携带机密信息，因为任何人都可以解析token并查看其中内容。
 :::
-
-## 已授权路由
-
-```typescript{9,10}
-// src/routers/post.router.ts
-import { Router } from '@aomex/router';
-import { authChain } from '../middleware/web.chain';
-
-export const router = new Router({  mount: authChain });
-
-router.get('/posts', {
-  action: async (ctx) => {
-    const { token, user } = ctx.jwt;
-    const { userId } = user;
-  },
-});
-```

@@ -11,11 +11,13 @@ pnpm add @aomex/compress
 ## 使用
 
 ```typescript
-// ./src/middleware/web.chain.ts
-import { mdchain } from '@aomex/core';
+// src/web.ts
+import { WebApp } from '@aomex/core';
 import { compress } from '@aomex/compress';
 
-export const appChain = mdchain.web.mount(compress());
+const app = new WebApp({
+  mount: [compress()],
+});
 ```
 
 ## 参数
@@ -50,7 +52,7 @@ export const appChain = mdchain.web.mount(compress());
 插件暴露出来的属性，允许响应`强制开启`压缩功能<br>
 
 ```typescript
-export const router = new Router({ mount: appChain });
+export const router = new Router();
 
 router.get('/users', {
   action(ctx) {

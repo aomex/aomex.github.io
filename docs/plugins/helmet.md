@@ -11,11 +11,13 @@ pnpm add @aomex/helmet
 ## 使用
 
 ```typescript
-// ./src/middleware/web.chain.ts
-import { mdchain } from '@aomex/core';
+// src/web.ts
+import { WebApp } from '@aomex/core';
 import { helmet } from '@aomex/helmet';
 
-const appChain = mdchain.web.mount(helmet());
+const app = new WebApp({
+  mount: [helmet()],
+});
 ```
 
 ## 参数

@@ -11,15 +11,13 @@ pnpm add @aomex/openapi
 ## 挂载
 
 ```typescript
-// ./src/middleware/console.chain.ts
-import { mdchain } from '@aomex/core';
+// src/cli.ts
+import { ConsoleApp } from '@aomex/core';
 import { openapi } from '@aomex/openapi';
 
-const appChain = mdchain.console.mount(
-  openapi({
-    routers: './src/routers',
-  }),
-);
+const app = new ConsoleApp({
+  mount: [openapi({ routers: './src/routers' })],
+});
 ```
 
 ## 开始生成

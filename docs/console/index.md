@@ -14,10 +14,19 @@ pnpm add @aomex/core @aomex/console
 // src/cli.ts
 import { ConsoleApp } from '@aomex/console';
 
-const app = new ConsoleApp();
+const app = new ConsoleApp({
+  locale: 'zh_CN',
+});
 
 const code = await app.run();
 process.exit(code);
+
+declare module '@aomex/console' {
+  namespace ConsoleApp {
+    type T = ConsoleApp.Infer<typeof app>;
+    interface Props extends T {}
+  }
+}
 ```
 
 恭喜，入口已经创建好，输入下面的命令试一下

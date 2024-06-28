@@ -11,9 +11,11 @@ pnpm add @aomex/response-time
 ## 使用
 
 ```typescript
-// ./src/middleware/web.chain.ts
-import { mdchain } from '@aomex/core';
+// src/web.ts
+import { WebApp } from '@aomex/core';
 import { responseTime } from '@aomex/response-time';
 
-const appChain = mdchain.web.mount(responseTime());
+const app = new WebApp({
+  mount: [responseTime()],
+});
 ```

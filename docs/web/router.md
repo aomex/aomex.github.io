@@ -11,7 +11,7 @@ pnpm add @aomex/router
 ## 第一个路由
 
 ```typescript
-// ./src/routers/user.ts
+// src/routers/user.ts
 import { Router, params } from '@aomex/router';
 
 const users = [
@@ -44,12 +44,12 @@ router.get('/users/count', {
 在访问接口之前，别忘了一件很重要的事情，就是挂载路由。框架采用了自动寻找路由的方式注册接口，我们再也不用重复地导出到入口文件（枯燥且浪费生命），真正做到了一劳永逸！
 
 ```typescript{6}
-// ./src/web.ts
-import { WebApp,mdchain } from '@aomex/core';
+// src/web.ts
+import { WebApp } from '@aomex/core';
 import { routers } from '@aomex/router';
 
 const app = new WebApp({
-  mount: mdchain.web.mount(routers('./src/routers'))
+  mount: [routers('./src/routers')],
 });
 
 app.listen(3000);
@@ -117,16 +117,16 @@ router.get('/users/:id', {
 如果所有的接口都需要使用某个中间件，则建议提取到路由级别。
 
 ```typescript{5-9}
-import { mdchain } from '@aomex/core';
+import { middleware } from '@aomex/core';
 import { Router } from '@aomex/router';
 
 export const router = new Router({
-  mount: mdchain.web.mount(
+  mount: [
     middleware.web<{ foo: string }>((ctx, next) => {
       ctx.foo = 'bar';
       return next();
     }),
-  ),
+  ]
 });
 
 router.get('/users', {

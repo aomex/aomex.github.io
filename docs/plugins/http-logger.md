@@ -11,11 +11,13 @@ pnpm add @aomex/http-logger
 ## 使用
 
 ```typescript
-// ./src/middleware/web.chain.ts
-import { mdchain } from '@aomex/core';
+// src/web.ts
+import { WebApp } from '@aomex/core';
 import { httpLogger } from '@aomex/pretty-json';
 
-export const appChain = mdchain.web.mount(httpLogger());
+const app = new WebApp({
+  mount: [httpLogger()],
+});
 ```
 
 ## 内置token

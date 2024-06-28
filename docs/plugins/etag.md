@@ -13,11 +13,13 @@ pnpm add @aomex/etag
 ## 使用
 
 ```typescript
-// ./src/middleware/web.chain.ts
-import { mdchain } from '@aomex/core';
+// src/web.ts
+import { WebApp } from '@aomex/core';
 import { etag } from '@aomex/etag';
 
-export const appChain = mdchain.web.mount(etag());
+const app = new WebApp({
+  mount: [etag()],
+});
 ```
 
 ## 参数

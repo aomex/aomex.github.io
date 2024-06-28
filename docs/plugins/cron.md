@@ -13,14 +13,14 @@ pnpm add @aomex/cron
 定时任务依赖指令，因此请先编写指令。
 
 ```typescript
-// ./src/middleware/console.chain.ts
-import { mdchain } from '@aomex/core';
+// src/cli.ts
+import { ConsoleApp } from '@aomex/core';
 import { commanders } from '@aomex/cron';
 import { cron } from '@aomex/cron';
 
-const appChain = mdchain.console
-  .mount(commanders('./src/commanders'))
-  .mount(cron());
+const app = new ConsoleApp({
+  mount: [cron(), commanders('./src/commanders')],
+});
 ```
 
 ## 携带指令
@@ -37,7 +37,7 @@ const appChain = mdchain.console
 ## 第一个打招呼任务
 
 ```typescript{9-11}
-// ./src/commanders/say.ts
+// src/commanders/say.ts
 import { Commander } from '@aomex/commander';
 import { schedule } from '@aomex/cron';
 
@@ -68,7 +68,7 @@ npx aomex cron:start
 如果同时要向 唐三 和 小舞 打招呼，是否可行？试试
 
 ```typescript
-// ./src/commanders/say.ts
+// src/commanders/say.ts
 import { Commander } from '@aomex/commander';
 import { schedule } from '@aomex/cron';
 import { options } from '@aomex/console';

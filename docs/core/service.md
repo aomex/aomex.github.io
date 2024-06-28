@@ -7,7 +7,7 @@
 service采用单例模式创建，可以在任意地方使用
 
 ```typescript
-// ./src/services/index.ts
+// src/services/index.ts
 import { combineServices } from '@aomex/core';
 
 export const services = await combineServices({
@@ -25,7 +25,7 @@ declare module '@aomex/core' {
 框架提供 Service 基础类，继承它即可
 
 ```typescript
-// ./src/services/user.service.ts
+// src/services/user.service.ts
 import { Service } from '@aomex/core';
 
 export class UserService extends Service {
@@ -46,7 +46,7 @@ export class UserService extends Service {
 接着把服务注册到入口
 
 ```typescript
-// ./src/services/index.ts
+// src/services/index.ts
 import { combineServices } from '@aomex/core';
 import { UserService } from './user.service'; // [!code ++]
 
@@ -128,7 +128,7 @@ export class RedisService extends Service {
 同样地，别忘了注册服务
 
 ```typescript
-// ./src/services/index.ts
+// src/services/index.ts
 import { combineServices } from '@aomex/core';
 import { UserService } from './user.service';
 import { RedisService } from './redis.service'; // [!code ++]
@@ -144,7 +144,7 @@ export const services = await combineServices({
 还记得服务入口那一段代码吗？再温习一下
 
 ```typescript
-// ./src/services/index.ts
+// src/services/index.ts
 import { combineServices } from '@aomex/core';
 
 export const services = await combineServices({
@@ -161,7 +161,7 @@ declare module '@aomex/core' { // [!code focus]
 类型扩展让我们可以在服务实例中愉快地使用其他服务
 
 ```typescript
-// ./src/services/user.service.ts
+// src/services/user.service.ts
 import { Service } from '@aomex/core';
 
 export class UserService extends Service {
