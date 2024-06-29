@@ -81,3 +81,73 @@ app.listen(3000, () => {
   console.log('服务已启动');
 });
 ```
+
+## 错误日志
+
+如果应用发生了错误，我们希望能收集上报给一些日志平台进行整理和分析，因此需要有一个入口能收集到错误日志：
+
+```typescript
+import { WebApp } from '@aomex/web';
+
+const app = new WebApp();
+
+app.on('error', (err, ctx) => {
+  app.log(err);
+  if (String(ctx.response.statusCode).startsWith(5)) {
+    // 上报5xx的异常
+  }
+});
+```
+
+默认情况下，响应的文字是字符串类型，我们也可以在事件中更改响应类型：
+
+```typescript
+import { WebApp } from '@aomex/web';
+
+const app = new WebApp();
+
+app.on('error', (err, ctx) => {
+  // 修改响应实体
+  ctx.response.body = {
+    status: 1,
+    message: ctx.response.body,
+  };
+});
+```
+
+## 监听https
+
+`app.listen`使用的是**http**协议，如果要使用**https**，我们一般会放在[nginx](https://nginx.org)服务然后代理到node服务。如果不想用nginx，也可以直接使用node来处理证书
+
+```typescript
+import fs from 'node:fs';
+import path from 'node:path';
+import { WebApp } from '@aomex/web';
+
+const app = new WebApp({ locale: 'zh_CN' });
+
+app
+  .https({
+    // 密钥
+    key: fs.readFileSync(path.resolve('ca', 'cert.key')),
+    // 公钥
+    cert: fs.readFileSync(path.resolve('ca', 'cert.pem')),
+  })
+  .listen(443);
+```
+
+## debug
+
+生产环境下，debug模式会被默认关闭，框架会将服务端造成的异常(5xx)文字统一为状态码文字。比如500异常会响应`Internal Server Error`，无法看到具体的原因。
+
+框架支持手动开关debug配置，开启后在生产环境页能响应真实错误。
+
+```typescript
+import { WebApp } from '@aomex/web';
+
+const app = new WebApp({
+  debug: process.env['NODE_ENV'] !== 'production', // [!code --]
+  debug: process.env['NODE_ENV'] === 'development', // [!code --]
+  debug: true, // [!code ++]
+});
+```
