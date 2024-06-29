@@ -132,6 +132,10 @@ export default defineConfig({
             text: '统计响应时间',
             link: '/plugins/response-time',
           },
+          {
+            text: '静态文件',
+            link: '/plugins/static',
+          },
         ],
       },
       {
