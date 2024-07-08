@@ -73,7 +73,7 @@ const app = new ConsoleApp({
 
 ```typescript
 import { Service } from '@aomex/core';
-import { traceMethod } from '@aomex/async-trace'; // [!code ++]
+import { traceMethod } from '@aomex/async-trace';
 
 class UserService extends Service {
   @traceMethod('获取所有用户') // [!code ++]
@@ -103,7 +103,7 @@ class UserService extends Service {
 有些代码不适合抽象到服务层，但也不影响耗时链路追踪
 
 ```typescript
-import { traceBlock } from '@aomex/async-trace'; // [!code ++]
+import { traceBlock } from '@aomex/async-trace';
 
 const result = await traceBlock('获取多个用户', async () => {
   await getUsers();
