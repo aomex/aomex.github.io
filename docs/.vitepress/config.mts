@@ -159,7 +159,7 @@ export default defineConfig({
             link: '/plugins/cron',
           },
           {
-            text: '文档生成器',
+            text: 'openapi生成器',
             link: '/plugins/openapi',
           },
         ],
