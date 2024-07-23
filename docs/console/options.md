@@ -7,8 +7,7 @@
 ```typescript{10-12}
 // src/commanders/say.ts
 import { rule } from '@aomex/core';
-import { Commander } from '@aomex/commander';
-import { options } from '@aomex/console';
+import { Commander, options } from '@aomex/console';
 
 export const commander = new Commander();
 

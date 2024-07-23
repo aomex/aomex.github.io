@@ -4,8 +4,7 @@
 
 ```typescript{11}
 import { rule } from '@aomex/core';
-import { body } from '@aomex/web';
-import { Router } from '@aomex/router';
+import { body, Router } from '@aomex/web';
 
 const router = new Router();
 

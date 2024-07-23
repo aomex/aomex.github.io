@@ -2,17 +2,11 @@
 
 在真实项目中，每个功能可能都有 增、删、改、查 的接口，如果全部放在应用入口，则难以管理。因此我们引入了路由，根据功能对接口进行模块化分类
 
-## 安装
-
-```bash
-pnpm add @aomex/router
-```
-
 ## 第一个路由
 
 ```typescript
 // src/routers/user.ts
-import { Router, params } from '@aomex/router';
+import { Router, params } from '@aomex/web';
 
 const users = [
   { id: 1, name: 'user1' },
@@ -46,7 +40,7 @@ router.get('/users/count', {
 ```typescript{6}
 // src/web.ts
 import { WebApp } from '@aomex/core';
-import { routers } from '@aomex/router';
+import { routers } from '@aomex/web';
 
 const app = new WebApp({
   mount: [routers('./src/routers')],
@@ -88,7 +82,7 @@ router.post('/', { action: () => {} });
 
 ```typescript{7-11}
 import { middleware } from '@aomex/core';
-import { Router } from '@aomex/router';
+import { Router } from '@aomex/web';
 
 export const router = new Router();
 
@@ -118,7 +112,7 @@ router.get('/users/:id', {
 
 ```typescript{5-9}
 import { middleware } from '@aomex/core';
-import { Router } from '@aomex/router';
+import { Router } from '@aomex/web';
 
 export const router = new Router({
   mount: [

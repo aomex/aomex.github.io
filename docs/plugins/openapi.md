@@ -87,7 +87,7 @@ openapi({
 是的没错，生成openapi文档不一定要用cli，直接引入包可以实现相同的效果（区别就是这边属于静默生成，终端无提示文字）
 
 ```typescript
-import { Router } from '@aomex/router';
+import { Router } from '@aomex/web';
 import { generateOpenapi } from '@aomex/openapi';
 
 const router = new Router();

@@ -38,7 +38,7 @@ const app = new ConsoleApp({
 
 ```typescript{9-11}
 // src/commanders/say.ts
-import { Commander } from '@aomex/commander';
+import { Commander } from '@aomex/console';
 import { schedule } from '@aomex/cron';
 
 export const commander = new Commander();
@@ -69,9 +69,8 @@ npx aomex cron:start
 
 ```typescript
 // src/commanders/say.ts
-import { Commander } from '@aomex/commander';
 import { schedule } from '@aomex/cron';
-import { options } from '@aomex/console';
+import { Commander, options } from '@aomex/console';
 
 export const commander = new Commander();
 
@@ -123,7 +122,7 @@ cron({
 
 ```typescript
 // src/commanders/say.ts
-import { Commander } from '@aomex/commander';
+import { Commander } from '@aomex/console';
 import { schedule } from '@aomex/cron';
 
 export const commander = new Commander();
@@ -149,7 +148,7 @@ commander.create('say', {
 
 ```typescript
 // src/commanders/mail.ts
-import { Commander } from '@aomex/commander';
+import { Commander } from '@aomex/console';
 import { schedule } from '@aomex/cron';
 
 export const commander = new Commander();

@@ -98,7 +98,7 @@ router.get('/posts', {
 
 ```typescript{13}
 // src/routers/passport.router.ts
-import { Router } from '@aomex/router';
+import { Router } from '@aomex/web';
 import { jwt } from '../middleware/jwt.md';
 
 export const router = new Router();

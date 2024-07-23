@@ -3,8 +3,7 @@
 框架提供了获取路径参数的中间件，并使用验证器过滤输入。
 
 ```typescript
-import { params } from '@aomex/web';
-import { Router } from '@aomex/router';
+import { params, Router } from '@aomex/web';
 
 export const router = new Router();
 

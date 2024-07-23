@@ -2,18 +2,11 @@
 
 像写接口一样写指令！
 
-## 安装
-
-```bash
-pnpm add @aomex/commander
-```
-
 ## 使用
 
 ```typescript
 // src/cli.ts
-import { ConsoleApp } from '@aomex/core';
-import { commanders } from '@aomex/commander';
+import { commanders, ConsoleApp } from '@aomex/console';
 
 const app = new ConsoleApp({
   mount: commanders('./src/commanders'),
@@ -24,7 +17,7 @@ const app = new ConsoleApp({
 
 ```typescript
 // src/commanders/say.ts
-import { Commander } from '@aomex/commander';
+import { Commander } from '@aomex/console';
 
 export const commander = new Commander();
 
@@ -49,7 +42,7 @@ npx aomex say
 
 ```typescript
 // src/commanders/say.ts
-import { Commander } from '@aomex/commander';
+import { Commander } from '@aomex/console';
 
 export const commander = new Commander();
 

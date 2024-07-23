@@ -3,8 +3,7 @@
 框架提供了获取实体的中间件，并使用验证器过滤输入。支持表单、JSON、XML
 
 ```typescript
-import { body } from '@aomex/web';
-import { Router } from '@aomex/router';
+import { body, Router } from '@aomex/web';
 
 export const router = new Router();
 

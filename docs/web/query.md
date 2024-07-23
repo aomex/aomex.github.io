@@ -3,8 +3,7 @@
 框架提供了获取查询字符串的中间件，并使用验证器过滤输入
 
 ```typescript
-import { query } from '@aomex/web';
-import { Router } from '@aomex/router';
+import { query, Router } from '@aomex/web';
 
 export const router = new Router();
 
