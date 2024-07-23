@@ -136,6 +136,10 @@ export default defineConfig({
             text: '静态文件',
             link: '/plugins/static',
           },
+          {
+            text: 'Swagger服务',
+            link: '/plugins/swagger-ui',
+          },
         ],
       },
       {
