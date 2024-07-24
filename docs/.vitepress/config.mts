@@ -136,10 +136,6 @@ export default defineConfig({
             text: '静态文件',
             link: '/plugins/static',
           },
-          {
-            text: 'Swagger服务',
-            link: '/plugins/swagger-ui',
-          },
         ],
       },
       {
@@ -162,10 +158,6 @@ export default defineConfig({
             text: '定时任务',
             link: '/plugins/cron',
           },
-          {
-            text: 'openapi生成器',
-            link: '/plugins/openapi',
-          },
         ],
       },
       {
@@ -183,6 +175,10 @@ export default defineConfig({
           {
             text: '国际化',
             link: '/core/i18n',
+          },
+          {
+            text: 'openapi文档',
+            link: '/plugins/openapi',
           },
         ],
       },
