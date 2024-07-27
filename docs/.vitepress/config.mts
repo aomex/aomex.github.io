@@ -180,6 +180,10 @@ export default defineConfig({
             text: 'openapi文档',
             link: '/plugins/openapi',
           },
+          {
+            text: '缓存',
+            link: '/core/cache',
+          },
         ],
       },
     ],
