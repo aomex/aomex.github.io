@@ -101,48 +101,20 @@ commander.create('say', {
 
 集群服务需通过存储介质共享状态，可以考虑如下介质：
 
-- [@aomex/redis-cache](https://www.npmjs.com/package/@aomex/redis-cache)
-- [@aomex/file-cache](https://www.npmjs.com/package/@aomex/file-cache)
+- [@aomex/cache-redis-store](https://www.npmjs.com/package/@aomex/cache-redis-store)
 
 ```typescript
-import { RedisCache } from '@aomex/redis-cache';
+import { Caching } from '@aomex/cache';
+import { CacheRedisStore } from '@aomex/cache-redis-store';
 
 cron({
-  store: new RedisCache(),
+  store: new Caching(CacheRedisStore, { host: 'http://', ... }),
 });
 ```
 
-## 任务重叠
+## 任务并发
 
-当一个任务被触发的时候，如果它上一次被触发的任务还在执行，就会发生任务重叠的情况。框架默认策略是：**上一次任务完成前，新触发的任务都会被忽略。**
-
-重叠一般不会发生，因为我们能根据出业务的复杂性和执行一次需要的时间，设置合理的定时间隔。
-
-当然，我们也可以通过参数修改这种默认行为，让重叠执行成为可能：
-
-```typescript
-// src/commanders/say.ts
-import { Commander } from '@aomex/console';
-import { schedule } from '@aomex/cron';
-
-export const commander = new Commander();
-
-commander.create('say', {
-  mount: [
-    schedule({
-      minute: '*/10',
-      overlap: true, // [!code ++]
-    }),
-  ],
-  action: (ctx) => {
-    console.log('Hello World');
-  },
-});
-```
-
-## 并发
-
-在集群服务中，每个服务会各自触发相同的任务，框架只允许一个服务通过抢占的形式获得任务并执行。因为并发任务就像多线程操作，读取资源需要设置排斥锁才能保证安全，否则一不留神就会造成业务被多次处理而出问题。
+在集群服务中，每个服务会触发相同的任务，框架默认只允许一个服务通过抢占的形式获得任务并执行。因为并发任务就像多线程操作，读取资源需要设置排斥锁才能保证安全，否则一不留神就会造成业务被多次处理而出问题。
 
 当然，我们也可以通过参数修改这种默认行为，让并发执行成为可能（但是注意加锁）：
 
