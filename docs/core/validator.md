@@ -397,14 +397,38 @@ rule.uuid(['v1', 'v2', 'v3', 'v4', 'v5']);
 
 ## rule.oneOf([...])
 
-从左往右匹配其中一种规则，至少传入两种规则
+必须且只能匹配其中一个规则，如果匹配上多个则失败
 
 ```typescript
-const oneOf = rule.oneOf([rule.string(), rule.number()]);
+const oneOf = rule.oneOf([rule.string(), rule.url()]);
 
-await validate(123, oneOf); // 123
 await validate('abc', oneOf); // 'abc'
-await validate([], oneOf); // 抛出异常
+await validate('http://example.com', oneOf); // 匹配多个，抛出异常
+await validate(123, oneOf); // 没有匹配上，抛出异常
+```
+
+## rule.anyOf()
+
+规则以管道形式执行，需要至少匹配一个规则
+
+```typescript
+const anyOf = rule.anyOf([rule.string(), rule.url()]);
+
+await validate('abc', anyOf); // 'abc'
+await validate('http://example.com', anyOf); // 'http://example.com'
+await validate(123, anyOf); // 没有匹配上，抛出异常
+```
+
+## rule.allOf()
+
+规则以管道形式执行，需要至少匹配一个规则
+
+```typescript
+const allOf = rule.allOf([rule.string(), rule.url()]);
+
+await validate('abc', allOf); // 未匹配url，抛出异常
+await validate('http://example.com', allOf); // 'http://example.com'
+await validate(123, allOf); // 没有匹配上，抛出异常
 ```
 
 ## rule.any()
