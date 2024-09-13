@@ -1,5 +1,7 @@
 # 查询字符串
 
+查询字符串就是超链接问号后面的字符串，比如 **http://example.com?page=1&pageSize=10** 中，`page=1&pageSize=10`就是查询字符串
+
 框架提供了获取查询字符串的中间件，并使用验证器过滤输入
 
 ```typescript
