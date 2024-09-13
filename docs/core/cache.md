@@ -13,24 +13,26 @@ pnpm add @aomex/cache
 内置一个内存适配器，适合在开发和测试阶段使用
 
 ```typescript
-import { Caching, CacheMemoryStore } from '@aomex/cache';
+import { Caching, memoryAdapter } from '@aomex/cache';
 
-const memoryCache = new Caching(CacheMemoryStore, {});
+export const memoryCache = new Caching(memoryAdapter());
 ```
 
 ## redis适配器
 
-- [@aomex/cache-redis-store](https://www.npmjs.com/package/@aomex/cache-redis-store)
+- [@aomex/cache-redis-adapter](https://www.npmjs.com/package/@aomex/cache-redis-adapter)
 
 ```typescript
 import { Caching } from '@aomex/cache';
-import { CacheRedisStore } from '@aomex/cache-redis-store';
+import { redisAdapter } from '@aomex/cache-redis-adapter';
 
-const redisCache = new Caching(CacheRedisStore, {
-  host: '',
-  password: '',
-  port: 6379,
-});
+export const redisCache = new Caching(
+  redisAdapter({
+    host: '',
+    password: '',
+    port: 6379,
+  }),
+);
 ```
 
 ## 方法
