@@ -39,11 +39,11 @@ npx create-aomex@latest --project=hello-aomex
 ├─ .gitignore                       git忽略指定文件和目录
 ├─ .prettierignore                  prettier忽略指定文件和目录
 ├─ .prettierrc.yml                  prettier配置
-├─ docker-compose-development.yml   本地开发服务配置
 ├─ docker-compose-integration.yml   集成环境部署配置
-├─ docker-compose.yml               生产环境部署配置
-├─ Dockerfile                       生产环境镜像脚本
+├─ docker-compose-production.yml    生产环境部署配置
+├─ docker-compose.yml               本地开发服务配置
 ├─ Dockerfile.integration           集成环境镜像脚本
+├─ Dockerfile.production            生产环境镜像脚本
 ├─ package.json                     第三方依赖列表
 ├─ README.md                        项目介绍
 └─ tsconfig.json                    Typescript配置
