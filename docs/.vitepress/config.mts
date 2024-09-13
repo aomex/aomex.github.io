@@ -113,8 +113,18 @@ export default defineConfig({
             link: '/plugins/etag',
           },
           {
-            text: 'JWT授权',
-            link: '/plugins/jwt',
+            text: '身份',
+            items: [
+              { text: '身份认证', link: '/plugins/auth' },
+              {
+                text: 'Bearer适配器',
+                link: '/plugins/auth-bearer-adapter',
+              },
+              {
+                text: 'JWT适配器',
+                link: '/plugins/auth-jwt-adapter',
+              },
+            ],
           },
           {
             text: '请求日志',
