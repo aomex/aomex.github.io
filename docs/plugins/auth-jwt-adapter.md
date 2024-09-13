@@ -21,7 +21,7 @@ export const auth = authentication(jwt);
 ```
 
 ::: warning
-签名不要携带机密信息，因为任何人都可以解析token并查看其中内容！
+签名不要携带私密信息，因为任何人都可以解析token并查看其中内容！建议只携带最基础的数据，比如用户编号
 :::
 
 ## 参数
@@ -61,9 +61,31 @@ header的key建议使用`authorization`，其它源的key建议使用`access_tok
 
 ### onVerified
 
-**签名：**`(data: { payload: Payload; ctx: WebContext; token: string }): Promise<Payload | false>`
+**签名：**`(data: { payload: Payload; ctx: WebContext; token: string }): Promise<VerifiedPayload | false>`
 
-验证成功后的回调，对payload做额外处理。如果token或者payload无效，则返回`false`
+验证成功后的回调，对payload做额外处理。如果token或者payload无效，则返回`false`。
+
+如果最终的数据与令牌中存储的数据不一致，则需要传入泛型第二个参数：
+
+```typescript
+const jwt = jwtAdapter<
+  { userId: number },
+  { id: number; name: string; age: number } // [!code ++]
+>({
+  secret: 'YOUR_SECRET',
+  async onVerified({ payload }) {
+    return { id: payload.userId, name: '树先生', age: 30 };
+  },
+});
+
+// 路由中使用
+const router = new Router();
+router.get('/api', {
+  action: async (ctx) => {
+    ctx.auth; // {id: 1, name: '树先生', age: 30}
+  },
+});
+```
 
 ### legacySecretOrPublicKey
 
@@ -77,7 +99,7 @@ header的key建议使用`authorization`，其它源的key建议使用`access_tok
 
 **签名：**`(payload: Payload, opts?: SignOptions): string`
 
-适配器包含一个生成token的方法。
+适配器包含一个生成token的方法。该方法会自动设置密码
 
 ```typescript
 const token = jwt.signature({ userId: 1 }, { expiresIn: '30d' });
