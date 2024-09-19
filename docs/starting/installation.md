@@ -23,6 +23,7 @@ npx create-aomex@latest
 ├─ .husky/                          git提交前执行的代码检测脚本
 ├─ .vscode/                         vscode编辑器基础设置
 ├─ prisma/                          数据表结构和migrate文件
+├─ scripts/                         运维脚本
 ├─ src/
    ├─ commanders/                   指令控制层
    ├─ configs/                      不同环境下的配置
