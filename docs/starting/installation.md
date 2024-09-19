@@ -10,7 +10,7 @@ outline: doc
 npx create-aomex@latest
 ```
 
-:::
+::: warning
 框架对 node.js 的最低要求为 `20.13.0`，安装前请使用 `node -v` 确认版本
 :::
 
