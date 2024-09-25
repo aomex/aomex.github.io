@@ -19,7 +19,7 @@ import { middleware } from '@aomex/core';
 import { WebApp } from '@aomex/web';
 
 const app = new WebApp({
-  locale: 'zh_CN',
+  language: 'zh_CN',
   mount: [
     middleware.web(async (ctx, next) => {
       await next();
@@ -74,7 +74,7 @@ import { middleware } from '@aomex/core';
 import { WebApp } from '@aomex/web';
 
 const app = new WebApp({
-  locale: 'en_US',
+  language: 'en_US',
 });
 
 app.listen(3000, () => {
@@ -124,7 +124,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { WebApp } from '@aomex/web';
 
-const app = new WebApp({ locale: 'zh_CN' });
+const app = new WebApp({ language: 'zh_CN' });
 
 app
   .https({

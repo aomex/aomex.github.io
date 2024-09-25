@@ -15,7 +15,7 @@ pnpm add @aomex/core @aomex/console
 import { ConsoleApp } from '@aomex/console';
 
 const app = new ConsoleApp({
-  locale: 'zh_CN',
+  language: 'zh_CN',
 });
 
 const code = await app.run();
@@ -44,7 +44,7 @@ import { middleware } from '@aomex/core';
 import { ConsoleApp } from '@aomex/console';
 
 const app = new ConsoleApp({
-  locale: 'en_US',
+  language: 'en_US',
 });
 
 const code = await app.run();
