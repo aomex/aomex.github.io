@@ -27,6 +27,7 @@ npx create-aomex@latest
 ├─ src/
    ├─ commanders/                   指令控制层
    ├─ configs/                      不同环境下的配置
+   ├─ i18n/                         国际化语言包
    ├─ middleware/                   中间件
    ├─ routers/                      路由控制层
    ├─ services/                     业务逻辑层
