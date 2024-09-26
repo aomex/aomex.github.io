@@ -16,10 +16,13 @@ pnpm add @aomex/cron
 // src/cli.ts
 import { ConsoleApp } from '@aomex/core';
 import { commanders } from '@aomex/cron';
-import { cron } from '@aomex/cron';
+import { crons } from '@aomex/cron';
 
 const app = new ConsoleApp({
-  mount: [cron(), commanders('./src/commanders')],
+  mount: [
+    crons({ commanders: './src/commanders' }),
+    commanders('./src/commanders'),
+  ],
 });
 ```
 
@@ -39,13 +42,13 @@ const app = new ConsoleApp({
 ```typescript{9-11}
 // src/commanders/say.ts
 import { Commander } from '@aomex/console';
-import { schedule } from '@aomex/cron';
+import { cron } from '@aomex/cron';
 
 export const commander = new Commander();
 
 commander.create('say', {
   mount: [
-    schedule({
+    cron({
       minute: '*/10',
     }),
   ],
@@ -69,7 +72,7 @@ npx aomex cron:start
 
 ```typescript
 // src/commanders/say.ts
-import { schedule } from '@aomex/cron';
+import { cron } from '@aomex/cron';
 import { Commander, options } from '@aomex/console';
 
 export const commander = new Commander();
@@ -79,11 +82,11 @@ commander.create('say', {
     options({
       name: rule.string(),
     }),
-    schedule({
+    cron({
       minute: '*/10',
       args: ['--name', '唐三'],
     }),
-    schedule({
+    cron({
       minute: '*/10',
       args: ['--name', '小舞'],
     }),
@@ -101,14 +104,14 @@ commander.create('say', {
 
 集群服务需通过存储介质共享状态，可以考虑如下介质：
 
-- [@aomex/cache-redis-store](https://www.npmjs.com/package/@aomex/cache-redis-store)
+- [@aomex/cache-redis-adapter](https://www.npmjs.com/package/@aomex/cache-redis-adapter)
 
 ```typescript
 import { Caching } from '@aomex/cache';
-import { CacheRedisStore } from '@aomex/cache-redis-store';
+import { redisAdapter } from '@aomex/cache-redis-adapter';
 
-cron({
-  store: new Caching(CacheRedisStore, { host: 'http://', ... }),
+crons({
+  cache: new Caching(redisAdapter({ host: 'http://', ... })),
 });
 ```
 
@@ -121,13 +124,13 @@ cron({
 ```typescript
 // src/commanders/mail.ts
 import { Commander } from '@aomex/console';
-import { schedule } from '@aomex/cron';
+import { cron } from '@aomex/cron';
 
 export const commander = new Commander();
 
 commander.create('send:mail', {
   mount: [
-    schedule({
+    cron({
       minute: '*',
       concurrent: Infinity, // [!code ++]
     }),
