@@ -1,4 +1,4 @@
-# JWT适配器
+# JWT策略
 
 服务器无状态令牌(JSON web token)
 
@@ -11,13 +11,16 @@ pnpm add @aomex/auth-jwt-bearer
 ## 使用
 
 ```typescript
-import { authentication } from '@aomex/auth';
-import { jwtAdapter } from '@aomex/auth-jwt-bearer';
+import { Authentication } from '@aomex/auth';
+import { JwtStrategy } from '@aomex/auth-jwt-strategy';
 
-export const jwt = jwtAdapter<{ userId: number }>({
-  secret: 'YOUR_SECRET',
+export const auth = new Authentication({
+  strategies: {
+    jwt: new JwtStrategy<{ userId: number }>({
+      secret: 'YOUR_SECRET',
+    }),
+  },
 });
-export const auth = authentication(jwt);
 ```
 
 ::: warning
@@ -68,7 +71,7 @@ header的key建议使用`authorization`，其它源的key建议使用`access_tok
 如果最终的数据与令牌中存储的数据不一致，则需要传入泛型第二个参数：
 
 ```typescript
-const jwt = jwtAdapter<
+const jwt = new JwtStrategy<
   { userId: number },
   { id: number; name: string; age: number } // [!code ++]
 >({
@@ -82,7 +85,7 @@ const jwt = jwtAdapter<
 const router = new Router();
 router.get('/api', {
   action: async (ctx) => {
-    ctx.auth; // {id: 1, name: '树先生', age: 30}
+    ctx.jwt; // {id: 1, name: '树先生', age: 30}
   },
 });
 ```
@@ -99,8 +102,10 @@ router.get('/api', {
 
 **签名：**`(payload: Payload, opts?: SignOptions): string`
 
-适配器包含一个生成token的方法。该方法会自动设置密码
+该策略包含一个生成token的方法。该方法会自动设置密码
 
 ```typescript
-const token = jwt.signature({ userId: 1 }, { expiresIn: '30d' });
+const token = auth
+  .strategy('jwt')
+  .signature({ userId: 1 }, { expiresIn: '30d' });
 ```

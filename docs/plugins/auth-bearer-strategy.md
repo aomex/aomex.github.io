@@ -1,25 +1,29 @@
-# Bearer适配器
+# Bearer Token策略
 
 使用一段普通的token令牌作为身份依据
 
 ## 安装
 
 ```bash
-pnpm add @aomex/auth-bearer-adapter
+pnpm add @aomex/auth-bearer-strategy
 ```
 
 ## 使用
 
 ```typescript
 import { authentication } from '@aomex/auth';
-import { bearerAdapter } from '@aomex/auth-bearer-adapter';
+import { BearerAdapter } from '@aomex/auth-bearer-strategy';
 
-export const bearer = bearerAdapter({
-  async onLoaded(token, ctx) {
-    return { id: 1, name: 'abc' };
+export const auth = new Authentication({
+  strategies: {
+    bearer: new BearerAdapter({
+      async onLoaded(token, ctx) {
+        // 返回值的类型会被反向推导到中间件
+        return { id: 1, name: 'abc' };
+      },
+    }),
   },
 });
-export const auth = authentication(bearer);
 ```
 
 ## 参数
@@ -37,7 +41,7 @@ export const router = new Router();
 
 router.get('/api', {
   action: (ctx) => {
-    console.log(ctx.auth); // { id: 1, name: 'abc' }
+    console.log(ctx.bearer.data); // { id: 1, name: 'abc' }
   },
 });
 ```
@@ -58,8 +62,8 @@ header的key建议使用`authorization`，其它源的key建议使用`access_tok
 
 **签名：**`(algorithm: string, uniqueKey?: string | number) => string`
 
-适配器包含一个生成token的方法
+strategy包含一个生成token的方法
 
 ```typescript
-const bearer = authAdapter.signature();
+const token = auth.strategy('bearer').signature('md5');
 ```

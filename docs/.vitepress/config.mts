@@ -117,12 +117,12 @@ export default defineConfig({
             items: [
               { text: '身份认证', link: '/plugins/auth' },
               {
-                text: 'Bearer适配器',
-                link: '/plugins/auth-bearer-adapter',
+                text: 'Bearer策略',
+                link: '/plugins/auth-bearer-strategy',
               },
               {
-                text: 'JWT适配器',
-                link: '/plugins/auth-jwt-adapter',
+                text: 'JWT策略',
+                link: '/plugins/auth-jwt-strategy',
               },
             ],
           },
