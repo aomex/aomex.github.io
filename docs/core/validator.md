@@ -229,9 +229,15 @@ await validate('a,b,c', strArray.forceToArray('block'));
 await validate(123, rule.array(rule.number()).forceToArray('block'));
 ```
 
-## rule.dateTime()
+## rule.dateTime(format?)
 
-时间类型
+时间类型，可以设置解析字符串的格式
+
+```typescript
+rule.dateTime();
+rule.dateTime('yyyy-MM-dd');
+rule.dateTime('yyyy-MM-dd', 'MM-dd', 'yyyy-MM'),
+```
 
 ### .min(date,inclusive=true)
 
