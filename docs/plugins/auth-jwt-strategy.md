@@ -5,7 +5,7 @@
 ## 安装
 
 ```bash
-pnpm add @aomex/auth-jwt-bearer
+pnpm add @aomex/auth-jwt-strategy
 ```
 
 ## 使用
