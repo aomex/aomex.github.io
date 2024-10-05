@@ -12,11 +12,11 @@ pnpm add @aomex/auth-bearer-strategy
 
 ```typescript
 import { authentication } from '@aomex/auth';
-import { BearerAdapter } from '@aomex/auth-bearer-strategy';
+import { BearerStrategy } from '@aomex/auth-bearer-strategy';
 
 export const auth = new Authentication({
   strategies: {
-    bearer: new BearerAdapter({
+    bearer: new BearerStrategy({
       async onLoaded(token, ctx) {
         // 返回值的类型会被反向推导到中间件
         return { id: 1, name: 'abc' };
