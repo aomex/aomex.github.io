@@ -191,6 +191,36 @@ await validate(str, normal); // 抛出异常
 await validate(str, fromString); // { id: 1 }
 ```
 
+### .additional({ key?, value? }) <Badge type="tip" text="v3.7.0" />
+
+保留未被验证的键值对。对象中包含动态字段时，无法使用具体的结构体描述出对象的组成。
+
+有以下几种保留规则：
+
+1. 不提供参数，则保留所有的属性和值；
+2. 提供`key`，则保留 键 能匹配正则表达式的键值对；
+3. 提供`value`，则保留 值 能匹配验证器的键值对，同时值会根据验证器逻辑做相应的修正；
+4. 提供`key`和`value`，则保留能同时满足规则2和3的键值对。
+
+```typescript
+const const obj = {
+  id: 1,
+  name: 'foo',
+  field_1: 'yes',
+  field_2: 'no',
+  dynamic_3: true
+};
+
+// 返回 { field_1, field_2 }
+rule.object().additional({ key: /^field_/ });
+
+// 返回 { id, field_1, field_2 }
+rule.object({ id: rule.int() }).additional({ key: /^field_/ });
+
+// 返回 { id, dynamic_3 }
+rule.object({ id: rule.int() }).additional({ value: rule.boolean() });
+```
+
 ## rule.array(item?)
 
 数组类型，包含一个元素验证器。
