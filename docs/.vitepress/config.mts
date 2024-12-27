@@ -94,6 +94,10 @@ export default defineConfig({
                 text: '约束响应结果',
                 link: '/web/response',
               },
+              {
+                text: 'Prisma验证器',
+                link: '/plugins/prisma-validator',
+              },
             ],
           },
           {
