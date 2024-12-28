@@ -142,6 +142,71 @@ await cache.ttl('foo'); // 59000
 
 删除所有缓存
 
+## 装饰器
+
+想象一下，你是否经常写这种代码，先判断缓存是否存在，不存在则获取，然后保存缓存。
+
+```
+class MyClass {
+  async getMyData(id: number) {
+    const key = `my_key_${id}`;
+    let data = await cache.get(key);
+    if (!data) {
+      data = await ... // 业务逻辑在这里
+      await cache.set(key, data, 3600_000);
+    }
+    return data;
+  }
+}
 ```
 
+这种写法有以下几个方面的缺点：
+
+1. 过于模板化，浪费时间
+2. 模板化不利于阅读
+3. 拼接key有点繁琐
+4. 并发时，缓存未命中的情况下，逻辑被执行多次
+
+---
+
+此时，装饰器方案可以很好地解决这些问题
+
+```typescript
+class MyClass {
+  @cache.decorate({ duration: 3600_000 })
+  async getMyData(id: number) {
+    const data = await ... // 业务逻辑在这里
+    return data;
+  }
+}
+```
+
+是了，带来一种清**爽**的感觉！缓存逻辑与业务分离，书写方便，利于阅读，还能自动管理key，重点是并发时只处理一次逻辑。
+
+如果你想手动管理key，那也是没问题的
+
+```typescript
+class MyClass {
+  @cache.decorate({
+    // 这里id的类型会自动推导为number类型
+    key: (id) => `my_key_${id}`,
+    duration: 3600_000,
+  })
+  async getMyData(id: number) {
+    const data = await ... // 业务逻辑在这里
+    return data;
+  }
+}
+```
+
+如果key不需要参数，也可以大胆地使用常量（这意味着总是只有一个缓存）
+
+```typescript
+class MyClass {
+  @cache.decorate({ key: 'my_key', duration: 3600_000 })
+  async getMyData(id: number) {
+    const data = await ... // 业务逻辑在这里
+    return data;
+  }
+}
 ```
