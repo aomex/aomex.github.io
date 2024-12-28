@@ -28,7 +28,7 @@ generator client {
 
 model user {
   id    Int  @id @default(autoincrement())
-  /// 这是一段注释，会被写入规则。注意开头是3个斜杆
+  /// 这是一段注释，会被写入验证器。注意开头是3个斜杆
   name  String
   age   Int?
   created_at DateTime @default(now())
@@ -71,3 +71,25 @@ router.post('/users', {
   },
 });
 ```
+
+## 子集
+
+有些接口只需要传入部分字段，比如创建时一般不需要 自增编号，时间 这些字段，那就可以直接使用剔除函数
+
+```typescript
+import { prismaInput } from '@aomex/prisma';
+
+// 等价于：{ name: rule.string(), age: rule.int().optional() }
+prismaInput.user.omit('id', 'created_at', 'updated_at');
+```
+
+或者直接指定你想要的字段也行
+
+```typescript
+import { prismaInput } from '@aomex/prisma';
+
+prismaInput.user.pick('name', 'age');
+```
+
+**pick**的优点是：精确控制想要的字段；缺点是：数据库增删字段时路由层也需要同步增删。<br>
+**omit**的优点是：只需过滤掉可自动生成的字段；缺点是：不够直观。
