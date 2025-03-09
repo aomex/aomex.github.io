@@ -198,6 +198,10 @@ export default defineConfig({
             text: '缓存',
             link: '/core/cache',
           },
+          {
+            text: '日志',
+            link: '/core/logger',
+          },
         ],
       },
     ],

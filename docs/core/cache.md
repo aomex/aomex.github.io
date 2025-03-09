@@ -1,6 +1,6 @@
 # 缓存
 
-临时存储不经常变化的数据
+临时存储不经常变化的数据或者热数据
 
 ## 安装
 
@@ -18,28 +18,23 @@ import { Caching, memoryAdapter } from '@aomex/cache';
 export const memoryCache = new Caching(memoryAdapter());
 ```
 
-## redis适配器
+## 数据类型
 
-- [@aomex/cache-redis-adapter](https://www.npmjs.com/package/@aomex/cache-redis-adapter)
-
-```typescript
-import { Caching } from '@aomex/cache';
-import { redisAdapter } from '@aomex/cache-redis-adapter';
-
-export const redisCache = new Caching(
-  redisAdapter({
-    host: '',
-    password: '',
-    port: 6379,
-  }),
-);
-```
-
-## 方法
+js内置的基础类型和复杂类型数据，均可存储
 
 ```typescript
-export type Types = string | number | object | boolean;
+export type Types =
+  | string
+  | number
+  | object
+  | boolean
+  | bigint
+  | Map
+  | Set
+  | Date;
 ```
+
+## 通用方法
 
 ### get()
 
@@ -209,4 +204,21 @@ class MyClass {
     return data;
   }
 }
+```
+
+## redis适配器
+
+- [@aomex/cache-redis-adapter](https://www.npmjs.com/package/@aomex/cache-redis-adapter)
+
+```typescript
+import { Caching } from '@aomex/cache';
+import { redisAdapter } from '@aomex/cache-redis-adapter';
+
+export const redisCache = new Caching(
+  redisAdapter({
+    host: '',
+    password: '',
+    port: 6379,
+  }),
+);
 ```

@@ -148,41 +148,9 @@ swaggerUI({
 
 swagger服务创建后，中间件内部包含了一个直接访问文档的接口。格式如下：`http://host.com/swagger/openapi.json`
 
-## 与前端项目配合
-
-如果跟你配合的前端大佬是个暴脾气，觉得看swagger文档还是太慢了，参数容易抄错，TS类型也要自己写。这时我们就可以掏给他一个不要钱的前端库 [foca-openapi](https://github.com/foca-js/foca-openapi)，让他自己生成`前端请求服务`，体验梭哈的感觉
-
-```typescript
-// openapi.config.ts
-import { defineConfig } from 'foca-openapi';
-
-export default defineConfig({
-  // 本地文件或者在线实时获取
-  path: 'http://host.com/swagger/openapi.json',
-});
-```
-
-让他执行指令 `npx foca-openapi` 后就能获得满屏的类型提示了，从此再也不会来找你的麻烦
-
-```typescript
-// index.ts
-import { OpenapiClient } from 'foca-openapi';
-import { fetchAdapter } from 'foca-openapi/adapters/fetch';
-
-const adapter = fetchAdapter({ baseURL: 'http://host.com' });
-const client = new OpenapiClient(adapter);
-
-// rest模式
-const users = await client.get('/users');
-// rpc模式
-const users = await client.getUsers();
-// rpc-group模式
-const users = await client.user.getUsers();
-```
-
 ## 生成静态文件
 
-处于某种无法满足的原因，你希望提前生成openapi.json文件，那么可以在console应用中使用指令生成
+出于某种原因，你希望提前生成openapi.json文件，那么可以在console应用中使用指令生成
 
 ### 挂载
 
@@ -217,3 +185,7 @@ openapi({
   saveToFile: 'openapi.yaml', // [!code ++]
 });
 ```
+
+## 与前端项目配合
+
+如果跟你配合的前端大佬是个暴脾气，觉得看swagger文档还是太慢了，参数容易抄错，TS类型也要自己写。这时我们就可以掏给他一个不要钱的前端库 [foca-openapi](https://github.com/foca-js/foca-openapi)，让他自己生成`前端请求服务`，体验梭哈的感觉。
