@@ -16,7 +16,7 @@ import { JwtStrategy } from '@aomex/auth-jwt-strategy';
 
 export const auth = new Auth({
   strategies: {
-    jwt: new JwtStrategy<{ userId: number }>({
+    jwt: new JwtStrategy({
       secret: 'YOUR_SECRET',
     }),
   },
@@ -64,19 +64,14 @@ header的key建议使用`authorization`，其它源的key建议使用`access_tok
 
 ### onVerified
 
-**签名：**`(data: { payload: Payload; ctx: WebContext; token: string }): Promise<VerifiedPayload | false>`
+**签名：**`(payload: Payload; ctx: WebContext; token: string): Promise<VerifiedPayload | false>`
 
 验证成功后的回调，对payload做额外处理。如果token或者payload无效，则返回`false`。
 
-如果最终的数据与令牌中存储的数据不一致，则需要传入泛型第二个参数：
-
 ```typescript
-const jwt = new JwtStrategy<
-  { userId: number },
-  { id: number; name: string; age: number } // [!code ++]
->({
+const jwt = new JwtStrategy({
   secret: 'YOUR_SECRET',
-  async onVerified({ payload }) {
+  async onVerified(payload: { userId: number }) {
     return { id: payload.userId, name: '树先生', age: 30 };
   },
 });
@@ -85,7 +80,7 @@ const jwt = new JwtStrategy<
 const router = new Router();
 router.get('/api', {
   action: async (ctx) => {
-    ctx.jwt; // {id: 1, name: '树先生', age: 30}
+    ctx.auth.jwt.data; // {id: 1, name: '树先生', age: 30}
   },
 });
 ```

@@ -41,7 +41,7 @@ export const router = new Router();
 
 router.get('/api', {
   action: (ctx) => {
-    console.log(ctx.bearer.data); // { id: 1, name: 'abc' }
+    console.log(ctx.auth.bearer.data); // { id: 1, name: 'abc' }
   },
 });
 ```

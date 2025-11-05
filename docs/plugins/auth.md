@@ -53,7 +53,7 @@ auth.strategy('aaa').someMethod();
 
 ## 上下文key
 
-默认地，被认证后的身份信息会存储在`ctx`上，而key就是策略对应的key。如果想修改，则需要在生成中间件时指定
+默认地，被认证后的身份信息会存储在`ctx.auth`上，而key就是策略对应的key。如果想修改，则需要在生成中间件时指定
 
 ```typescript
 auth.authenticate('aaa'); // ctx.aaa
