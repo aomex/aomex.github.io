@@ -51,11 +51,26 @@ auth.authenticate('aaa'); // 中间件
 auth.strategy('aaa').someMethod();
 ```
 
-## 上下文key
+## 权限认证
 
-默认地，被认证后的身份信息会存储在`ctx.auth`上，而key就是策略对应的key。如果想修改，则需要在生成中间件时指定
+身份认证只能过滤已经登录的用户，但是在一些复杂的系统（尤其是后台管理系统），往往包含了权限方面的认证。比如用户A只能访问某个产品数据，用户B不仅能访问还能编辑，用户C则能创建用户。我们往往用scopes来表示用户的权限，比如 scopes=['create', 'retrieve', 'update', 'delete']，不用用户包含的权限数量是不一样的。
 
 ```typescript
-auth.authenticate('aaa'); // ctx.aaa
-auth.authenticate('aaa', { contextKey: 'zzz' }); // ctx.zzz
+router.get('/api', {
+  mount: [
+    // 先认证身份
+    auth.authenticate('my_strategy'),
+    // 再认证权限
+    auth.authorize('my_strategy', 'create', 'update'),
+
+    // 身份与权限 合并使用
+    auth.authenticate('my_strategy').authorize('create', 'update'),
+  ],
+  action: async (ctx) => {},
+});
 ```
+
+:::warning
+身份认证失败状态码：**401**<br>
+权限认证失败状态码：**403**
+:::

@@ -85,6 +85,50 @@ router.get('/api', {
 });
 ```
 
+### onAuthorize
+
+**签名：**`(...scopes) => Promise<boolean>`
+
+身份认证后进行权限认证。中间件可以和身份认证一起使用，也可以单独使用，有利于灵活控制不同路由的权限。
+
+```typescript{1,9-15,22-23,31-32}
+type Scopes = 'create' | 'update' | 'retrieve' | 'delete';
+
+const auth = new Auth({
+  strategies: {
+    bearer: new BearerStrategy({
+      async onVerified(payload: { userId: number }) {
+        return { id: payload.userId, name: '树先生', age: 30, scopes: [] };
+      },
+      onAuthorize(...scopes: Scopes[]) {
+        // 获得 onLoaded 的返回值
+        const user = this.getIdentity();
+        // 取权限交集
+        const accepted = intersection(scopes, user.scopes);
+        return accepted.length > 0;
+      },
+    }),
+  },
+});
+
+router.get('/api', {
+  mount: [
+    // 一体式
+    auth.authenticate('jwt').authorize('create', 'update')
+  ],
+  action: (ctx) => {},
+});
+
+router.get('/api', {
+  mount: [
+    auth.authenticate('jwt'),
+    // 独立式
+    auth.authorize('jwt', 'create', 'update')
+  ],
+  action: (ctx) => {},
+});
+```
+
 ### legacySecretOrPublicKey
 
 **签名：**`Secret[]`

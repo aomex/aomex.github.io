@@ -16,12 +16,7 @@ import { BearerStrategy } from '@aomex/auth-bearer-strategy';
 
 export const auth = new Auth({
   strategies: {
-    bearer: new BearerStrategy({
-      async onLoaded(token, ctx) {
-        // 返回值的类型会被反向推导到中间件
-        return { id: 1, name: 'abc' };
-      },
-    }),
+    bearer: new BearerStrategy({}),
   },
 });
 ```
@@ -36,13 +31,69 @@ export const auth = new Auth({
 
 返回的身份数据在路由中可直接使用
 
-```typescript
-export const router = new Router();
+```typescript{4-7,14,17}
+export const auth = new Auth({
+  strategies: {
+    bearer: new BearerStrategy({
+      async onLoaded(token, ctx) {
+        // 返回值的类型会被反向推导到中间件
+        return { id: 1, name: 'abc', scopes: [] };
+      },
+    }),
+  },
+});
 
 router.get('/api', {
+  mount: [
+    auth.authenticate('bearer'),
+  ],
   action: (ctx) => {
     console.log(ctx.auth.bearer.data); // { id: 1, name: 'abc' }
   },
+});
+```
+
+### onAuthorize
+
+**签名：**`(...scopes) => Promise<boolean>`
+
+身份认证后进行权限认证。中间件可以和身份认证一起使用，也可以单独使用，有利于灵活控制不同路由的权限。
+
+```typescript{1,9-15,22-23,31-32}
+type Scopes = 'create' | 'update' | 'retrieve' | 'delete';
+
+const auth = new Auth({
+  strategies: {
+    bearer: new BearerStrategy({
+      async onLoaded(token, ctx) {
+        return { id: 1, name: 'abc', scopes: [] };
+      },
+      onAuthorize(...scopes: Scopes[]) {
+        // 获得 onLoaded 的返回值
+        const user = this.getIdentity();
+        // 取权限交集
+        const accepted = intersection(scopes, user.scopes);
+        return accepted.length > 0;
+      },
+    }),
+  },
+});
+
+router.get('/api', {
+  mount: [
+    // 一体式
+    auth.authenticate('bearer').authorize('create', 'update')
+  ],
+  action: (ctx) => {},
+});
+
+router.get('/api', {
+  mount: [
+    auth.authenticate('bearer'),
+    // 独立式
+    auth.authorize('bearer', 'create', 'update')
+  ],
+  action: (ctx) => {},
 });
 ```
 
