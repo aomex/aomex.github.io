@@ -11,10 +11,10 @@ pnpm add @aomex/auth-bearer-strategy
 ## 使用
 
 ```typescript
-import { authentication } from '@aomex/auth';
+import { Auth } from '@aomex/auth';
 import { BearerStrategy } from '@aomex/auth-bearer-strategy';
 
-export const auth = new Authentication({
+export const auth = new Auth({
   strategies: {
     bearer: new BearerStrategy({
       async onLoaded(token, ctx) {

@@ -15,9 +15,9 @@ pnpm add @aomex/auth
 ```typescript
 // src/web.ts
 import { WebApp } from '@aomex/core';
-import { Authentication } from '@aomex/auth';
+import { Auth } from '@aomex/auth';
 
-const auth = new Authentication({
+const auth = new Auth({
   strategies: { s1: new MyStrategy1() },
 });
 
@@ -32,7 +32,7 @@ export const router = new Router({
 认证实例作为统一入口，可以包含多种认证策略。使用时，在路由层调用`auth.authenticate(...)`生成中间件，这样不同的路由就可以混合使用需要的认证策略。
 
 ```typescript
-export const auth = new Authentication({
+export const auth = new Auth({
   strategies: {
     aaa: new MyStrategy1(),
     bbb: new MyStrategy2(),

@@ -11,10 +11,10 @@ pnpm add @aomex/auth-jwt-strategy
 ## 使用
 
 ```typescript
-import { Authentication } from '@aomex/auth';
+import { Auth } from '@aomex/auth';
 import { JwtStrategy } from '@aomex/auth-jwt-strategy';
 
-export const auth = new Authentication({
+export const auth = new Auth({
   strategies: {
     jwt: new JwtStrategy<{ userId: number }>({
       secret: 'YOUR_SECRET',
