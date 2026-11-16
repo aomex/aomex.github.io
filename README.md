@@ -1,1 +1,8 @@
-aomex框架文档，地址：https://aomex.js.org
+# aomex.js.org
+
+Aomex 框架文档站点：https://aomex.js.org
+
+```bash
+pnpm install
+pnpm dev
+```

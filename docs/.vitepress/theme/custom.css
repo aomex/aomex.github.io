@@ -1,0 +1,7 @@
+/* 根 locale 仅作跳转页，语言菜单里用零宽字符占位，这里藏掉空项 */
+.VPNavBarTranslations .items .link:empty,
+.VPNavScreenTranslations .items .link:empty,
+.VPNavBarTranslations .items .link:blank,
+.VPNavScreenTranslations .items .link:blank {
+  display: none !important;
+}

@@ -3,3 +3,11 @@ node_modules/
 .cache/
 dist/
 */.vitepress/cache/
+
+# 翻译临时产物（正式管线只保留 scripts/translate-docs.mjs + lib + generated）
+scripts/.translate-cache/
+scripts/.translate-batches/
+scripts/.venv-translate/
+scripts/.ru-parts/
+scripts/.ru-parts-en/
+.venv-translate/
