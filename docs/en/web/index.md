@@ -205,7 +205,7 @@ On `SIGTERM` / `SIGINT` (`docker stop`, Ctrl+C, K8s rolling), `WebApp` **gracefu
 shutdown: { timeout: 10_000 },
 ```
 
-Rarely changed locally; in production with uploads, long poll, slow queries, size to worst-case request. No new requests during shutdown—load balancers should drain first.
+Rarely changed locally; in production with uploads, long poll, slow queries, size to worst-case request. No new requests during shutdown—load balancers should drain first. With [clusterListen](/en/advanced/cluster#clusterlisten), the primary also receives signals and coordinates worker exit.
 
 ## Site-wide body limits
 
@@ -265,6 +265,8 @@ app
 ```
 
 Production often terminates TLS at Nginx / Caddy and proxies to Node HTTP—pair with correct `proxyIP`.
+
+Multi-process setups, Docker scale, K8s replicas, PM2, and `clusterListen`: [Multi-process and scaling](/en/advanced/cluster).
 
 ## ctx.send
 
@@ -364,3 +366,4 @@ Uncaught exceptions in actions/middleware emit `error` on the app. Default loggi
 - [SSE](/en/web/sse): `ctx.sse` / stream / resume
 - [Error format](/en/web/errors): JSON after `ctx.throw`
 - [Response envelope](/en/web/envelope): unified JSON shell, HTTP 200
+- [Multi-process and scaling](/en/advanced/cluster): Docker / K8s / PM2 / `clusterListen`

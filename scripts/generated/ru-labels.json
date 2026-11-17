@@ -64,7 +64,8 @@
     "customMiddleware": "Свой middleware",
     "customValidator": "Свой валидатор",
     "customAuth": "Своя стратегия Auth",
-    "i18n": "i18n в приложении"
+    "i18n": "i18n в приложении",
+    "cluster": "Многопроцессность и масштабирование"
   },
   "ui": {
     "editLink": "Редактировать страницу",

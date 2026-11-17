@@ -102,6 +102,7 @@ export const ZH_SIDEBAR_LABELS = {
   customValidator: '自定义验证器',
   customAuth: '自定义鉴权策略',
   i18n: '业务国际化',
+  cluster: '多进程与扩容',
 };
 
 export const UI_STRINGS_ZH = {

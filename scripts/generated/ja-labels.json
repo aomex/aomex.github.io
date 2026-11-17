@@ -64,7 +64,8 @@
     "customMiddleware": "カスタムミドルウェア",
     "customValidator": "カスタムバリデータ",
     "customAuth": "カスタム認証ストラテジー",
-    "i18n": "アプリの i18n"
+    "i18n": "アプリの i18n",
+    "cluster": "マルチプロセスとスケール"
   },
   "ui": {
     "editLink": "このページを編集",

@@ -205,7 +205,7 @@ const app = new WebApp({
 shutdown: { timeout: 10_000 },
 ```
 
-本地开发很少改；生产若有上传、长轮询、慢查询，可按最坏请求耗时调大。关停期间新请求进不来——负载均衡应先摘掉实例再发信号。
+本地开发很少改；生产若有上传、长轮询、慢查询，可按最坏请求耗时调大。关停期间新请求进不来——负载均衡应先摘掉实例再发信号。用了 [clusterListen](/zh/advanced/cluster#clusterlisten) 时，primary 自己也会收信号并协调各 worker 退出。
 
 ## body 全站配额
 
@@ -265,6 +265,8 @@ app
 ```
 
 生产更常见的是 Nginx / Caddy 终结 TLS，反代到 Node HTTP——同时要配准 proxyIP。
+
+多进程、Docker scale、K8s 副本、PM2、`clusterListen` 见 [多进程与扩容](/zh/advanced/cluster)。
 
 ## ctx.send
 
@@ -364,3 +366,4 @@ action / 中间件里没接住的异常，框架会 `emit('error', err, ctx)`。
 - [服务端推送 SSE](/zh/web/sse)：ctx.sse / stream / 断线续传
 - [错误格式](/zh/web/errors)：`ctx.throw` 后的 JSON 错误体
 - [响应体套壳](/zh/web/envelope)：统一 JSON 外壳、外层 HTTP 200
+- [多进程与扩容](/zh/advanced/cluster)：Docker / K8s / PM2 / `clusterListen`

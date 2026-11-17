@@ -192,7 +192,7 @@ const app = new WebApp({
 ```typescript
 shutdown: { timeout: 10_000 },
 ```
-ローカルはほぼデフォルトのまま。本番でアップロード、ロングポーリング、遅いクエリがあるなら最悪リクエスト時間に合わせて延長。停止中は新規リクエスト不可——LB は先にインスタンスを外してからシグナル。
+ローカルはほぼデフォルトのまま。本番でアップロード、ロングポーリング、遅いクエリがあるなら最悪リクエスト時間に合わせて延長。停止中は新規リクエスト不可——LB は先にインスタンスを外してからシグナル。[clusterListen](/ja/advanced/cluster#clusterlisten) を使う場合、primary もシグナルを受け取り各 worker の終了を調整します。
 
 ## body サイトクォータ
 
@@ -250,6 +250,8 @@ app
   .listen(443);
 ```
 本番は Nginx / Caddy で TLS 終端し Node HTTP へリバプロ——proxyIP も正しく。
+
+マルチプロセス、Docker scale、K8s レプリカ、PM2、`clusterListen` は [マルチプロセスとスケール](/ja/advanced/cluster)。
 
 ## ctx.send
 
@@ -346,3 +348,4 @@ action/ミドルウェアで捕捉されない例外は `emit('error', err, ctx)
 - [SSE](/ja/web/sse)：ctx.sse / stream / 断線続き
 - [エラー形式](/ja/web/errors)：`ctx.throw` 後の JSON
 - [レスポンスエンベロープ](/ja/web/envelope)：統一 JSON 外殻・HTTP 200
+- [マルチプロセスとスケール](/ja/advanced/cluster)：Docker / K8s / PM2 / `clusterListen`

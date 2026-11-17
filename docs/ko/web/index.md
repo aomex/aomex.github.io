@@ -205,7 +205,7 @@ const app = new WebApp({
 shutdown: { timeout: 10_000 },
 ```
 
-로컬 개발에서는 거의 안 바꿉니다. 프로덕션에서 업로드·장 폴링·느린 쿼리가 있으면 최악 요청 시간에 맞춰 키우세요. shutdown 중 새 요청은 들어오지 않습니다. 로드밸런서가 시그널 전에 인스턴스를 빼야 합니다.
+로컬 개발에서는 거의 안 바꿉니다. 프로덕션에서 업로드·장 폴링·느린 쿼리가 있으면 최악 요청 시간에 맞춰 키우세요. shutdown 중 새 요청은 들어오지 않습니다. 로드밸런서가 시그널 전에 인스턴스를 빼야 합니다. [clusterListen](/ko/advanced/cluster#clusterlisten)을 쓰면 primary도 시그널을 받아 worker 종료를 조율합니다.
 
 ## body 사이트 할당량
 
@@ -265,6 +265,8 @@ app
 ```
 
 프로덕션에서는 Nginx / Caddy가 TLS를 끝내고 Node HTTP로 리버스 프록시하는 경우가 많습니다. 이때 proxyIP도 맞추세요.
+
+멀티 프로세스, Docker scale, K8s 복제본, PM2, `clusterListen`은 [멀티 프로세스와 확장](/ko/advanced/cluster)을 참고하세요.
 
 ## ctx.send
 
@@ -364,3 +366,4 @@ action / 미들웨어에서 잡히지 않은 예외는 프레임워크가 `emit(
 - [서버 전송 SSE](/ko/web/sse): ctx.sse / stream / 끊김 이어받기
 - [오류 형식](/ko/web/errors): `ctx.throw` 이후 JSON 오류 body
 - [응답 본문 래핑](/ko/web/envelope): 통일 JSON 껍데기, 바깥 HTTP 200
+- [멀티 프로세스와 확장](/ko/advanced/cluster): Docker / K8s / PM2 / `clusterListen`

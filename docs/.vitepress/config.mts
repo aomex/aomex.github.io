@@ -80,6 +80,7 @@ type SidebarLabels = {
   customValidator: string;
   customAuth: string;
   i18n: string;
+  cluster: string;
 };
 
 const zhLabels: SidebarLabels = {
@@ -142,6 +143,7 @@ const zhLabels: SidebarLabels = {
   customValidator: '自定义验证器',
   customAuth: '自定义鉴权策略',
   i18n: '业务国际化',
+  cluster: '多进程与扩容',
 };
 
 const zhTWLabels: SidebarLabels = {
@@ -204,6 +206,7 @@ const zhTWLabels: SidebarLabels = {
   customValidator: '自定義驗證器',
   customAuth: '自定義鑑權策略',
   i18n: '業務國際化',
+  cluster: '多程序與擴容',
 };
 
 const enLabels: SidebarLabels = {
@@ -266,6 +269,7 @@ const enLabels: SidebarLabels = {
   customValidator: 'Custom validators',
   customAuth: 'Custom auth strategy',
   i18n: 'Business i18n',
+  cluster: 'Multi-process & scaling',
 };
 
 const jaLabels: SidebarLabels = {
@@ -328,6 +332,7 @@ const jaLabels: SidebarLabels = {
   customValidator: "カスタムバリデータ",
   customAuth: "カスタム認証ストラテジー",
   i18n: "アプリの i18n",
+  cluster: "マルチプロセスとスケール",
 };
 
 const koLabels: SidebarLabels = {
@@ -390,6 +395,7 @@ const koLabels: SidebarLabels = {
   customValidator: "커스텀 검증기",
   customAuth: "커스텀 인증 전략",
   i18n: "앱 i18n",
+  cluster: "멀티 프로세스와 확장",
 };
 
 const ruLabels: SidebarLabels = {
@@ -452,6 +458,7 @@ const ruLabels: SidebarLabels = {
   customValidator: "Свой валидатор",
   customAuth: "Своя стратегия Auth",
   i18n: "i18n в приложении",
+  cluster: "Многопроцессность и масштабирование",
 };
 
 const makeSidebar = (
@@ -597,6 +604,7 @@ const makeSidebar = (
         { text: t.customValidator, link: p('/advanced/validator') },
         { text: t.customAuth, link: p('/advanced/auth-strategy') },
         { text: t.i18n, link: p('/advanced/i18n') },
+        { text: t.cluster, link: p('/advanced/cluster') },
       ],
     },
   ];

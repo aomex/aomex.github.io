@@ -64,7 +64,8 @@
     "customMiddleware": "커스텀 미들웨어",
     "customValidator": "커스텀 검증기",
     "customAuth": "커스텀 인증 전략",
-    "i18n": "앱 i18n"
+    "i18n": "앱 i18n",
+    "cluster": "멀티 프로세스와 확장"
   },
   "ui": {
     "editLink": "이 페이지 편집",
