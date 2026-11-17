@@ -192,7 +192,7 @@ router.get('/openapi.json', {
 每次請求都掃路由——訪問頻繁時可加快取，或改 CI 落盤 + 靜態檔案。
 
 ::: warning
-`generateOpenapi` 的 `app` 必須和線上是**同一份配置**（同一例項最省事）。只傳 `routers`、不傳 `app` 時，文件裡會缺全域性鑑權、formatError、envelope 等注入，聯調對不上。
+`generateOpenapi` 的 `app` **必填**（型別上也是），並應與線上是**同一份配置**（同一例項最省事）。漏傳過不了編譯；傳了另一套 mount / envelope 時，文件裡的鑑權、formatError、套殼仍會和真環境對不上。
 :::
 
 ::: tip

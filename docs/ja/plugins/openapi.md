@@ -4,19 +4,19 @@ outline: deep
 
 # OpenAPI ドキュメント生成
 
-ルートで**契約を宣言**し、**ルートを走査して OpenAPI 3.0 を出力**。連携先や CI 向け。Swagger / Redoc は「JSON の読み方」——生成本体は `@aomex/openapi`。Web プロセスでは `generateOpenapi`；ファイルへ書き出すは [Console での出力](/ja/console/openapi)。
+ルートで**契約を宣言**し、**ルートを走査して OpenAPI 3.0 を出力**する。連携先や CI 向け。Swagger / Redoc は「JSON の読み方」だけ——生成本体は `@aomex/openapi`。Web プロセスでは `generateOpenapi`、ファイル落としは [Console での出力](/ja/console/openapi)。
 
-query / body / response を載せないルートはドキュメント上も空——実行時は動くが契約は欠ける。send / throw の型狭めは [制約付きレスポンス](/ja/web/response)。
+`query` / `body` / `response` を載せないルートは、ドキュメント上も対応セクションが空になる。実行時は動くが契約は欠ける。send / throw の型狭めは [制約付きレスポンス](/ja/web/response)。
 
 ```bash
 pnpm add @aomex/openapi
 ```
 
-一覧・詳細ルートにバリデータと `response()` を載せ、`generateOpenapi` で提出可能な `openapi.json`（またはメモリ上の Document）。**本番と同じ `WebApp` インスタンス**（`app`）を渡すと `mount` と `envelope` を読み、security・エラー体・エンベロープが実環境とずれにくい。
+一覧・詳細などのルートにバリデータと `response()` を載せ、`generateOpenapi` で提出可能な `openapi.json`（またはメモリ上の Document）を得る。**本番と同じ `WebApp` インスタンス**（`app`）を渡すと、グローバル `mount` と `envelope` を読み込み、security・エラー体・エンベロープが実環境とずれにくい。
 
-## ルートに response と docs
+## ルートに response と docs を載せる
 
-契約はルート宣言から：`query` / `body` / `params` が入参 schema、`response()` が各ステータス出口、`docs` が summary と tags。実行時検証と型狭めはドキュメントと同源。欠けた段は openapi.json でも空。
+契約はルート宣言から来る。`query` / `body` / `params` が入参 schema、`response()` が各ステータス出口、`docs` が summary と tags。実行時検証と型狭めはドキュメントと同源。欠けたセクションは openapi.json でも空のまま。
 
 ```typescript
 // src/routers/user.ts
@@ -52,14 +52,14 @@ router.get('/:id', { // [!code focus:14]
 });
 ```
 
-## app を渡して Document 生成
+## `app` を渡して Document を生成
 
-`generateOpenapi` が要るのは **`WebApp` インスタンス**。別の `mount` 配列は渡さない。`app` からグローバルミドルウェアと [レスポンスエンベロープ](/ja/web/envelope) を読み、OpenAPI 注入の単一の真実源にする。
+`generateOpenapi` が要るのは **`WebApp` インスタンス**。`mount` 配列を別途渡す方式ではない。`app` からグローバルミドルウェアと [レスポンスエンベロープ](/ja/web/envelope) を読み、OpenAPI 注入の単一の真実の源にする。
 
-CLI・テスト・スクリプトがこのモジュールを import するなら `new WebApp(...)` と `app.listen(...)` を**分離**（本当のプロセス入口だけ listen）。import の副作用で起動・ポート奪いを防ぐ。
+CLI・テスト・スクリプトがモジュールを `import` するときは、`new WebApp(...)` と `app.listen(...)` を**分ける**（listen は本当のプロセス入口だけ）。さもないと import 時に副作用でサーバが立ち、ポートを奪う。
 
 ```typescript
-// src/app.ts —— 只创建并导出，不 listen
+// src/app.ts —— 作成と export のみ。listen しない
 import { formatError, routers, WebApp } from '@aomex/web';
 import { rule } from '@aomex/common';
 import { services } from './services/index.js';
@@ -85,7 +85,7 @@ export const app = new WebApp({
 ```
 
 ```typescript
-// src/main.ts —— 进程入口才听端口
+// src/main.ts —— プロセス入口だけがポートを listen
 import { app } from './app.js';
 
 app.listen(3000);
@@ -111,21 +111,21 @@ const document = await generateOpenapi({ // [!code focus:11]
 await writeFile('openapi.json', JSON.stringify(document, null, 2));
 ```
 
-- ルートに body / query / params を載せると ctx.body、ctx.query 等は action で既に狭い型——ドキュメント schema と同源。
-- `response({ statusCode, content })` 後、`ctx.send(200, …)` の第 2 引数は content と一致。200 宣言で send(201) は多く型エラー。
-- 手書き `openapi.onMethod` でだけ補うレスポンスは**生成 JSON に多くだけ影響**し ctx.send は狭めない——その場合は型を自分で見る。
+- ルートに body / query / params を載せると、action 内の `ctx.body`、`ctx.query` などは既に狭い型になる。ドキュメント schema と同源。
+- `response({ statusCode, content })` のあと、`ctx.send(200, …)` の第 2 引数は content と一致させる。200 を宣言して send(201) すると多くの場合型エラーになる。
+- 手書きの `openapi.onMethod` だけでレスポンスを足す場合は、**生成 JSON に多く影響するだけ**で `ctx.send` は自動狭めにならない。そのときは型を自分で確認する。
 
-`response()` 常用フィールド：
+`response()` のよく使うフィールド：
 
 | フィールド | いつ使う |
 | --- | --- |
 | `statusCode` | 出口ごとに 1 回（200 / 201 / 204 / 404…） |
 | `content` | JSON 成功体。ついで `ctx.send` も狭める |
-| `contentType` | CSV、HTML、バイナリ等非デフォルト JSON |
-| `headers` | `X-Request-Id` 等をドキュメント化 |
+| `contentType` | CSV、HTML、バイナリなど非デフォルト JSON |
+| `headers` | `X-Request-Id` などをドキュメント化 |
 | `example` | ドキュメントサイトの例。実行時は影響なし |
 
-非 JSON 例：
+非 JSON の例：
 
 ```typescript
 response({
@@ -136,7 +136,7 @@ response({
 });
 ```
 
-バリデータが覆えない少数レスポンス（バイナリストリーム等）は、当該ルートに `openapi.onMethod` 付きミドルウェアを載せ、生成結果だけ変更：
+バリデータが覆えない少数のレスポンス（バイナリストリームなど）は、当該ルートに `openapi.onMethod` 付きミドルウェアを載せ、生成結果だけ変更する：
 
 ```typescript
 import { middleware } from '@aomex/common';
@@ -161,16 +161,16 @@ export const openapiBinaryFile = middleware.web({ // [!code focus:18]
 });
 ```
 
-## generateOpenapi と実行時出口
+## generateOpenapi と実行時の出口
 
-`generateOpenapi` はルートディレクトリを読み、`app` からグローバル `mount` / `envelope` を取り、メモリ上で OpenAPI Document を組み立てる。ファイル化、Swagger/ReDoc 埋め込み、CI diff に使える。**HTTP は起動しない**。実行時 ctx の狭めは自動ではなくルート mount 次第。
+`generateOpenapi` はルートディレクトリを読み、`app` からグローバル `mount` / `envelope` を取り、メモリ上で OpenAPI Document を組み立てる。ファイル書き込み、Swagger / ReDoc 埋め込み、CI diff に使える。**HTTP は起動しない**。実行時の `ctx` 狭めは自動ではなく、ルート上の mount 次第。
 
 | `generateOpenapi` オプション | いつ使う |
 | --- | --- |
 | `routers` | 必須。Web のルート走査と同じ glob |
-| `app` | 本番と同じ `WebApp`（mount、envelope 込み） |
+| `app` | 本番と同じ `WebApp` インスタンス（mount・envelope を含む） |
 | `docs` | `info.title` / `version` / `description` |
-| `fix` | `servers`、連絡先、ベンダー拡張。単一レスポンスはルート `response()` 優先 |
+| `fix` | `servers`、連絡先、ベンダー拡張。単一レスポンスはルートの `response()` を優先 |
 
 実行時に仕様を動的返す（自前 `/openapi.json`）：
 
@@ -189,21 +189,21 @@ router.get('/openapi.json', {
 });
 ```
 
-リクエストごとにルート走査——アクセス多いならキャッシュ、または CI 出力 + 静的ファイル。
+リクエストのたびにルート走査する。アクセスが多いならキャッシュするか、CI 落とし + 静的ファイルに切り替える。
 
 ::: warning
-`generateOpenapi` の `app` は本番と**同じ設定**（同一インスタンスが楽）。`routers` だけで `app` なしだと、グローバル認証、formatError、envelope 等がドキュメントに欠け、联調が合わない。
+`generateOpenapi` の `app` は**必須**（型定義上も）。本番と**同じ設定**（同一インスタンスがいちばん楽）。省略するとコンパイルを通らない。別の mount / envelope を渡すと、ドキュメント上の認証・formatError・エンベロープが実環境と合わなくなる。
 :::
 
 ::: tip
-Console 出力・スクリプト生成は Web モジュールを import する：`new WebApp` と `app.listen` を分け、CLI 実行で HTTP が立ち上がらないようにする。
+Console 落としやスクリプト生成は Web モジュールを import する。`new WebApp` と `app.listen` を分け、CLI 実行で HTTP が立ち上がらないようにする。
 :::
 
-CI / ローカル**固定ファイル**は Console：`openapi()` + `aomex openapi`。 [OpenAPI のファイル出力](/ja/console/openapi) 参照。
+CI / ローカルで**固定ファイル**にするなら Console の `openapi()` + `aomex openapi`。[OpenAPI のファイル出力](/ja/console/openapi) を参照。
 
 ブラウザで契約を開く：[Swagger UI](/ja/plugins/swagger-ui) · [Redoc UI](/ja/plugins/redoc-ui)。
 
-ルートに載せられる response は `response()` で維持。fix だけで全行手修正しない。docs.summary / tags 忘れても生成は動くが、読む側が苦しい。JSON を返すルートは多く `docs.showInOpenapi: false` で自分自身の再帰記述を避ける。
+ルートに載せられる response は `response()` で維持する。`fix` だけで全行手修正しない。`docs.summary` / `tags` を忘れても生成は動くが、読む側は苦しくなる。JSON を返すルートは多く `docs.showInOpenapi: false` にし、自分自身を再帰記述しない。
 
 ## 関連
 

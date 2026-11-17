@@ -95,6 +95,26 @@ user: async () => FakeUserService,
 
 本地试跑、极简 CLI 可以不写 eager。若在 A 的 `onInit` 里要 `await services.cache.xxx`，而 cache 没进 eager，连库会拖到第一次业务调用，启动阶段容易踩时序坑。
 
+## 生命周期钩子
+
+有些资源**不必**做成 Service、也不进 `services` 袋（例如模块级 PrismaClient、插件内部的 Redis store），但仍要在进程启动时连上、关停时断开。这时用 `registerLifecycle`：登记时立刻跑 `onInit`，`WebApp` / `ConsoleApp` 关停时再跑 `onDestroy`。
+
+```typescript
+import { registerLifecycle } from '@aomex/common';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+await registerLifecycle({ // [!code focus:4]
+  onInit: () => prisma.$connect(),
+  onDestroy: () => prisma.$disconnect(),
+});
+```
+
+返回的函数用来**提前取消登记**（已关停或已取消后再调无效果）。`onInit` 失败则不会进入销毁队列。限流等插件内部也会用同一套钩子管 store，业务侧一般不用再为它们登记一遍。
+
+已经放进 `combineServices` 的类继续用 `onInit` / `onDestroy` 即可，不必再套一层 `registerLifecycle`。
+
 ## 多袋合并
 
 大仓按域拆多个 combineServices 再合并交给 App：
@@ -108,12 +128,12 @@ const app = new WebApp({
 });
 ```
 
-类名以 Service 结尾时，[@remember](/zh/core/cache#方法装饰器-remember) 等会用去掉后缀后的名字区分缓存键（UserService → User）。
+类名以 Service 结尾时，[`createRemember`](/zh/core/cache#缓存装饰器) 等会用去掉后缀后的名字区分缓存键（UserService → User）。
 
 服务之间互相调用：在类里 import { services } from './index.js'，再 await services.other.method() 即可。类内 this.foo() 照常写；只有**跨类**才用 await services.other.foo()。
 
 ## 下一步
 
-- 会话与 Redis：[缓存](/zh/core/cache)
+- 会话、`createRemember`：[缓存](/zh/core/cache)
 - 全站日志出口：[日志](/zh/core/logger)
 - 路由怎么写薄：[接口路由](/zh/web/router)

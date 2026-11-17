@@ -1,15 +1,15 @@
 # 캐시
 
-**CacheService**를 만듭니다. memory / file / Redis 어댑터를 고르고 `this.cache`로 읽고 씁니다. 로그인 **session**(token → 사용자)으로 발급·인증 읽기·로그아웃 삭제까지 연결합니다.
+**CacheService**를 만든다. memory / file / Redis 어댑터를 고르고 `this.cache`로 읽고 쓴다. 로그인 **session**(token → 사용자 정보)으로 「발행 · 인증 읽기 · 로그아웃 삭제」흐름을 통과한다.
 
-하위 클래스는 `createAdapter()` 구현; 비즈니스 키는 `protected readonly` + `this.concat`으로 모아 문자열을 흩뿌리지 않습니다.
+하위 클래스에서 `createAdapter()`를 구현한다. 업무 접두사는 `protected readonly`와 `this.key(...)`로 `CacheKey`로 모으고, 메서드 안에서는 `.key(token)`을 이어 붙여 문자열이 흩어지지 않게 한다.
 
 ```typescript
 import { BaseCacheService } from '@aomex/cache';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 
 export default class CacheService extends BaseCacheService { // [!code focus:28]
-  protected readonly loginTokenKey = this.concat('login-token', 'v1');
+  protected readonly loginTokenKey = this.key('login-token', 'v1');
 
   protected createAdapter() {
     return new CacheMemoryAdapter(); // [!code highlight]
@@ -17,7 +17,7 @@ export default class CacheService extends BaseCacheService { // [!code focus:28]
 
   async getLoginToken(token: string) {
     return this.cache.get<{ userId: number; role: number }>(
-      this.concat(this.loginTokenKey, token),
+      this.loginTokenKey.key(token),
     );
   }
 
@@ -26,21 +26,21 @@ export default class CacheService extends BaseCacheService { // [!code focus:28]
     session: { userId: number; role: number },
   ) {
     await this.cache.set(
-      this.concat(this.loginTokenKey, token),
+      this.loginTokenKey.key(token),
       session,
       this.ttl.DAY * 7,
     );
   }
 
   async deleteLoginToken(token: string) {
-    await this.cache.delete(this.concat(this.loginTokenKey, token));
+    await this.cache.delete(this.loginTokenKey.key(token));
   }
 }
 ```
 
-`get<T>(key)`는 제네릭으로 `T | null`; `set` 세 번째 인자는 만료 **밀리초**, `this.ttl.DAY`·`this.ttl.MINUTE`로 매직 넘버를 줄입니다. `services.cache.xxx`는 CacheService 선언과 같아 서명 변경 시 라우트·인증 콜백까지 컴파일러가 따라갑니다.
+`get` / `set` / `delete` 등은 **문자열 또는 `CacheKey`**를 받는다. `get<T>(key)`에 제네릭을 붙이면 반환 타입은 `T | null`. `set` 세 번째 인자는 만료 **밀리초**. `this.ttl.DAY`, `this.ttl.MINUTE`로 매직 넘버를 줄인다. `services.cache.xxx`의 메서드 이름·인자는 CacheService에 선언한 것과 같다. 시그니처를 바꾸면 컴파일러가 라우트와 인증 콜백까지 따라 간다.
 
-등록·예열(프로덕션 Redis는 especially eager):
+등록과 워밍업(프로덕션에서 Redis로 바꿀 때는 특히 `eager` 권장):
 
 ```typescript
 await combineServices(
@@ -52,14 +52,14 @@ await combineServices(
 ```
 
 ::: warning
-프로덕션·다중 인스턴스에서 cache에 eager 없으면 첫 캐시 읽기에 연결 비용이 붙어 tail latency가 흔들립니다.
+프로덕션이나 다중 인스턴스에서 cache에 eager를 쓰지 않으면 첫 캐시 읽기에 Redis 연결 비용이 붙고 tail latency가 튈 수 있다.
 :::
 
-## session 읽기/쓰기
+## session 읽기·쓰기
 
-로그인 후 token → 사용자를 캐시에 씁니다. 인증 `onLoaded`에서 읽고 로그아웃 시 delete. 키는 `this.concat` + 버전 prefix, 페이로드 변경 시 한 곳에서 무효화.
+로그인 후 token을 발급하면 「token → 사용자 정보」를 캐시에 쓴다. 인증 onLoaded에서 읽고, 로그아웃 시 delete한다. 키 이름은 버전이 있는 `CacheKey` 접두사를 쓴다. 릴리스 때 세션 구조를 바꾸면 한곳만 고쳐 일괄 무효화할 수 있다.
 
-비즈니스(로그인/인증/로그아웃):
+업무 측(로그인 / 인증 / 로그아웃):
 
 ```typescript
 // 登录成功后写入
@@ -79,13 +79,13 @@ if (!session) {
 await services.cache.deleteLoginToken(token);
 ```
 
-token 발급·DB는 User / Auth Service; CacheService는 저장만.
+token 발급·DB 조회는 User / Auth 등 Service에 둔다. CacheService는 저장·조회만 담당한다.
 
-## memory와 Redis
+## 어댑터 선택
 
-어댑터가 저장 위치를 정합니다. **memory**: 의존성 없음, 프로세스 내, 재시작 시 비움 — 로컬·단위 테스트. **Redis**: 다중 인스턴스 session·속도 제한. **file**: 가벼운 디스크. 비즈니스는 보통 `createAdapter()`만 바꿉니다.
+어댑터가 데이터 위치를 정한다. **memory**는 의존성 없음·프로세스 내부·재시작 시 비움. 로컬·단위 테스트용. **Redis**는 다중 인스턴스에서 session·rate limit 카운트를 공유. 디스크에 조금 남기려면 **file**. 업무 코드는 보통 `createAdapter()`만 바꾸고 읽기·쓰기 API는 동일.
 
-로컬·단위 테스트는 `@aomex/cache/memory`:
+로컬 개발·단위 테스트는 `@aomex/cache/memory`. 의존성 없음, 재시작 시 데이터 소실:
 
 ```typescript
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
@@ -95,7 +95,7 @@ protected createAdapter() {
 }
 ```
 
-프로덕션·공유 session/속도 제한은 `@aomex/cache-redis-adapter`, 보통 `createAdapter`만 변경:
+프로덕션·다중 인스턴스 session / rate limit 공유는 `@aomex/cache-redis-adapter`(`ioredis` 패키지 포함. 대개 `createAdapter`만 변경):
 
 ```typescript
 import { CacheRedisAdapter } from '@aomex/cache-redis-adapter';
@@ -105,25 +105,59 @@ protected createAdapter() {
 }
 ```
 
-단일 머신 약간의 영속은 `@aomex/cache/file`.
+단일 머신에서 가벼운 디스크 영속은 `@aomex/cache/file`.
 
-## 키 이름과 버전
+## 키 조합: CacheKey
 
-`protected readonly`로 접두사(예: `login-token`), `this.concat`으로 token/id 결합. 접두사에 버전(`v1` → `v2`)을 넣으면 **이름 충돌 없이** 구 session 폐기.
-
-v1 → v2는 키 일괄 무효, 페이로드 변경에 흔함:
+`this.key(...)`의 반환은 **`CacheKey`**이며 일반 문자열이 아니다. 조각은 `:`로 이어지고 `.key` / `.keyHash` / `.toHash()`를 계속 붙일 수 있다. `this.cache.get` / `set` 등이 그대로 받는다. `String(...)`은 필요 없다.
 
 ```typescript
-protected readonly loginTokenKey = this.concat('login-token', 'v2');
+this.key('user', 1); // user:1
+this.key('user').key(1); // 同上
+this.key('user').keyHash(1); // user:<md5('1')>，前缀可读
+this.key('user', 1).toHash(); // <md5('user:1')>
+this.keyHash('user', 1); // 同上，整键哈希
 ```
 
-메서드마다 버전 문자열을 흩뿌리지 말고 클래스 `readonly` 접두사 + `this.concat`.
+| 쓰는 법 | 얻는 것 |
+| --- | --- |
+| `this.key('a', 1)` | 읽기 쉬운 키 `a:1` |
+| `prefix.key(id)` | 기존 `CacheKey` 접두사 뒤에 한 단 더 |
+| `this.key('a').keyHash(id)` | 접두사 유지, **이번 인자만 해시** |
+| `this.key(...).toHash()` / `this.keyHash(...)` | **전체** MD5, 읽기 쉬운 접두사 없음 |
+
+조각이 길거나 이상한 문자가 있거나 Redis에 평문을 노출하고 싶지 않을 때 해시를 쓴다. 일상 업무 키는 읽기 쉬운 접두사가 디버깅에 유리하다. 예전 단독 `hash()`는 제거되었고 위 패턴으로 통일한다.
+
+### 접두사와 버전
+
+`protected readonly` 필드로 업무 접두사(예: `login-token`)를 모으고, 메서드에서는 `.key(token)` / `.key(id)`를 이어 붙인다. 곳곳에 매직 문자열을 쓰지 않는다. 접두사에 버전(`v1` → `v2`)을 넣으면 **이름 충돌 없이** 이전 session을 폐기한다:
+
+```typescript
+protected readonly loginTokenKey = this.key('login-token', 'v2');
+```
+
+## exists: 있는지 여부만
+
+키가 **있는지**만 알면 되고 값을 읽어 디코딩할 필요가 없을 때는 `exists`를 쓴다. `boolean`을 반환하며 문자열 또는 `CacheKey`를 받는다.
+
+```typescript
+const key = this.loginTokenKey.key(token);
+if (await this.cache.exists(key)) {
+  // 会话还在，再决定要不要 get 详情
+}
+```
+
+`get`과의 차이: `get`은 미스일 때 `null`(직접 판단해야 함)이고 값을 역직렬화한다. `exists`는 어댑터에 「이 키가 아직 있는지」만 묻는다. 자리 표시 마커, 락을 아직 잡고 있는지, 큰 객체를 꺼내기 전 탐색에 맞다.
+
+::: tip
+「먼저 exists 후 get」사이에 다른 쪽이 키를 지우거나 바꿀 수 있다. 엄격한 트랜잭션 조건으로 쓰지 마라. 락 획득·멱등은 아래 `setNX`를 쓴다.
+:::
 
 ## setNX와 카운터
 
-`setNX`는 key 없을 때만 씁니다 — 분산 락, 멱등 「한 번만」. TTL은 최악 작업 시간보다 길게. `increment` / `expire`는 OTP 실패 횟수·슬라이딩 윈도.
+`setNX`는 키가 없을 때만 쓴다. 분산 락·멱등 「한 번만 처리」에 쓴다. TTL은 작업 최악 시간을 덮어야 한다. 그렇지 않으면 락 만료 후 다른 worker가 가져갈 수 있다. `increment` / `expire`는 인증 코드 실패 횟수·슬라이딩 윈도우에 맞다.
 
-락·멱등(TTL > 최악 작업 시간):
+락 획득·멱등(TTL은 작업 최악 시간보다 커야 함):
 
 ```typescript
 const ok = await this.cache.setNX(lockKey, '1', 30_000);
@@ -132,32 +166,50 @@ if (ok) {
 }
 ```
 
-OTP 실패 횟수 등은 increment / expire.
+인증 코드 실패 횟수 등 윈도우 카운트는 `increment` / `expire`.
 
-## `@remember` 메서드 데코레이터
+## 캐시 데코레이터
 
-읽기 많고 잠깐 캐시 가능한 조회는 **비즈니스 Service**에 `@remember`. CacheService.onInit에서 `remember.setInstance(this)` + `eager: ['cache']`, 종료 시 `deleteInstance`.
+업무 메서드마다 「get → 없으면 계산 → set」을 반복하면 번거롭고, 같은 key 동시 요청이 여러 번 계산된다. `createRemember`는 메서드 데코레이터 `@remember`를 만든다. 히트면 바로 반환. 미스면 원 메서드만 실행해 기록. **같은 key 동시 요청은 하나만 실행**, 나머지는 결과를 기다린다.
+
+데코레이터는 자신의 캐시 서비스 클래스에 묶는다. `BaseCacheService` **하위 클래스 생성자**를 넘긴다(기반 클래스·인스턴스 불가). `cache.service.ts`에 두는 것이 편하고, 업무 쪽은 `remember`를 import한다:
 
 ```typescript
-protected override async onInit() {
-  await super.onInit();
-  remember.setInstance(this); // [!code highlight]
+import { BaseCacheService, createRemember } from '@aomex/cache';
+import { CacheMemoryAdapter } from '@aomex/cache/memory';
+
+export default class CacheService extends BaseCacheService {
+  protected createAdapter() {
+    return new CacheMemoryAdapter();
+  }
 }
 
-protected override async onDestroy() {
-  remember.deleteInstance(); // [!code highlight]
-  await super.onDestroy();
-}
+export const remember = createRemember(CacheService); // [!code highlight]
 ```
 
+`BaseCacheService`는 `onInit`에서 어댑터 연결 후 remember를 자동으로 걸고 종료 시 해제한다. **수동 등록은 불필요**. `combineServices`에서는 여전히 `eager: ['cache']` 권장. 캐시 준비 전이면 데코레이트된 메서드는 **대기**. 종료 후 호출은 **예외**.
+
+### 업무 메서드에 적용
+
+메서드는 **async**(Promise 반환)여야 한다. 밀리초만 넘기면 「캐시 유지 시간」이다:
+
 ```typescript
+import { Service } from '@aomex/common';
+import { remember } from './cache.service.js';
+
 class ReportService extends Service {
   @remember(60_000)
   async build(id: number) {
     return heavyCompute(id);
   }
+}
+```
 
-  @remember({ // [!code highlight]
+key나 기본값을 쓰려면 객체를 넘긴다. 이때 `await services.report.find(1)` 첫 호출은 DB로 가고, 창 안에서 같은 인자로 다시 호출하면 캐시를 읽는다. `duration`은 기록 후 만료 **밀리초**다:
+
+```typescript
+class ReportService extends Service {
+  @remember({ // [!code focus:8]
     duration: 60_000,
     key: (id) => {
       return `report:${id}`;
@@ -170,12 +222,38 @@ class ReportService extends Service {
 }
 ```
 
+| 쓰는 법 | 역할 |
+| --- | --- |
+| `@remember(60_000)` | 만료만 지정. key는 기본 규칙 |
+| `duration` | 필수(객체 형태). 캐시 기간 |
+| `key: '고정 문자열'` | 메서드 전체 하나의 키(무인자·전역 단일 결과) |
+| `key: (...args) => string` | 인자로 키 조합. `this`는 업무 인스턴스 |
+| `defaultValue` | 원 메서드가 `null`일 때 호출자에게 보이는 값(기본 `null`) |
+
+### 기본 key 조합
+
+`key`를 쓰지 않으면 프레임워크는 다음을 쓴다:
+
+`클래스 이름 또는 displayName` + `-` + `메서드 이름` + `-` + `JSON.stringify(인자)`
+
+`Service`를 상속하고 클래스 이름이 `Service`로 끝나면 접미사를 뺀 `displayName`(`ReportService` → `Report`)으로 키에 긴 접미사를 넣지 않는다. 인자는 JSON에 들어간다. **직렬화 불가·불안정한 값**(`Date`, 순환 참조, 매번 다른 객체 리터럴)을 넣으면 key가 맞지 않아 캐시가 사실상 꺼진다. 인자가 많거나 구조가 어지러우면 `key`를 직접 쓰는 편이 낫다.
+
+### 동시성과 빈 결과
+
+같은 key가 동시에 오면 첫 호출이 `setNX`로 자리를 잡고 원 메서드를 실행한다. 자리 표시 키는 약 20초, 실행 중 갱신된다. 나머지는 자리가 사라질 때까지 폴링 후 캐시를 읽거나 `defaultValue`를 받는다. 캐시 스탬피드 방지용이지 범용 분산 락이 아니다——범용 락으로 쓰지 않는다.
+
+원 메서드가 `null`을 반환하면 **`null`은 쓰지 않는다**(「없음」을 오래 고정하지 않음). 호출자는 `defaultValue`를 본다. 「명시적으로 없음」을 캐시하려면 키를 설계하거나 수동 `this.cache.set`을 쓴다.
+
+### 여러 캐시
+
+로컬 memory와 공유 Redis를 쓸 때 각각 `BaseCacheService` 하위 클래스를 만들고 각각 `createRemember`를 호출한다. 범위는 **서비스 클래스** 단위. `fork()`는 없다. 어떤 `remember`를 붙이느냐에 따라 저장소가 정해진다.
+
 ::: warning
-부작용 있는 쓰기에는 달지 마세요. 무효화는 delete나 키 버전. 쓰기에 `@remember` 쓰면 오래된 값이 남습니다.
+**읽기 많고 쓰기 적으며 잠깐 stale해도 되는** 조회에만 붙인다. DB 쓰기·SMS·재고 차감 같은 부작용 메서드에는 붙이지 않는다——캐시는 낡은 값이다. 데이터가 바뀌면 해당 키를 `cache.delete`하거나 key 버전을 올린다(위 key 조합 참고).
 :::
 
 ## 다음 단계
 
-- 등록·eager: [서비스](/ko/core/service)
-- 인증 session: [Auth](/ko/plugins/auth)
-- Bearer: [Bearer 전략](/ko/plugins/auth-bearer-strategy)
+- 서비스 등록과 eager: [서비스 계층](/ko/core/service)
+- 인증에서 session 사용: [Auth 통합 진입점](/ko/plugins/auth)
+- Bearer와 token 전략: [Bearer 전략](/ko/plugins/auth-bearer-strategy)

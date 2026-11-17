@@ -2,21 +2,21 @@
 outline: deep
 ---
 
-# Генерация OpenAPI
+# Генерация документации OpenAPI
 
-**Контракт на маршрутах**, затем **скан в OpenAPI 3.0** для партнёров или CI. Swagger / Redoc — читатели; пайплайн в `@aomex/openapi`. Web — `generateOpenapi`; файл: [Экспорт в Console](/ru/console/openapi).
+На маршрутах **объяви контракт**, затем **просканируй маршруты и выгрузи OpenAPI 3.0** для интеграторов или CI. Swagger / Redoc — только способ читать этот JSON; цепочка в `@aomex/openapi`. В Web-процессе — `generateOpenapi`; запись в файл — [экспорт из Console](/ru/console/openapi).
 
-Маршруты без `query` / `body` / `response` оставят пустые разделы документа — рантайм работает, контракт неполный. Сужение типов для `send` / `throw`: [Ограничения response](/ru/web/response).
+Маршруты без `query` / `body` / `response` дадут пустые секции в документе — рантайм работает, контракт неполный. Сужение типов для `send` / `throw` — [ограничение ответов](/ru/web/response).
 
 ```bash
 pnpm add @aomex/openapi
 ```
 
-Повесьте валидаторы и `response()` на list/detail, вызовите `generateOpenapi` — коммитабельный `openapi.json` (или `Document` в памяти). **Тот же `WebApp` (`app`), что в проде** — глобальный `mount` и `envelope`; security, ошибки, обёртки.
+Повесь на list/detail валидаторы и `response()`, вызови `generateOpenapi` — получишь `openapi.json` для коммита (или Document в памяти). **Передай тот же экземпляр `WebApp`, что и в проде** (`app`): генератор читает глобальный `mount` и `envelope`, чтобы security, тела ошибок и обёртка не разошлись с боем.
 
 ## response и docs на маршрутах
 
-Контракт из объявлений: `query` / `body` / `params` для входа, `response()` для кодов выхода, `docs` для summary/tags. Рантайм и дока из одного источника; без mount — пустые секции OpenAPI.
+Контракт с маршрута: `query` / `body` / `params` — входные схемы, `response()` — выходы по кодам, `docs` — summary и tags. Валидация в рантайме и сужение типов из того же источника; пропущенные куски в `openapi.json` останутся пустыми.
 
 ```typescript
 // src/routers/user.ts
@@ -52,14 +52,14 @@ router.get('/:id', { // [!code focus:14]
 });
 ```
 
-## Передайте app в generateOpenapi
+## Передай app и собери Document
 
-`generateOpenapi` ждёт **экземпляр `WebApp`** — не дублируйте массив `mount`. Берёт глобальный middleware и [конверт ответа](/ru/web/envelope) как единый источник для OpenAPI.
+`generateOpenapi` ждёт **экземпляр `WebApp`**, отдельный массив `mount` не передавай. Из `app` берутся глобальные middleware и [обёртка ответа](/ru/web/envelope) — единый источник для OpenAPI.
 
-Когда CLI/тесты `import` модуль, **разделите** `new WebApp(...)` и `app.listen(...)` — иначе побочный HTTP и занятый порт.
+Когда CLI, тесты или скрипты **импортируют** модуль, раздели `new WebApp(...)` и `app.listen(...)` (или слушай порт только в entry процесса), иначе import поднимет сервер и займёт порт.
 
 ```typescript
-// src/app.ts —— 只创建并导出，不 listen
+// src/app.ts — только создание и экспорт, без listen
 import { formatError, routers, WebApp } from '@aomex/web';
 import { rule } from '@aomex/common';
 import { services } from './services/index.js';
@@ -85,7 +85,7 @@ export const app = new WebApp({
 ```
 
 ```typescript
-// src/main.ts —— 进程入口才听端口
+// src/main.ts — entry процесса слушает порт
 import { app } from './app.js';
 
 app.listen(3000);
@@ -111,21 +111,21 @@ const document = await generateOpenapi({ // [!code focus:11]
 await writeFile('openapi.json', JSON.stringify(document, null, 2));
 ```
 
-- После `body` / `query` / `params` сужаются `ctx.body` / `ctx.query` в action — те же schema, что в доке.
-- После `response({ statusCode, content })` `ctx.send(200, …)` должно совпадать с `content`; 200 в доке, а `send(201)` — обычно ошибка типов.
-- Ручной `openapi.onMethod` для одного ответа **часто только JSON**, не типы `ctx.send` — вы сами.
+- После `body` / `query` / `params` на маршруте `ctx.body`, `ctx.query` и т.д. в action уже сужены — как в схеме документа.
+- С `response({ statusCode, content })` второй аргумент `ctx.send(200, …)` должен совпадать с `content`; объявил 200, а вызвал `send(201)` — обычно ошибка типов.
+- Ручной `openapi.onMethod` для одного ответа **чаще меняет только JSON**, не сужает `ctx.send` — типы держишь сам.
 
 Частые поля `response()`:
 
-| Поле | Когда использовать |
+| Поле | Когда |
 | --- | --- |
-| `statusCode` | Один mount на выход (200 / 201 / 204 / 404…) |
+| `statusCode` | По одному mount на каждый код (200 / 201 / 204 / 404…) |
 | `content` | Успешное JSON-тело; сужает `ctx.send` |
-| `contentType` | CSV, HTML, бинарь не по умолчанию JSON |
-| `headers` | В доке `X-Request-Id` и т.д. |
-| `example` | Примеры в доке, без эффекта в рантайме |
+| `contentType` | Не JSON по умолчанию: CSV, HTML, бинарник |
+| `headers` | Документировать `X-Request-Id` и т.п. |
+| `example` | Примеры для док-сайта, на рантайм не влияет |
 
-Пример не-JSON:
+Не-JSON:
 
 ```typescript
 response({
@@ -136,7 +136,7 @@ response({
 });
 ```
 
-Когда валидаторы не описывают ответ (бинарный поток), middleware с `openapi.onMethod` патчит только генерацию:
+Когда валидатор не покрывает ответ (бинарный поток и т.д.), на маршрут повесь middleware с `openapi.onMethod` — только правка генерации:
 
 ```typescript
 import { middleware } from '@aomex/common';
@@ -161,18 +161,18 @@ export const openapiBinaryFile = middleware.web({ // [!code focus:18]
 });
 ```
 
-## generateOpenapi vs рантайм
+## generateOpenapi и рантайм
 
-`generateOpenapi` читает каталог маршрутов и глобальный `mount` / `envelope` у `app`, строит `Document` в памяти — файл, Swagger/ReDoc, diff в CI. **HTTP не стартует** и не сужает рантайм-`ctx` — mount на маршрутах по-прежнему нужны.
+`generateOpenapi` сканирует каталог маршрутов, из `app` подтягивает глобальный `mount` / `envelope` и собирает OpenAPI Document в памяти — файл, Swagger/ReDoc или diff в CI. **HTTP не поднимает** и рантайм `ctx` сам не сужает — сужение с `mount` на маршрутах.
 
 | Опция `generateOpenapi` | Когда |
 | --- | --- |
 | `routers` | Обязательно; тот же glob, что у Web |
-| `app` | Тот же `WebApp`, что в проде (mount, envelope) |
+| `app` | Тот же `WebApp`, что в проде (несёт `mount`, `envelope`) |
 | `docs` | `info.title` / `version` / `description` |
-| `fix` | Патч `servers`, контакты, расширения; по операции лучше `response()` на маршруте |
+| `fix` | `servers`, контакты, vendor extensions; один ответ лучше через `response()` на маршруте |
 
-Рантайм-эндпоинт спецификации:
+Динамическая отдача спеки (`/openapi.json`):
 
 ```typescript
 import { app } from '../app.js';
@@ -189,26 +189,26 @@ router.get('/openapi.json', {
 });
 ```
 
-Перескан на каждый запрос дорог — кеш или CI + статический файл.
+Скан на каждый запрос дорог при частых обращениях — кэшируй или отдавай статикой после CI.
 
 ::: warning
-`app` в `generateOpenapi` = **прод-конфиг** (проще тот же экземпляр). `routers` без `app` выкинет глобальный auth, `formatError`, `envelope` из доки.
+`app` в `generateOpenapi` **обязателен** (и в типах), конфигурация должна совпадать с продом (**тот же экземпляр** проще всего). Без `app` не соберётся; другой `mount` / `envelope` — в доке разъедутся auth, `formatError` и обёртка с боем.
 :::
 
 ::: tip
-Console export и скрипты `import` Web — разделите `new WebApp` и `app.listen`, чтобы CLI не поднимал HTTP.
+Экспорт из Console и скрипты импортируют Web-модуль: раздели `new WebApp` и `app.listen`, чтобы CLI не поднимал HTTP при запуске.
 :::
 
-Файл в CI/локально: Console `openapi()` + `aomex openapi` — [Экспорт OpenAPI](/ru/console/openapi).
+Фиксированный артефакт в CI / локально: Console `openapi()` + `aomex openapi` — [экспорт OpenAPI](/ru/console/openapi).
 
-В браузере: [Swagger UI](/ru/plugins/swagger-ui) · [Redoc UI](/ru/plugins/redoc-ui).
+Открыть контракт в браузере: [Swagger UI](/ru/plugins/swagger-ui) · [Redoc UI](/ru/plugins/redoc-ui).
 
-`response()` на маршруте лучше, чем править каждую операцию в `fix`. Без `docs.summary` / tags сгенерируется, но партнёрам больнее. JSON, отдающий спеку, ставьте `docs.showInOpenapi: false`, чтобы не сослаться на себя.
+Где можно — веди ответы через `response()` на маршрутах, а не только `fix` по одному. Без `docs.summary` / `tags` JSON соберётся, интеграторам будет тяжело. Маршрут, который отдаёт JSON, обычно ставят `docs.showInOpenapi: false`, чтобы не описывать себя рекурсивно.
 
 ## Связанное
 
-- [Ограничения response](/ru/web/response)
-- [Конверт ответа](/ru/web/envelope) (с `app` сводит success/error к 200)
+- [Ограничение ответов](/ru/web/response)
+- [Обёртка ответа](/ru/web/envelope) (с `app` успех/ошибка сводятся в 200)
 - [Формат ошибок](/ru/web/errors)
 - [Экспорт OpenAPI](/ru/console/openapi)
 - [Swagger UI](/ru/plugins/swagger-ui) · [Redoc UI](/ru/plugins/redoc-ui)

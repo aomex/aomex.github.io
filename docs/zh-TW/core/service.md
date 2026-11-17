@@ -95,6 +95,26 @@ user: async () => FakeUserService,
 
 本地試跑、極簡 CLI 可以不寫 eager。若在 A 的 `onInit` 裡要 `await services.cache.xxx`，而 cache 沒進 eager，連庫會拖到第一次業務呼叫，啟動階段容易踩時序坑。
 
+## 生命週期鉤子
+
+有些資源**不必**做成 Service、也不進 `services` 袋（例如模組級 PrismaClient、外掛內部的 Redis store），但仍要在程序啟動時連上、關停時斷開。這時用 `registerLifecycle`：登記時立刻跑 `onInit`，`WebApp` / `ConsoleApp` 關停時再跑 `onDestroy`。
+
+```typescript
+import { registerLifecycle } from '@aomex/common';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+await registerLifecycle({ // [!code focus:4]
+  onInit: () => prisma.$connect(),
+  onDestroy: () => prisma.$disconnect(),
+});
+```
+
+返回的函式用來**提前取消登記**（已關停或已取消後再調無效果）。`onInit` 失敗則不會進入銷燬佇列。限流等外掛內部也會用同一套鉤子管 store，業務側一般不用再為它們登記一遍。
+
+已經放進 `combineServices` 的類繼續用 `onInit` / `onDestroy` 即可，不必再套一層 `registerLifecycle`。
+
 ## 多袋合併
 
 大倉按域拆多個 combineServices 再合併交給 App：
@@ -108,12 +128,12 @@ const app = new WebApp({
 });
 ```
 
-類名以 Service 結尾時，[@remember](/zh-TW/core/cache#方法裝飾器-remember) 等會用去掉字尾後的名字區分快取鍵（UserService → User）。
+類名以 Service 結尾時，[`createRemember`](/zh-TW/core/cache#快取裝飾器) 等會用去掉字尾後的名字區分快取鍵（UserService → User）。
 
 服務之間互相呼叫：在類裡 import { services } from './index.js'，再 await services.other.method() 即可。類內 this.foo() 照常寫；只有**跨類**才用 await services.other.foo()。
 
 ## 下一步
 
-- 會話與 Redis：[快取](/zh-TW/core/cache)
+- 會話、`createRemember`：[快取](/zh-TW/core/cache)
 - 全站日誌出口：[日誌](/zh-TW/core/logger)
 - 路由怎麼寫薄：[介面路由](/zh-TW/web/router)

@@ -192,7 +192,7 @@ router.get('/openapi.json', {
 每次请求都扫路由——访问频繁时可加缓存，或改 CI 落盘 + 静态文件。
 
 ::: warning
-`generateOpenapi` 的 `app` 必须和线上是**同一份配置**（同一实例最省事）。只传 `routers`、不传 `app` 时，文档里会缺全局鉴权、formatError、envelope 等注入，联调对不上。
+`generateOpenapi` 的 `app` **必填**（类型上也是），并应与线上是**同一份配置**（同一实例最省事）。漏传过不了编译；传了另一套 mount / envelope 时，文档里的鉴权、formatError、套壳仍会和真环境对不上。
 :::
 
 ::: tip

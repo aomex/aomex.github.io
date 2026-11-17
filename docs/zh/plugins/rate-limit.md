@@ -13,7 +13,7 @@ outline: deep
 ```bash
 pnpm add @aomex/rate-limit
 # 多实例且必须在应用内共享计数：
-pnpm add @aomex/rate-limit-redis-store ioredis
+pnpm add @aomex/rate-limit-redis-store
 ```
 
 ## 全站挂载
@@ -92,12 +92,16 @@ router.post('/login', {
 
 ### 生产多副本：Redis
 
+构造时只传 `RedisOptions`（`host` / `port` 等；类型可从本包引入），不要传入已建好的 `Redis` 实例。`ioredis` 已随 `@aomex/rate-limit-redis-store` 装好，不必再单独加依赖。store 内部会 `lazyConnect`，由 `rateLimit()` 经 [`registerLifecycle`](/zh/core/service#生命周期钩子) 在进程侧连上 / 断开。
+
 ```typescript
 import { RateLimitRedisStore } from '@aomex/rate-limit-redis-store';
-import Redis from 'ioredis';
 
 rateLimit({
-  store: new RateLimitRedisStore(new Redis()), // [!code highlight]
+  store: new RateLimitRedisStore({ // [!code highlight]
+    host: '127.0.0.1',
+    port: 6379,
+  }),
   maxRequest: 500,
   duration: 3_600_000,
   id: (ctx) => {
@@ -110,13 +114,15 @@ rateLimit({
 });
 ```
 
+默认内存 store 也可从 `@aomex/rate-limit/memory` 显式引入；关停时会清空进程内计数。
+
 | 环境 | 建议 |
 | --- | --- |
 | 本地直连 | 可挂应用限流，限额松一点，避免刷接口把自己锁死 |
 | 生产有 Nginx | **优先** `limit_req` 等做 IP / 连接限流；应用层留给登录、短信、按 Key 的配额 |
 | 生产多 Pod + 应用内计数 | **必须**共享 `store`（Redis）；别和网关用同一套过紧的 IP 限额叠到误伤 |
 
-自建存储需实现包内 RateLimitStore 的原子 getAndSet；签名以类型定义为准。
+自建存储需实现包内 `RateLimitStore` 的原子 `getAndSet`；需要连库 / 关连接时可覆盖 `onInit` / `onDestroy`（`rateLimit()` 会自动登记）。签名以类型定义为准。
 
 只按 IP 限流时，NAT 后面整栋办公楼共用一个键，容易误伤；登录等接口更适合按用户或 API Key。全站限额过紧时，热点路由单独 mount 更常见。
 
