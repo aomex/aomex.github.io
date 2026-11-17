@@ -4,23 +4,11 @@ outline: deep
 
 # Web 앱 진입점
 
-HTTP 서비스를 띄우려면 [combineServices](/ko/core/service)로 services와 logger를 준비하고, `new WebApp`에 필수 항목을 채운 뒤 `routers('./src/routers')`로 라우트를 겁니다. 아래에서는 사이트 언어, 클라이언트 IP, 요청 본문 상한, 라우트의 ctx.send / ctx.throw / ctx.redirect 사용도 함께 설명합니다.
+HTTP 서비스를 띄우려면 `new WebApp`에 필수 항목을 채운 뒤 `routers('./src/routers')`로 라우트를 겁니다. 아래에서는 사이트 언어, 클라이언트 IP, 요청 본문 상한, 라우트의 ctx.send / ctx.throw / ctx.redirect 사용도 함께 설명합니다.
 
 ```bash
 pnpm add @aomex/web @aomex/common @aomex/logger
 pnpm add tsx -D
-```
-
-업무 서비스는 [combineServices](/ko/core/service)로 등록하고, WebApp에는 그 반환값과 대응하는 logger 인스턴스를 넘겨야 합니다.
-
-```typescript
-// src/services/index.ts
-import { combineServices } from '@aomex/common';
-
-export const services = await combineServices(
-  { logger: () => import('./logger.service.js') },
-  { eager: ['logger'] }, // [!code highlight]
-);
 ```
 
 ```typescript

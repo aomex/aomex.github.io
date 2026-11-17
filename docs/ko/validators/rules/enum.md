@@ -4,9 +4,9 @@ outline: deep
 
 # rule.enum()
 
-**Stitus, 정렬, 역할 (input OpenAPI enum).
+필드를 **유한 집합**으로 제한합니다: status, sort, role（OpenAPI enum에 반영）.
 
-Universal Chain은 [General Chain] (../chain)을 참조하여 이 규칙의 유일한 목적을 위해 **를 참조하십시오.
+공통 체인은 [공통 체인](../chain)을 보세요. 아래는 **이 규칙 전용** 메서드만 적습니다.
 
 ```typescript
 import { rule, schema } from '@aomex/common';
@@ -14,16 +14,57 @@ import { rule, schema } from '@aomex/common';
 export const listQuery = schema({
   sort: rule.enum(['asc', 'desc']).default('desc'), // [!code highlight]
 });
-// ?sort=asc → 'asc'；非法值 → 失败
+// ?sort=asc → 'asc'；잘못된 값 → 실패
 ```
 
-- 공동 단어 수 또는 회원 유형의 수 (TS enum에 전달하면).
-- Pick / omit은 새로운 enumerator를 가져오고 옵션 / 기본값을 유지합니다.
-- Pick / omit 결과는 비어 있습니다. 또는 기본값은 풀에 있지 않으며 구성 기간은 thrown입니다.
+- 배열 인자는 리터럴 유니온으로 추론됩니다（예: `'asc' | 'desc'`）.
+- pick / omit은 새 enum 검증기를 만들며, optional / default을 자주 유지합니다.
+- pick / omit 결과가 비거나 default가 집합 밖이면 설정 시점에 예외가 납니다.
+
+이미 TypeScript `enum`（또는 `as const` 열거 객체）가 있으면 `rule.enum`에 그대로 넘기면 됩니다. 배열을 다시 적을 필요 없습니다:
+
+```typescript
+import { rule, schema } from '@aomex/common';
+
+enum Color {
+  Red = 'red',
+  Blue = 'blue',
+}
+
+export const patchBody = schema({
+  color: rule.enum(Color), // [!code highlight]
+});
+// { color: 'red' } → Color.Red；'green' → 실패
+```
+
+통과 후 타입은 enum 멤버（`Color`）이지, 맨 리터럴 `'red' | 'blue'`가 아닙니다——`ctx.body.color`를 `Color.Red`와 바로 비교할 수 있습니다. 숫자 enum도 같고, 추론은 `Status`입니다:
+
+```typescript
+import { rule } from '@aomex/common';
+
+enum Status {
+  Off = 0,
+  On = 1,
+}
+
+rule.enum(Status); // → Status
+```
+
+`enum` 키워드 없이 상수 객체만 있을 때는 `as const`를 붙인 뒤 넘기면 되고, 추론은 값 유니온입니다:
+
+```typescript
+import { rule } from '@aomex/common';
+
+const Role = { Admin: 'admin', User: 'user' } as const;
+
+rule.enum(Role); // → 'admin' | 'user'
+```
+
+객체 값은 string / number만 가능합니다. 불리언은 배열 형태 `rule.enum([true, false])`를 쓰세요.
 
 ### pick(...values | values[])
 
-**언제 쓰나요:** ** 관리 끝에 전체 질량; 사용자 릴리스 인터페이스는 단지 초안 → 공공을 허용.
+**언제 쓰나요:** 전체 상태는 관리단; 사용자 공개 API는 draft → published만 허용.
 
 ```typescript
 import { rule } from '@aomex/common';
@@ -33,9 +74,11 @@ status.pick('draft', 'published');
 status.pick(['draft', 'published']);
 ```
 
+TS enum을 넘겼다면 pick / omit은 멤버 자체를 쓰면 됩니다: `rule.enum(Color).pick(Color.Red, Color.Blue)`.
+
 ### omit(...values | values[])
 
-**언제 쓰나요:** ** 생성에 아카이브를 선택할 수 없습니다; 내부 상태를 끌어 필터.
+**언제 쓰나요:** 생성 시 archived 선택 불가; 필터 UI에서 내부 상태 제외.
 
 ```typescript
 import { rule } from '@aomex/common';
@@ -43,16 +86,17 @@ import { rule } from '@aomex/common';
 rule.enum(['draft', 'published', 'archived']).omit('archived');
 ```
 
-기본 변경을 기억하기 위해 여전히 선택 후 풀에 떨어졌다/미트.
+default를 바꾼 뒤에도 pick/omit 이후 집합 안에 남겨 두세요.
 
 ### strict(is?: boolean)
 
-** 사용할 때 :** 숫자 및 신체는 숫자입니다; 쿼리 문자열은 종종 기본 유지.
+**언제 쓰나요:** 숫자 enum이고 body가 이미 number일 때; query 문자열은 기본（비엄격）을 두는 경우가 많습니다.
 
 ```typescript
 import { rule } from '@aomex/common';
 
-rule.enum([0, 1, 2]).strict();'1' → 失败；1 → 通过
+rule.enum([0, 1, 2]).strict();
+// '1' → 실패；1 → 통과
 ```
 
-일반적인 사슬은 [일반적인 사슬] (../chain); [literal] (./literal), [oneof] (./one-of), [string] (./string)에서 있습니다.
+공통 체인은 [공통 체인](../chain); [literal](./literal), [oneOf](./one-of), [string](./string).

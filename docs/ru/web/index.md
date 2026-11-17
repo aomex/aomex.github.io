@@ -4,23 +4,11 @@ outline: deep
 
 # Точка входа Web-приложения
 
-Поднимите HTTP-сервис: подготовьте `services` и `logger` через [combineServices](/ru/core/service), заполните обязательные опции `WebApp`, подключите маршруты через `routers('./src/routers')`. Ниже — язык сайта, IP клиента, лимиты тела запроса и использование `ctx.send` / `ctx.throw` / `ctx.redirect`.
+Поднимите HTTP-сервис: заполните обязательные опции `WebApp` и подключите маршруты через `routers('./src/routers')`. Ниже — язык сайта, IP клиента, лимиты тела запроса и использование `ctx.send` / `ctx.throw` / `ctx.redirect`.
 
 ```bash
 pnpm add @aomex/web @aomex/common @aomex/logger
 pnpm add tsx -D
-```
-
-Бизнес-сервисы регистрируйте через [combineServices](/ru/core/service); `WebApp` должен получить результат и тот же экземпляр `logger`.
-
-```typescript
-// src/services/index.ts
-import { combineServices } from '@aomex/common';
-
-export const services = await combineServices(
-  { logger: () => import('./logger.service.js') },
-  { eager: ['logger'] }, // [!code highlight]
-);
 ```
 
 ```typescript

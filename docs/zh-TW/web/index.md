@@ -4,23 +4,11 @@ outline: deep
 
 # Web 應用入口
 
-把 HTTP 服務跑起來：[combineServices](/zh-TW/core/service) 備好 services 和 logger，`new WebApp` 填齊必填項，用 `routers('./src/routers')` 掛上路由。下面順帶說明整站語言、客戶端 IP、請求體上限，以及路由裡 ctx.send / ctx.throw / ctx.redirect 的用法。
+把 HTTP 服務跑起來：`new WebApp` 填齊必填項，用 `routers('./src/routers')` 掛上路由。下面順帶說明整站語言、客戶端 IP、請求體上限，以及路由裡 ctx.send / ctx.throw / ctx.redirect 的用法。
 
 ```bash
 pnpm add @aomex/web @aomex/common @aomex/logger
 pnpm add tsx -D
-```
-
-業務服務用 [combineServices](/zh-TW/core/service) 註冊；WebApp 必須拿到它的返回值，以及對應的 logger 例項。
-
-```typescript
-// src/services/index.ts
-import { combineServices } from '@aomex/common';
-
-export const services = await combineServices(
-  { logger: () => import('./logger.service.js') },
-  { eager: ['logger'] }, // [!code highlight]
-);
 ```
 
 ```typescript

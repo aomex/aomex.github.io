@@ -14,12 +14,53 @@ import { rule, schema } from '@aomex/common';
 export const listQuery = schema({
   sort: rule.enum(['asc', 'desc']).default('desc'), // [!code highlight]
 });
-// ?sort=asc → 'asc'；非法值 → 失败
+// ?sort=asc → 'asc'；非法值 → 失敗
 ```
 
-- 推斷為聯合字面量或列舉成員型別（傳 TS enum 時）。
+- 陣列入參推斷為聯合字面量（如 `'asc' | 'desc'`）。
 - pick / omit 得到新列舉驗證器，常保留 optional / default。
 - pick / omit 結果為空，或 default 不在集合內，配置期會拋錯。
+
+業務裡已經有 TypeScript `enum`（或 `as const` 列舉物件）時，可以直接傳給 `rule.enum`，不必再手抄一份陣列：
+
+```typescript
+import { rule, schema } from '@aomex/common';
+
+enum Color {
+  Red = 'red',
+  Blue = 'blue',
+}
+
+export const patchBody = schema({
+  color: rule.enum(Color), // [!code highlight]
+});
+// { color: 'red' } → Color.Red；'green' → 失敗
+```
+
+通過後的型別是列舉成員（`Color`），不是裸的 `'red' | 'blue'`——`ctx.body.color` 可以直接和 `Color.Red` 比較。數字 enum 同理，推斷為 `Status`：
+
+```typescript
+import { rule } from '@aomex/common';
+
+enum Status {
+  Off = 0,
+  On = 1,
+}
+
+rule.enum(Status); // → Status
+```
+
+沒有 `enum` 關鍵字、只有常量物件時，加 `as const` 再傳入即可，推斷為取值聯合：
+
+```typescript
+import { rule } from '@aomex/common';
+
+const Role = { Admin: 'admin', User: 'user' } as const;
+
+rule.enum(Role); // → 'admin' | 'user'
+```
+
+物件的值只能是 string / number；布林值請用陣列寫法 `rule.enum([true, false])`。
 
 ### pick(...values | values[])
 
@@ -32,6 +73,8 @@ const status = rule.enum(['draft', 'published', 'archived']);
 status.pick('draft', 'published');
 status.pick(['draft', 'published']);
 ```
+
+傳了 TS enum 時，pick / omit 用成員本身即可：`rule.enum(Color).pick(Color.Red, Color.Blue)`。
 
 ### omit(...values | values[])
 
@@ -52,7 +95,8 @@ rule.enum(['draft', 'published', 'archived']).omit('archived');
 ```typescript
 import { rule } from '@aomex/common';
 
-rule.enum([0, 1, 2]).strict();'1' → 失败；1 → 通过
+rule.enum([0, 1, 2]).strict();
+// '1' → 失敗；1 → 通過
 ```
 
 通用鏈見 [通用鏈式](../chain)；[literal](./literal)、[oneOf](./one-of)、[string](./string)。

@@ -4,23 +4,11 @@ outline: deep
 
 # Web app entry
 
-Start the HTTP server: prepare `services` and `logger` with [combineServices](/en/core/service), fill required `WebApp` options, mount routes with `routers('./src/routers')`. Below covers site language, client IP, body limits, and `ctx.send` / `ctx.throw` / `ctx.redirect`.
+Start the HTTP server: fill required `WebApp` options and mount routes with `routers('./src/routers')`. Below covers site language, client IP, body limits, and `ctx.send` / `ctx.throw` / `ctx.redirect`.
 
 ```bash
 pnpm add @aomex/web @aomex/common @aomex/logger
 pnpm add tsx -D
-```
-
-Register business services with [combineServices](/en/core/service); `WebApp` must receive the result and the same `logger` instance.
-
-```typescript
-// src/services/index.ts
-import { combineServices } from '@aomex/common';
-
-export const services = await combineServices(
-  { logger: () => import('./logger.service.js') },
-  { eager: ['logger'] }, // [!code highlight]
-);
 ```
 
 ```typescript

@@ -4,22 +4,11 @@ outline: deep
 
 # Web アプリケーション入口
 
-HTTP サービスを起動：[combineServices](/ja/core/service) で services と logger を用意し、`new WebApp` で必須項目を埋め、`routers('./src/routers')` でルートをマウント。サイト言語、クライアント IP、ボディ上限、ルート内 `ctx.send` / `ctx.throw` / `ctx.redirect` もここで触れる。
+HTTP サービスを起動：`new WebApp` で必須項目を埋め、`routers('./src/routers')` でルートをマウント。サイト言語、クライアント IP、ボディ上限、ルート内 `ctx.send` / `ctx.throw` / `ctx.redirect` もここで触れる。
 
 ```bash
 pnpm add @aomex/web @aomex/common @aomex/logger
 pnpm add tsx -D
-```
-業務サービスは [combineServices](/ja/core/service) で登録。WebApp はその戻り値と対応 logger を必ず受け取る。
-
-```typescript
-// src/services/index.ts
-import { combineServices } from '@aomex/common';
-
-export const services = await combineServices(
-  { logger: () => import('./logger.service.js') },
-  { eager: ['logger'] }, // [!code highlight]
-);
 ```
 
 ```typescript

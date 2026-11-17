@@ -17,9 +17,50 @@ export const listQuery = schema({
 // ?sort=asc → 'asc'; invalid → fail
 ```
 
-- Infers as a union of literals or enum members (when you pass a TS enum).
+- An array argument infers as a union of literals (e.g. `'asc' | 'desc'`).
 - `pick` / `omit` yield a new enum validator, often keeping `optional` / `default`.
 - Empty `pick` / `omit` or `default` outside the set throws at configuration time.
+
+When you already have a TypeScript `enum` (or an `as const` enum-like object), pass it straight to `rule.enum`—no need to copy the values into a separate array:
+
+```typescript
+import { rule, schema } from '@aomex/common';
+
+enum Color {
+  Red = 'red',
+  Blue = 'blue',
+}
+
+export const patchBody = schema({
+  color: rule.enum(Color), // [!code highlight]
+});
+// { color: 'red' } → Color.Red; 'green' → fail
+```
+
+The inferred type is the enum member type (`Color`), not a bare `'red' | 'blue'`—so `ctx.body.color` compares cleanly with `Color.Red`. Numeric enums work the same way and infer as `Status`:
+
+```typescript
+import { rule } from '@aomex/common';
+
+enum Status {
+  Off = 0,
+  On = 1,
+}
+
+rule.enum(Status); // → Status
+```
+
+Without the `enum` keyword, use a const object and pass that; the inferred type is the value union:
+
+```typescript
+import { rule } from '@aomex/common';
+
+const Role = { Admin: 'admin', User: 'user' } as const;
+
+rule.enum(Role); // → 'admin' | 'user'
+```
+
+Object values must be string / number; for booleans use the array form `rule.enum([true, false])`.
 
 ### pick(...values | values[])
 
@@ -32,6 +73,8 @@ const status = rule.enum(['draft', 'published', 'archived']);
 status.pick('draft', 'published');
 status.pick(['draft', 'published']);
 ```
+
+With a TS enum, pick / omit take members: `rule.enum(Color).pick(Color.Red, Color.Blue)`.
 
 ### omit(...values | values[])
 
