@@ -7,6 +7,7 @@ import {
   writeStoredLocale,
   type DocsLocale,
 } from './autoLocale';
+import VersionBadge from './VersionBadge.vue';
 
 const { Layout } = DefaultTheme;
 const route = useRoute();
@@ -116,5 +117,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <Layout />
+  <Layout>
+    <template #nav-bar-title-after>
+      <VersionBadge />
+    </template>
+  </Layout>
 </template>
