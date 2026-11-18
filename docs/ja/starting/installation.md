@@ -66,7 +66,7 @@ Console は Web と **同じ** services / schemas を共有。`src/commanders/` 
 pnpm aomex hello
 pnpm aomex hello --user Ada
 ```
-Cron や OpenAPI 書き出しも `src/cli.ts` 経由。詳しくは [Cron](/ja/plugins/cron)・[OpenAPI 書き出し](/ja/console/openapi)。
+Cron や OpenAPI 書き出しも `src/cli.ts` 経由。詳しくは [Cron](/ja/plugins/cron)・[OpenAPI 書き出し](/ja/openapi/)。
 
 ## 次のステップ
 

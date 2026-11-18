@@ -162,12 +162,12 @@ user: {
 | `prismaOutput` | `response({ content })` |
 | `prismaEnum` | Table-aligned `rule.enum` |
 
-Referenced prisma schemas feed [OpenAPI](/en/plugins/openapi); after table/Json changes: `prisma generate` → check overrides → [export contract](/en/console/openapi). Forgot generate → stale types.
+Referenced prisma schemas feed [OpenAPI](/en/openapi/); after table/Json changes: `prisma generate` → check overrides → [Generate OpenAPI](/en/openapi/). Forgot generate → stale types.
 
 Not HTTP middleware—no `WebApp.mount`.
 
 ## Related
 
 - [Validators overview](/en/validators/)
-- [OpenAPI generation](/en/plugins/openapi)
-- [OpenAPI export](/en/console/openapi)
+- [Generate OpenAPI](/en/openapi/)
+- [Generate OpenAPI](/en/openapi/)

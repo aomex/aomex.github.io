@@ -147,11 +147,11 @@ action: async (ctx) => {
 
 若同一 operation 既有「skip 的 200」又有需要套壳的成败支，生成器会在该 `200` 的 `application/json` 上把裸 schema 与套壳 schema 做成 `oneOf`，其它 media（如 `text/html`）原样留下。
 
-`envelope.description` 会写到收拢后的 `200` 响应说明上。不必再手传一份 `mount` 数组，也别漏传 `app`——否则契约仍是「201 + 裸 body」、线上却是「200 + 外壳」。详见 [OpenAPI 生成](/zh/plugins/openapi)。
+`envelope.description` 会写到收拢后的 `200` 响应说明上。不必再手传一份 `mount` 数组，也别漏传 `app`——否则契约仍是「201 + 裸 body」、线上却是「200 + 外壳」。详见 [生成OpenAPI](/zh/openapi/)。
 
 ## 下一步
 
 - [错误格式](/zh/web/errors)：`formatError` 与套壳的 payload
 - [约束响应](/zh/web/response)：路由上声明真实状态码与内层 content
-- [OpenAPI 生成](/zh/plugins/openapi)：契约如何扫路由
+- [生成OpenAPI](/zh/openapi/)：契约如何扫路由
 - [Web 应用入口](/zh/web/)：`WebApp` 其它必填项

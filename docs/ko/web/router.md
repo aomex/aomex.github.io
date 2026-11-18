@@ -140,7 +140,7 @@ router.get('/users', { // [!code focus:11]
 });
 ```
 
-OpenAPI 메타데이터는 [OpenAPI 플러그인](/ko/plugins/openapi)을 보세요.
+OpenAPI 메타데이터는 [OpenAPI 플러그인](/ko/openapi/)을 보세요.
 
 단일 경로 파라미터:
 

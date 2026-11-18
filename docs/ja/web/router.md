@@ -133,7 +133,7 @@ router.get('/users', { // [!code focus:11]
   },
 });
 ```
-OpenAPI メタデータは [OpenAPI プラグイン](/ja/plugins/openapi)。
+OpenAPI メタデータは [OpenAPI プラグイン](/ja/openapi/)。
 
 単一路径パラメータ：
 

@@ -119,7 +119,7 @@ Router-level mount hits **every** method in the file—split public routes to an
 
 **disabled** skips registration at runtime (no match, no action)—env flags or feature toggles for half-built endpoints beat leaving 501 in production.
 
-**docs** sets OpenAPI text (`summary`, etc.). `Router({ docs: { tags } })` groups; route `docs` override titles/descriptions—scanned with [response()](/en/web/response). See [OpenAPI plugin](/en/plugins/openapi).
+**docs** sets OpenAPI text (`summary`, etc.). `Router({ docs: { tags } })` groups; route `docs` override titles/descriptions—scanned with [response()](/en/web/response). See [OpenAPI plugin](/en/openapi/).
 
 ```typescript
 import { rule } from '@aomex/common';

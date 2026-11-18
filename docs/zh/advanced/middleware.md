@@ -106,7 +106,7 @@ export const traceId = middleware.web<{
 });
 ```
 
-重新跑 [OpenAPI 生成](/zh/plugins/openapi) 或打开 Swagger：挂了该中间件的 operation 上应能看到 `X-Trace-Id`。钩子里改错结构不会在 `pnpm start` 时报错，要在生成结果里核对。
+重新跑 [生成OpenAPI](/zh/openapi/) 或打开 Swagger：挂了该中间件的 operation 上应能看到 `X-Trace-Id`。钩子里改错结构不会在 `pnpm start` 时报错，要在生成结果里核对。
 
 ::: tip
 中间件若**运行时什么都不做**、只为改文档，先问自己能不能写在路由 `docs` 或生成器配置里——空跑一层会让 mount 更难读。
@@ -175,4 +175,4 @@ export const consoleTraceId = middleware.console<{ readonly traceId: string }>({
 
 - 顺序、`.skip()`、`dependsOn`、ctx 合并：[中间件](/zh/core/middleware)
 - 现成插件：[访问日志](/zh/plugins/http-access-log)、[统一入口 Auth](/zh/plugins/auth)
-- 生成文档：[OpenAPI 生成](/zh/plugins/openapi)
+- 生成文档：[生成OpenAPI](/zh/openapi/)

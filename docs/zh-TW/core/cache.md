@@ -233,7 +233,7 @@ class ReportService extends Service {
 
 沒寫 `key` 時，框架用：
 
-`類名或 displayName` + `-` + `方法名` + `-` + `JSON.stringify(引數)`
+`类名或 displayName` + `-` + `方法名` + `-` + `JSON.stringify(参数)`
 
 繼承 `Service` 且類名以 `Service` 結尾時，會用去掉字尾的 `displayName`（`ReportService` → `Report`），避免鍵裡一長串字尾。引數會進 JSON，**別塞不可序列化或會抖的值**（`Date`、迴圈引用、每次不同的物件字面量），否則 key 對不上、等於沒快取。引數多或結構亂時，自己寫 `key` 更穩。
 

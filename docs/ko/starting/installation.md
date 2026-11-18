@@ -71,7 +71,7 @@ pnpm aomex hello
 pnpm aomex hello --user Ada
 ```
 
-Cron·OpenAPI 내보내기도 `src/cli.ts`를 거칩니다 — [Cron](/ko/plugins/cron) · [OpenAPI 내보내기](/ko/console/openapi).
+Cron·OpenAPI 내보내기도 `src/cli.ts`를 거칩니다 — [Cron](/ko/plugins/cron) · [OpenAPI 생성](/ko/openapi/).
 
 ## 다음 단계
 

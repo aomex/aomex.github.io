@@ -14,7 +14,7 @@ import { rule, schema } from '@aomex/common';
 export const listQuery = schema({
   sort: rule.enum(['asc', 'desc']).default('desc'), // [!code highlight]
 });
-// ?sort=asc → 'asc'；非法值 → 失敗
+// ?sort=asc → 'asc'；非法值 → 失败
 ```
 
 - 陣列入參推斷為聯合字面量（如 `'asc' | 'desc'`）。
@@ -34,7 +34,7 @@ enum Color {
 export const patchBody = schema({
   color: rule.enum(Color), // [!code highlight]
 });
-// { color: 'red' } → Color.Red；'green' → 失敗
+// { color: 'red' } → Color.Red；'green' → 失败
 ```
 
 通過後的型別是列舉成員（`Color`），不是裸的 `'red' | 'blue'`——`ctx.body.color` 可以直接和 `Color.Red` 比較。數字 enum 同理，推斷為 `Status`：
@@ -96,7 +96,7 @@ rule.enum(['draft', 'published', 'archived']).omit('archived');
 import { rule } from '@aomex/common';
 
 rule.enum([0, 1, 2]).strict();
-// '1' → 失敗；1 → 通過
+// '1' → 失败；1 → 通过
 ```
 
 通用鏈見 [通用鏈式](../chain)；[literal](./literal)、[oneOf](./one-of)、[string](./string)。

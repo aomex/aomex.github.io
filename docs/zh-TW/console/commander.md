@@ -61,7 +61,7 @@ commander.create(commandName | string[], {
 
 `prefix` 是指令名字首：構造 `new Commander({ prefix: 'cache:' })` 後，`create('warm')` 對外就是 `aomex cache:warm`。按領域劃分（`cache:`、`user:`）可少跨檔案重名，也方便在 `--help` 裡一眼掃到一組相關命令。
 
-未匹配任何指令時，應用通常以**非零退出碼**結束並列印幫助——CI 裡要用退出碼斷言，別隻看 stdout。忘了在 `ConsoleApp.mount` 掛 `commanders(...)` 時，檔案寫了指令 CLI 裡也找不到。
+未匹配任何指令時，應用通常以**非零退出碼**結束並列印幫助——CI 裡要用退出碼斷言，別只看 stdout。忘了在 `ConsoleApp.mount` 掛 `commanders(...)` 時，檔案寫了指令 CLI 裡也找不到。
 
 ## commanders 註冊
 
@@ -71,7 +71,7 @@ commander.create(commandName | string[], {
 | `commanders([a, b])` | 測試或只掛子集 |
 | 一域一檔案 | `cache.commander.ts`、`user.commander.ts` |
 | 與 Cron 共用 | 定時與手跑同文件、同 `action`；Cron 的 `args` 也要走同一套 `options()`，見 [Cron](/zh-TW/plugins/cron) |
-| OpenAPI 落盤 | `openapi()` 與 `commanders()` 一起掛在 Console `mount`，見 [OpenAPI 落盤](/zh-TW/console/openapi) |
+| OpenAPI 落盤 | `openapi()` 與 `commanders()` 一起掛在 Console `mount`，見 [生成OpenAPI](/zh-TW/openapi/) |
 
 ## docs 與 disabled
 

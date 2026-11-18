@@ -68,4 +68,4 @@ prettyJson({
 
 - JSON 业务形态：[约束响应](/zh/web/response)
 - 压体积：[Compress](/zh/plugins/compress)
-- 开发期文档 UI：[Swagger UI](/zh/plugins/swagger-ui)
+- 开发期文档 UI：[Swagger UI](/zh/openapi/swagger-ui)

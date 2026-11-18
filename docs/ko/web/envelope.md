@@ -147,11 +147,11 @@ action: async (ctx) => {
 
 같은 operation에 «스킵한 200»과 래핑되는 성공·실패 가지가 같이 있으면, 생성기는 해당 `200`의 `application/json`에서 맨 schema와 래핑 schema를 `oneOf`로 합치고, 다른 media(`text/html` 등)는 그대로 둡니다.
 
-`envelope.description`은 모인 `200` 응답 설명에 씁니다. `mount` 배열을 또 손으로 넘기지 말고 `app`을 빼먹지도 마세요. 그렇지 않으면 계약은 «201 + 맨 body»인데 실서비스는 «200 + 껍데기»가 됩니다. 자세히는 [OpenAPI 생성](/ko/plugins/openapi).
+`envelope.description`은 모인 `200` 응답 설명에 씁니다. `mount` 배열을 또 손으로 넘기지 말고 `app`을 빼먹지도 마세요. 그렇지 않으면 계약은 «201 + 맨 body»인데 실서비스는 «200 + 껍데기»가 됩니다. 자세히는 [OpenAPI 생성](/ko/openapi/).
 
 ## 다음 단계
 
 - [오류 형식](/ko/web/errors): `formatError`와 래핑 payload
 - [응답 제약](/ko/web/response): 라우트별 실제 상태 코드와 안쪽 content
-- [OpenAPI 생성](/ko/plugins/openapi): 계약이 라우트를 어떻게 스캔하는지
+- [OpenAPI 생성](/ko/openapi/): 계약이 라우트를 어떻게 스캔하는지
 - [Web 앱 진입점](/ko/web/): `WebApp` 기타 필수 항목

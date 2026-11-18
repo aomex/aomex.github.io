@@ -97,5 +97,5 @@ new ConsoleApp({
 
 - [Маршрутизация команд](/ru/console/commander)
 - [Параметры ввода](/ru/console/options)
-- [Экспорт OpenAPI](/ru/console/openapi)
+- [Генерация OpenAPI](/ru/openapi/)
 - [Крон](/ru/plugins/cron)

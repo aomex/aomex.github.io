@@ -70,4 +70,4 @@ prettyJson({
 
 - JSON 응답 형태: [응답 제약](/ko/web/response)
 - 페이로드 축소: [Compress](/ko/plugins/compress)
-- 개발 API UI: [Swagger UI](/ko/plugins/swagger-ui)
+- 개발 API UI: [Swagger UI](/ko/openapi/swagger-ui)

@@ -68,4 +68,4 @@ Pretty для больших списков может быть в разы бо
 
 - Форма JSON-ответа: [Ограничения response](/ru/web/response)
 - Сжать payload: [Compress](/ru/plugins/compress)
-- UI API в разработке: [Swagger UI](/ru/plugins/swagger-ui)
+- UI API в разработке: [Swagger UI](/ru/openapi/swagger-ui)

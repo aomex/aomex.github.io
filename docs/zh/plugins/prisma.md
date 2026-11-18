@@ -162,12 +162,12 @@ user: {
 | `prismaOutput` | `response({ content })` |
 | `prismaEnum` | 和表枚举对齐的 `rule.enum` |
 
-路由引用的 prisma schema 会进 [OpenAPI](/zh/plugins/openapi)；改表或 Json 后：prisma generate → 检查覆盖 → [落盘契约](/zh/console/openapi)。改表忘了 generate 时，类型仍是旧的，覆盖项可能对不上新字段。
+路由引用的 prisma schema 会进 [OpenAPI](/zh/openapi/)；改表或 Json 后：prisma generate → 检查覆盖 → [生成OpenAPI](/zh/openapi/)。改表忘了 generate 时，类型仍是旧的，覆盖项可能对不上新字段。
 
 本包**不是** HTTP 中间件，无需挂 `WebApp.mount`。
 
 ## 相关
 
 - [验证器总览](/zh/validators/)
-- [OpenAPI 生成](/zh/plugins/openapi)
-- [OpenAPI 落盘](/zh/console/openapi)
+- [生成OpenAPI](/zh/openapi/)
+- [生成OpenAPI](/zh/openapi/)

@@ -162,12 +162,12 @@ user: {
 | `prismaOutput` | `response({ content })` |
 | `prismaEnum` | 和表列舉對齊的 `rule.enum` |
 
-路由引用的 prisma schema 會進 [OpenAPI](/zh-TW/plugins/openapi)；改表或 Json 後：prisma generate → 檢查覆蓋 → [落盤契約](/zh-TW/console/openapi)。改表忘了 generate 時，型別仍是舊的，覆蓋項可能對不上新欄位。
+路由引用的 prisma schema 會進 [OpenAPI](/zh-TW/openapi/)；改表或 Json 後：prisma generate → 檢查覆蓋 → [生成OpenAPI](/zh-TW/openapi/)。改表忘了 generate 時，型別仍是舊的，覆蓋項可能對不上新欄位。
 
 本包**不是** HTTP 中介軟體，無需掛 `WebApp.mount`。
 
 ## 相關
 
 - [驗證器總覽](/zh-TW/validators/)
-- [OpenAPI 生成](/zh-TW/plugins/openapi)
-- [OpenAPI 落盤](/zh-TW/console/openapi)
+- [生成OpenAPI](/zh-TW/openapi/)
+- [生成OpenAPI](/zh-TW/openapi/)

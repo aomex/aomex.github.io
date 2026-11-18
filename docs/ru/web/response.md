@@ -186,4 +186,4 @@ router.get('/report.pdf', { // [!code focus:12]
 - [Формат ошибки](/ru/web/errors) (4xx/5xx JSON с ответом)
 - [Обёртка ответа](/ru/web/envelope) (внешний HTTP 200, единая оболочка; `skipEnvelope`)
 - [Тело запроса](/ru/web/body)/[Строка запроса](/ru/web/query) (симметричная запись со стороны входа)
-- [Генерация OpenAPI](/ru/plugins/openapi)
+- [Генерация OpenAPI](/ru/openapi/)

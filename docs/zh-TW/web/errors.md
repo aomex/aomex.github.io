@@ -11,7 +11,7 @@ import { rule } from '@aomex/common';
 import { formatError, routers, WebApp } from '@aomex/web';
 
 new WebApp({
-  // services / logger / language / proxyIP —— 见 [应用入口](/zh-TW/web/)
+  // services / logger / language / proxyIP —— 见 [应用入口](/zh/web/)
   mount: [
     formatError({ // [!code focus:13]
       content: { // [!code highlight]

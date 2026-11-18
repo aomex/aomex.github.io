@@ -111,4 +111,4 @@ new AuthJwtStrategy({
 
 - [認証](/ja/plugins/auth)
 - [Bearer 戦略](/ja/plugins/auth-bearer-strategy)
-- [OpenAPI 生成](/ja/plugins/openapi)
+- [生成OpenAPI](/ja/openapi/)

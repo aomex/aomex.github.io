@@ -141,7 +141,7 @@ router.get('/users', { // [!code focus:11]
 });
 ```
 
-Метаданные OpenAPI подробно описаны в [Плагин OpenAPI](/ru/plugins/openapi).
+Метаданные OpenAPI подробно описаны в [Плагин OpenAPI](/ru/openapi/).
 
 Параметры одного пути:
 

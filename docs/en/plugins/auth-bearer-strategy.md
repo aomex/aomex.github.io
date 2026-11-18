@@ -134,4 +134,4 @@ For OpenAPI, pass the same `WebApp` with `auth.authenticate('bearer')` to `gener
 
 - [Authentication](/en/plugins/auth)
 - [JWT strategy](/en/plugins/auth-jwt-strategy)
-- [OpenAPI generation](/en/plugins/openapi)
+- [Generate OpenAPI](/en/openapi/)

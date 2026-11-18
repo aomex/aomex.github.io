@@ -69,7 +69,7 @@ commander.create(commandName | string[], {
 | `commanders([a, b])` | テストやサブセットだけマウント |
 | ドメインごと1ファイル | `cache.commander.ts`、`user.commander.ts` |
 | Cron と共有 | 定時と手動が同じファイル・同じ `action`；Cron の `args` も同じ `options()`。[Cron](/ja/plugins/cron) |
-| OpenAPI 書き出し | `openapi()` と `commanders()` を Console `mount` に。[OpenAPI 書き出し](/ja/console/openapi) |
+| OpenAPI 書き出し | `openapi()` と `commanders()` を Console `mount` に。[OpenAPI 書き出し](/ja/openapi/) |
 
 ## docs と disabled
 

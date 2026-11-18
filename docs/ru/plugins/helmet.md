@@ -81,5 +81,5 @@ CSP из шаблона без CDN/скриптов — белый экран и
 ## Дальше
 
 - Кросс-домен: [CORS](/ru/plugins/cors)
-- UI документации: [Swagger UI](/ru/plugins/swagger-ui), [Redoc UI](/ru/plugins/redoc-ui)
+- UI документации: [Swagger UI](/ru/openapi/swagger-ui), [Redoc UI](/ru/openapi/redoc-ui)
 - Размещение middleware: [Middleware](/ru/core/middleware)

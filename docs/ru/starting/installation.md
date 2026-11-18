@@ -71,7 +71,7 @@ pnpm aomex hello
 pnpm aomex hello --user Ada
 ```
 
-Запланированные задачи и OpenAPI также можно разместить на диске. ` src/cli.ts `, см. [Cron](/ru/plugins/cron) · [Экспорт OpenAPI](/ru/console/openapi).
+Запланированные задачи и OpenAPI также можно разместить на диске. ` src/cli.ts `, см. [Cron](/ru/plugins/cron) · [Генерация OpenAPI](/ru/openapi/).
 
 ## Дальше
 

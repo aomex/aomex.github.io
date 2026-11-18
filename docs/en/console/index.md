@@ -96,5 +96,5 @@ Business services and mixin middleware work on both sides. Put ops-style work on
 
 - [Command routing](/en/console/commander)
 - [Input options](/en/console/options)
-- [OpenAPI export](/en/console/openapi)
+- [Generate OpenAPI](/en/openapi/)
 - [Cron](/en/plugins/cron)

@@ -147,11 +147,11 @@ Pass the **same `WebApp` (`app`) with `envelope` configured** to `generateOpenap
 
 When one operation has both a skipped `200` and wrapped success/error branches, the generator builds `oneOf` on that `200` `application/json` between bare and wrapped schemas; other media (e.g. `text/html`) stay as declared.
 
-`envelope.description` lands on the collapsed `200` response docs. Do not hand-copy a `mount` array or omit `app`—contract stays “201 + bare body” while production is “200 + wrapper”. See [OpenAPI generation](/en/plugins/openapi).
+`envelope.description` lands on the collapsed `200` response docs. Do not hand-copy a `mount` array or omit `app`—contract stays “201 + bare body” while production is “200 + wrapper”. See [Generate OpenAPI](/en/openapi/).
 
 ## Next steps
 
 - [Error format](/en/web/errors): `formatError` and envelope `payload`
 - [Response constraints](/en/web/response): declare real status and inner `content`
-- [OpenAPI generation](/en/plugins/openapi): how contracts scan routes
+- [Generate OpenAPI](/en/openapi/): how contracts scan routes
 - [Web app entry](/en/web/): other required `WebApp` options

@@ -56,7 +56,7 @@ CORS、全站 requestId、訪問日誌等「每條請求都要」的事，放 `W
 
 ## Router.mount
 
-整組 URL 共享同一套邏輯（統一鑑權、審計、字首下的 formatError）時用 `Router({ mount })`，隻影響本檔案註冊的路徑，不必用 WebApp 把整站都包一層。
+整組 URL 共享同一套邏輯（統一鑑權、審計、字首下的 formatError）時用 `Router({ mount })`，只影響本檔案註冊的路徑，不必用 WebApp 把整站都包一層。
 
 ```typescript
 import { Router } from '@aomex/web';
@@ -144,7 +144,7 @@ router.get('/me', {
 也可以傳工廠 / `async` 工廠（和 `combineServices` 懶載入類似，這裡同樣只為型別服務）。可鏈式多次 `dependsOn`，欄位會疊在一起。
 
 ::: tip
-`Middleware.Infer<typeof loadProfile>` **不會**帶上 `dependsOn` 借來的 Props——對外仍像「自己沒往 ctx 上加欄位」。借型別隻影響你在 `fn`（以及緊跟著的一次 `.skip(ctx => …)`）裡看到的 `ctx`。
+`Middleware.Infer<typeof loadProfile>` **不會**帶上 `dependsOn` 借來的 Props——對外仍像「自己沒往 ctx 上加欄位」。借型別只影響你在 `fn`（以及緊跟著的一次 `.skip(ctx => …)`）裡看到的 `ctx`。
 :::
 
 日常優先用現成的 query、body、cors、各類 auth；要往 OpenAPI / CLI 幫助裡寫鉤子，見 [自定義中介軟體](/zh-TW/advanced/middleware)。

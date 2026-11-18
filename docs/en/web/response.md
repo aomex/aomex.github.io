@@ -186,4 +186,4 @@ You can `ctx.send` without `response()`; before launch add success and common 40
 - [Error format](/en/web/errors) (4xx/5xx JSON with `response`)
 - [Response envelope](/en/web/envelope) (outer HTTP 200 wrapper; `skipEnvelope`)
 - [Request body](/en/web/body) / [Query string](/en/web/query) (symmetric input side)
-- [OpenAPI generation](/en/plugins/openapi)
+- [Generate OpenAPI](/en/openapi/)

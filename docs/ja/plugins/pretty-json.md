@@ -68,4 +68,4 @@ prettyJson({
 
 - JSON の業務形：[制約付きレスポンス](/ja/web/response)
 - サイズ削減：[Compress](/ja/plugins/compress)
-- 開発用ドキュメント UI：[Swagger UI](/ja/plugins/swagger-ui)
+- 開発用ドキュメント UI：[Swagger UI](/ja/openapi/swagger-ui)

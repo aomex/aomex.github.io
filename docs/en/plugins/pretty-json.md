@@ -68,4 +68,4 @@ Prettying large lists can be several times the compact JSON size—Postman will 
 
 - JSON response shape: [Response constraints](/en/web/response)
 - Shrink payloads: [Compress](/en/plugins/compress)
-- Dev API UI: [Swagger UI](/en/plugins/swagger-ui)
+- Dev API UI: [Swagger UI](/en/openapi/swagger-ui)

@@ -94,7 +94,7 @@ envelope: {
 | **3xx** 重定向 | Location 等語義不能改成 JSON 外殼 |
 | **204 / 205 / 304** 等無內容狀態碼 | 本身沒有 body |
 | **SSE**（`text/event-stream`） | 流式幀協議，不能整包緩衝成一個 JSON |
-| **Buffer / Stream** 體 | 二進制或流式下載，不適合套 JSON |
+| **Buffer / Stream** 體 | 二進位制或流式下載，不適合套 JSON |
 
 普通 json / string / null（含未顯式 send 的預設 404）都會套。
 
@@ -104,7 +104,7 @@ envelope: {
 
 全站開了 envelope，個別出口仍要**裸響應**（下載頁、相容舊客戶端、HTML 文件頁等）時，有兩種寫法：
 
-**業務路由優先用 `response({ skipEnvelope: true })`**：只跳過**這一條**宣告裡的 `statusCode`；其它狀態碼仍套殼。執行時與 OpenAPI 一致。
+**業務路由優先用 `response({ skipEnvelope: true })`**：只跳過**這一條**聲明裡的 `statusCode`；其它狀態碼仍套殼。執行時與 OpenAPI 一致。
 
 ```typescript
 import { rule } from '@aomex/common';
@@ -132,7 +132,7 @@ router.get('/export.csv', { // [!code focus:14]
 
 同一路由可多次掛 `response()`，各自決定要不要 `skipEnvelope`——例如成功套殼、錯誤裸出，或反過來。
 
-**基礎設施響應**（Swagger / Redoc 頁、裸 OpenAPI JSON）可在 action 裡設 `ctx.response.skipEnvelope = true`：無條件跳過本次寫出，不論最終狀態碼。業務介面請優先用上面的 `response({ skipEnvelope })`，好讓文件也登記到對應狀態。
+**基礎設施響應**（Swagger / Redoc 頁、裸 OpenAPI JSON）可在 action 裡設 `ctx.response.skipEnvelope = true`：無條件跳過本次寫出，不論最終狀態碼。業務接口請優先用上面的 `response({ skipEnvelope })`，好讓文件也登記到對應狀態。
 
 ```typescript
 action: async (ctx) => {
@@ -147,11 +147,11 @@ action: async (ctx) => {
 
 若同一 operation 既有「skip 的 200」又有需要套殼的成敗支，生成器會在該 `200` 的 `application/json` 上把裸 schema 與套殼 schema 做成 `oneOf`，其它 media（如 `text/html`）原樣留下。
 
-`envelope.description` 會寫到收攏後的 `200` 響應說明上。不必再手傳一份 `mount` 陣列，也別漏傳 `app`——否則契約仍是「201 + 裸 body」、線上卻是「200 + 外殼」。詳見 [OpenAPI 生成](/zh-TW/plugins/openapi)。
+`envelope.description` 會寫到收攏後的 `200` 響應說明上。不必再手傳一份 `mount` 陣列，也別漏傳 `app`——否則契約仍是「201 + 裸 body」、線上卻是「200 + 外殼」。詳見 [生成OpenAPI](/zh-TW/openapi/)。
 
 ## 下一步
 
 - [錯誤格式](/zh-TW/web/errors)：`formatError` 與套殼的 payload
 - [約束響應](/zh-TW/web/response)：路由上宣告真實狀態碼與內層 content
-- [OpenAPI 生成](/zh-TW/plugins/openapi)：契約如何掃路由
+- [生成OpenAPI](/zh-TW/openapi/)：契約如何掃路由
 - [Web 應用入口](/zh-TW/web/)：`WebApp` 其它必填項

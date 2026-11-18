@@ -93,5 +93,5 @@ new ConsoleApp({
 
 - [コマンドルーティング](/ja/console/commander)
 - [入力パラメータ](/ja/console/options)
-- [OpenAPI 書き出し](/ja/console/openapi)
+- [OpenAPI 書き出し](/ja/openapi/)
 - [Cron](/ja/plugins/cron)

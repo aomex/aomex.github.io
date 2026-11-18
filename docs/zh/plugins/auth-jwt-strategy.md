@@ -110,4 +110,4 @@ new AuthJwtStrategy({
 
 - [身份认证](/zh/plugins/auth)
 - [Bearer 策略](/zh/plugins/auth-bearer-strategy)
-- [OpenAPI 生成](/zh/plugins/openapi)
+- [生成OpenAPI](/zh/openapi/)

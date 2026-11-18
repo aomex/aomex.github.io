@@ -140,7 +140,7 @@ router.get('/users', { // [!code focus:11]
 });
 ```
 
-OpenAPI 元数据详见 [OpenAPI 插件](/zh/plugins/openapi)。
+OpenAPI 元数据详见 [生成OpenAPI](/zh/openapi/) · [Tags 分组](/zh/openapi/tags)。
 
 单条路径参数：
 

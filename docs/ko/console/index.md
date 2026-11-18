@@ -96,5 +96,5 @@ new ConsoleApp({
 
 - [명령 라우팅](/ko/console/commander)
 - [입력 옵션](/ko/console/options)
-- [OpenAPI 내보내기](/ko/console/openapi)
+- [OpenAPI 생성](/ko/openapi/)
 - [Cron](/ko/plugins/cron)

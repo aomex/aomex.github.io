@@ -71,7 +71,7 @@ Unmatched commands usually exit **non-zero** and print help—assert exit codes 
 | `commanders([a, b])` | Tests or subset mounting |
 | One domain per file | `cache.commander.ts`, `user.commander.ts` |
 | Shared with Cron | Schedule and manual runs share file and `action`; Cron `args` must pass the same `options()`—see [Cron](/en/plugins/cron) |
-| OpenAPI export | Mount `openapi()` with `commanders()` on Console—see [OpenAPI export](/en/console/openapi) |
+| OpenAPI export | Mount `openapi()` with `commanders()` on Console—see [Generate OpenAPI](/en/openapi/) |
 
 ## docs and disabled
 

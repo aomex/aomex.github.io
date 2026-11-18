@@ -145,11 +145,11 @@ action: async (ctx) => {
 
 同一 operation で「skip の 200」とラップが必要な成否枝が共存するとき、生成器はその `200` の `application/json` 上で裸 schema とラップ schema を `oneOf` にし、他の media（`text/html` など）はそのまま残す。
 
-`envelope.description` は集約後の `200` レスポンス説明へ。`mount` 配列を手で二重に渡さない。`app` を落とすと契約は「201 + 裸 body」、本番は「200 + 外殻」のまま。[OpenAPI 生成](/ja/plugins/openapi) 参照。
+`envelope.description` は集約後の `200` レスポンス説明へ。`mount` 配列を手で二重に渡さない。`app` を落とすと契約は「201 + 裸 body」、本番は「200 + 外殻」のまま。[生成OpenAPI](/ja/openapi/) 参照。
 
 ## 次のステップ
 
 - [エラー形式](/ja/web/errors)：`formatError` と payload
 - [レスポンス制約](/ja/web/response)：真のステータスと内側 content
-- [OpenAPI 生成](/ja/plugins/openapi)：契約のスキャン
+- [生成OpenAPI](/ja/openapi/)：契約のスキャン
 - [Web アプリケーション入口](/ja/web/)：`WebApp` 他必須項目

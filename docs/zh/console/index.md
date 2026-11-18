@@ -96,5 +96,5 @@ new ConsoleApp({
 
 - [指令路由](/zh/console/commander)
 - [输入参数](/zh/console/options)
-- [OpenAPI 落盘](/zh/console/openapi)
+- [生成OpenAPI](/zh/openapi/)
 - [定时任务 Cron](/zh/plugins/cron)

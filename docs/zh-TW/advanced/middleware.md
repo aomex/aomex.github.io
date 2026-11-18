@@ -106,7 +106,7 @@ export const traceId = middleware.web<{
 });
 ```
 
-重新跑 [OpenAPI 生成](/zh-TW/plugins/openapi) 或開啟 Swagger：掛了該中介軟體的 operation 上應能看到 `X-Trace-Id`。鉤子裡改錯結構不會在 `pnpm start` 時報錯，要在生成結果裡核對。
+重新跑 [生成OpenAPI](/zh-TW/openapi/) 或開啟 Swagger：掛了該中介軟體的 operation 上應能看到 `X-Trace-Id`。鉤子裡改錯結構不會在 `pnpm start` 時報錯，要在生成結果裡核對。
 
 ::: tip
 中介軟體若**執行時什麼都不做**、只為改文件，先問自己能不能寫在路由 `docs` 或生成器配置裡——空跑一層會讓 mount 更難讀。
@@ -175,4 +175,4 @@ export const consoleTraceId = middleware.console<{ readonly traceId: string }>({
 
 - 順序、`.skip()`、`dependsOn`、ctx 合併：[中介軟體](/zh-TW/core/middleware)
 - 現成外掛：[訪問日誌](/zh-TW/plugins/http-access-log)、[統一入口 Auth](/zh-TW/plugins/auth)
-- 生成文件：[OpenAPI 生成](/zh-TW/plugins/openapi)
+- 生成文件：[生成OpenAPI](/zh-TW/openapi/)

@@ -180,4 +180,4 @@ router.get('/report.pdf', { // [!code focus:12]
 - [エラー形式](/ja/web/errors)（4xx/5xx JSON と response）
 - [レスポンスエンベロープ](/ja/web/envelope)（外側固定 200・`skipEnvelope`）
 - [リクエストボディ](/ja/web/body) / [クエリ](/ja/web/query)
-- [OpenAPI 生成](/ja/plugins/openapi)
+- [生成OpenAPI](/ja/openapi/)

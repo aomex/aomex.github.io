@@ -103,7 +103,7 @@ export const traceId = middleware.web<{
   },
 });
 ```
-[OpenAPI 生成](/ja/plugins/openapi) を再実行するか Swagger を開く：このミドルウェアをマウントした operation に `X-Trace-Id` が見えるはず。フックの構造ミスは `pnpm start` では怒られない。生成結果で確認する。
+[生成OpenAPI](/ja/openapi/) を再実行するか Swagger を開く：このミドルウェアをマウントした operation に `X-Trace-Id` が見えるはず。フックの構造ミスは `pnpm start` では怒られない。生成結果で確認する。
 
 ::: tip
 ミドルウェアが**実行時に何もしない**のにドキュメントだけ変えたいなら、ルート `docs` やジェネレータ設定で足せないか先に考える——空回りの1層は mount を読みにくくする。
@@ -170,4 +170,4 @@ export const consoleTraceId = middleware.console<{ readonly traceId: string }>({
 
 - 順序、`.skip()`、`dependsOn`、ctx のマージ：[ミドルウェア](/ja/core/middleware)
 - 既成プラグイン：[アクセスログ](/ja/plugins/http-access-log)、[認証統一エントリ Auth](/ja/plugins/auth)
-- ドキュメント生成：[OpenAPI 生成](/ja/plugins/openapi)
+- ドキュメント生成：[生成OpenAPI](/ja/openapi/)

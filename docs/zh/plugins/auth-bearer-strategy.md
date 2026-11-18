@@ -134,4 +134,4 @@ onLoaded 返回 false 即未登录（**401**），别用业务异常代替，除
 
 - [身份认证](/zh/plugins/auth)
 - [JWT 策略](/zh/plugins/auth-jwt-strategy)
-- [OpenAPI 生成](/zh/plugins/openapi)
+- [生成OpenAPI](/zh/openapi/)

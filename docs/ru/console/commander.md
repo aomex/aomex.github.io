@@ -71,7 +71,7 @@ commander.create(commandName | string[], {
 | ` commanders([a, b])` | Тестируйте или вешайте только подмножество |
 | Один домен, один файл | ` cache.commander.ts `,` user.commander.ts ` |
 | Совместно с Cron | Синхронизация и запуск одного и того же файла вручную и ` action `;Крона ` args ` Нам придется идти по тому же пути ` options()`, см. [Cron](/ru/plugins/cron) |
-| Размещение OpenAPI | ` openapi()` и ` commanders()` Держитесь вместе в консоли ` mount `, см. [Экспорт OpenAPI](/ru/console/openapi) |
+| Размещение OpenAPI | ` openapi()` и ` commanders()` Держитесь вместе в консоли ` mount `, см. [Генерация OpenAPI](/ru/openapi/) |
 
 ## документы и отключены
 

@@ -4,7 +4,7 @@ outline: deep
 
 # Console 應用入口
 
-做一個能在終端跑的指令入口：和 Web **共用** services / 驗證器，但舞臺是 aomex <命令>。適合遷移、預熱快取、落盤 OpenAPI、Cron——跑完就退出，不必佔 HTTP 埠。
+做一個能在終端跑的指令入口：和 Web **共用** services / 驗證器，但舞臺是 `aomex <命令>`。適合遷移、預熱快取、落盤 OpenAPI、Cron——跑完就退出，不必佔 HTTP 埠。
 
 ```bash
 pnpm add @aomex/console @aomex/common @aomex/logger
@@ -96,5 +96,5 @@ new ConsoleApp({
 
 - [指令路由](/zh-TW/console/commander)
 - [輸入引數](/zh-TW/console/options)
-- [OpenAPI 落盤](/zh-TW/console/openapi)
+- [生成OpenAPI](/zh-TW/openapi/)
 - [定時任務 Cron](/zh-TW/plugins/cron)

@@ -110,4 +110,4 @@ new AuthJwtStrategy({
 
 - [Аутентификация](/ru/plugins/auth)
 - [Bearer](/ru/plugins/auth-bearer-strategy)
-- [Генерация OpenAPI](/ru/plugins/openapi)
+- [Генерация OpenAPI](/ru/openapi/)

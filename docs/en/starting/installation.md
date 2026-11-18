@@ -71,7 +71,7 @@ pnpm aomex hello
 pnpm aomex hello --user Ada
 ```
 
-Cron and OpenAPI export also go through `src/cli.ts`—see [Cron](/en/plugins/cron) · [OpenAPI export](/en/console/openapi).
+Cron and OpenAPI export also go through `src/cli.ts`—see [Cron](/en/plugins/cron) · [Generate OpenAPI](/en/openapi/).
 
 ## Next steps
 

@@ -106,7 +106,7 @@ export const traceId = middleware.web<{
 });
 ```
 
-Re-run [OpenAPI generation](/en/plugins/openapi) or open Swagger: operations with this middleware should show `X-Trace-Id`. Bad structure in hooks will not fail `pnpm start`; verify in the generated output.
+Re-run [Generate OpenAPI](/en/openapi/) or open Swagger: operations with this middleware should show `X-Trace-Id`. Bad structure in hooks will not fail `pnpm start`; verify in the generated output.
 
 ::: tip
 If the middleware **does nothing at runtime** and only exists for docs, ask whether route `docs` or generator config is enough—an empty layer makes `mount` harder to read.
@@ -175,4 +175,4 @@ export const consoleTraceId = middleware.console<{ readonly traceId: string }>({
 
 - Order, `.skip()`, `dependsOn`, ctx merging: [Middleware](/en/core/middleware)
 - Ready-made plugins: [HTTP access log](/en/plugins/http-access-log), [Auth entry](/en/plugins/auth)
-- Doc generation: [OpenAPI generation](/en/plugins/openapi)
+- Doc generation: [Generate OpenAPI](/en/openapi/)

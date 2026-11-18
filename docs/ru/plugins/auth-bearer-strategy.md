@@ -134,4 +134,4 @@ new AuthBearerStrategy({
 
 - [Аутентификация](/ru/plugins/auth)
 - [JWT](/ru/plugins/auth-jwt-strategy)
-- [Генерация OpenAPI](/ru/plugins/openapi)
+- [Генерация OpenAPI](/ru/openapi/)

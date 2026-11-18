@@ -103,7 +103,7 @@ sse.close();
 
 ## 與 response()、OpenAPI
 
-OpenAPI 需要知道這條 GET 出口是 `text/event-stream`，所以在 mount 裡掛 `response({ contentType: 'text/event-stream', ... })`。這隻服務文件和型別，**不能替代** action 裡的 `ctx.sse()` 寫幀。
+OpenAPI 需要知道這條 GET 出口是 `text/event-stream`，所以在 mount 裡掛 `response({ contentType: 'text/event-stream', ... })`。這只服務文件和型別，**不能替代** action 裡的 `ctx.sse()` 寫幀。
 
 ```typescript
 import { rule } from '@aomex/common';
@@ -117,7 +117,7 @@ response({
 });
 ```
 
-這隻幫文件和型別提示，**不能代替** `ctx.sse()` 的幀協議。壓縮中介軟體一般會跳過 text/event-stream，見 [Compress](/zh-TW/plugins/compress)。
+這只幫文件和型別提示，**不能代替** `ctx.sse()` 的幀協議。壓縮中介軟體一般會跳過 text/event-stream，見 [Compress](/zh-TW/plugins/compress)。
 
 EventSource 只能 GET，跨站帶 cookie 時要配好 [CORS](/zh-TW/plugins/cors)。
 

@@ -162,12 +162,12 @@ user: {
 | `prismaOutput` | `response({ content })` |
 | `prismaEnum` | `rule.enum` по таблице |
 
-Связанные prisma-schema идут в [OpenAPI](/ru/plugins/openapi); после таблиц/Json: `prisma generate` → overrides → [экспорт контракта](/ru/console/openapi). Забыли generate — устаревшие типы.
+Связанные prisma-schema идут в [OpenAPI](/ru/openapi/); после таблиц/Json: `prisma generate` → overrides → [Генерация OpenAPI](/ru/openapi/). Забыли generate — устаревшие типы.
 
 Не HTTP-middleware — нет `WebApp.mount`.
 
 ## Связанное
 
 - [Обзор валидаторов](/ru/validators/)
-- [Генерация OpenAPI](/ru/plugins/openapi)
-- [Экспорт OpenAPI](/ru/console/openapi)
+- [Генерация OpenAPI](/ru/openapi/)
+- [Генерация OpenAPI](/ru/openapi/)

@@ -134,4 +134,4 @@ onLoaded 返回 false 即未登入（**401**），別用業務異常代替，除
 
 - [身份認證](/zh-TW/plugins/auth)
 - [JWT 策略](/zh-TW/plugins/auth-jwt-strategy)
-- [OpenAPI 生成](/zh-TW/plugins/openapi)
+- [生成OpenAPI](/zh-TW/openapi/)

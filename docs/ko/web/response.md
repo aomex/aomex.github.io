@@ -186,4 +186,4 @@ router.get('/report.pdf', { // [!code focus:12]
 - [오류 형식](/ko/web/errors)(4xx/5xx JSON과 response 연동)
 - [응답 본문 래핑](/ko/web/envelope)(바깥 200 고정, body 통일 껍데기; `skipEnvelope`)
 - [요청 본문](/ko/web/body) / [쿼리 문자열](/ko/web/query)(입력 쪽 대칭 표기)
-- [OpenAPI 문서 생성](/ko/plugins/openapi)
+- [OpenAPI 문서 생성](/ko/openapi/)

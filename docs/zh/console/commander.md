@@ -71,7 +71,7 @@ commander.create(commandName | string[], {
 | `commanders([a, b])` | 测试或只挂子集 |
 | 一域一文件 | `cache.commander.ts`、`user.commander.ts` |
 | 与 Cron 共用 | 定时与手跑同文件、同 `action`；Cron 的 `args` 也要走同一套 `options()`，见 [Cron](/zh/plugins/cron) |
-| OpenAPI 落盘 | `openapi()` 与 `commanders()` 一起挂在 Console `mount`，见 [OpenAPI 落盘](/zh/console/openapi) |
+| OpenAPI 落盘 | `openapi()` 与 `commanders()` 一起挂在 Console `mount`，见 [生成OpenAPI](/zh/openapi/) |
 
 ## docs 与 disabled
 

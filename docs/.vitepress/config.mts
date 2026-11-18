@@ -52,14 +52,17 @@ type SidebarLabels = {
   jwt: string;
   docs: string;
   openapi: string;
+  openapiTags: string;
+  openapiMarkdown: string;
+  openapiChooseUi: string;
   swagger: string;
   redoc: string;
+  scalar: string;
   consoleApp: string;
   consoleEntry: string;
   commander: string;
   options: string;
   cron: string;
-  openapiDisk: string;
   common: string;
   middleware: string;
   service: string;
@@ -113,16 +116,19 @@ const zhLabels: SidebarLabels = {
   bearer: 'Bearer 策略',
   apiKey: 'API Key 策略',
   jwt: 'JWT 策略',
-  docs: '文档',
-  openapi: 'OpenAPI 生成',
+  docs: '业务文档',
+  openapi: '生成OpenAPI',
+  openapiTags: 'Tags 分组',
+  openapiMarkdown: 'Markdown 文案',
+  openapiChooseUi: '怎么选文档 UI',
   swagger: 'Swagger UI',
   redoc: 'Redoc UI',
+  scalar: 'Scalar UI',
   consoleApp: 'Console 应用',
   consoleEntry: '应用入口',
   commander: '指令路由',
   options: '输入参数',
   cron: '定时任务 Cron',
-  openapiDisk: 'OpenAPI 落盘',
   common: '通用模块',
   middleware: '中间件',
   service: '服务层',
@@ -176,16 +182,19 @@ const zhTWLabels: SidebarLabels = {
   bearer: 'Bearer 策略',
   apiKey: 'API Key 策略',
   jwt: 'JWT 策略',
-  docs: '文件',
-  openapi: 'OpenAPI 生成',
+  docs: '業務文件',
+  openapi: '生成OpenAPI',
+  openapiTags: 'Tags 分組',
+  openapiMarkdown: 'Markdown 文案',
+  openapiChooseUi: '怎麼選文件 UI',
   swagger: 'Swagger UI',
   redoc: 'Redoc UI',
+  scalar: 'Scalar UI',
   consoleApp: 'Console 應用',
   consoleEntry: '應用入口',
   commander: '指令路由',
   options: '輸入引數',
   cron: '定時任務 Cron',
-  openapiDisk: 'OpenAPI 落盤',
   common: '通用模組',
   middleware: '中介軟體',
   service: '服務層',
@@ -239,16 +248,19 @@ const enLabels: SidebarLabels = {
   bearer: 'Bearer strategy',
   apiKey: 'API Key strategy',
   jwt: 'JWT strategy',
-  docs: 'API docs',
-  openapi: 'OpenAPI generation',
+  docs: 'Business docs',
+  openapi: 'Generate OpenAPI',
+  openapiTags: 'Tags',
+  openapiMarkdown: 'Markdown copy',
+  openapiChooseUi: 'Choosing a docs UI',
   swagger: 'Swagger UI',
   redoc: 'Redoc UI',
+  scalar: 'Scalar UI',
   consoleApp: 'Console app',
   consoleEntry: 'App entry',
   commander: 'Commands',
   options: 'CLI options',
   cron: 'Cron jobs',
-  openapiDisk: 'OpenAPI to disk',
   common: 'Common modules',
   middleware: 'Middleware',
   service: 'Services',
@@ -302,16 +314,19 @@ const jaLabels: SidebarLabels = {
   bearer: "Bearer ストラテジー",
   apiKey: "API Key ストラテジー",
   jwt: "JWT ストラテジー",
-  docs: "ドキュメント",
-  openapi: "OpenAPI 生成",
+  docs: "業務ドキュメント",
+  openapi: "OpenAPI を生成",
+  openapiTags: "タグ",
+  openapiMarkdown: "Markdown 記述",
+  openapiChooseUi: "ドキュメント UI の選び方",
   swagger: "Swagger UI",
   redoc: "Redoc UI",
+  scalar: "Scalar UI",
   consoleApp: "Console アプリ",
   consoleEntry: "アプリのエントリ",
   commander: "コマンドルート",
   options: "オプション",
   cron: "Cron",
-  openapiDisk: "OpenAPI の書き出し",
   common: "共通モジュール",
   middleware: "ミドルウェア",
   service: "サービス層",
@@ -365,16 +380,19 @@ const koLabels: SidebarLabels = {
   bearer: "Bearer 전략",
   apiKey: "API Key 전략",
   jwt: "JWT 전략",
-  docs: "문서",
+  docs: "업무 문서",
   openapi: "OpenAPI 생성",
+  openapiTags: "태그",
+  openapiMarkdown: "Markdown 문구",
+  openapiChooseUi: "문서 UI 고르기",
   swagger: "Swagger UI",
   redoc: "Redoc UI",
+  scalar: "Scalar UI",
   consoleApp: "Console 앱",
   consoleEntry: "앱 진입점",
   commander: "명령 라우팅",
   options: "입력 옵션",
   cron: "Cron 예약",
-  openapiDisk: "OpenAPI 디스크",
   common: "공통 모듈",
   middleware: "미들웨어",
   service: "서비스 레이어",
@@ -428,16 +446,19 @@ const ruLabels: SidebarLabels = {
   bearer: "Bearer",
   apiKey: "API Key",
   jwt: "JWT",
-  docs: "Документация",
+  docs: "Бизнес-документация",
   openapi: "Генерация OpenAPI",
+  openapiTags: "Теги",
+  openapiMarkdown: "Markdown-тексты",
+  openapiChooseUi: "Какой docs UI выбрать",
   swagger: "Swagger UI",
   redoc: "Redoc UI",
+  scalar: "Scalar UI",
   consoleApp: "Console-приложение",
   consoleEntry: "Точка входа",
   commander: "Маршруты команд",
   options: "Параметры ввода",
   cron: "Cron",
-  openapiDisk: "OpenAPI на диск",
   common: "Общие модули",
   middleware: "Middleware",
   service: "Сервисный слой",
@@ -464,10 +485,25 @@ const ruLabels: SidebarLabels = {
 const makeSidebar = (
   prefix: string,
   t: SidebarLabels,
+  options: { includeOpenapiExtras?: boolean } = {},
 ): DefaultTheme.Sidebar => {
   const p = (path: string) => {
     return withPrefix(prefix, path);
   };
+
+  const docsItems: DefaultTheme.SidebarItem[] = [
+    { text: t.swagger, link: p('/openapi/swagger-ui') },
+    { text: t.redoc, link: p('/openapi/redoc-ui') },
+    { text: t.scalar, link: p('/openapi/scalar-ui') },
+    { text: t.openapiChooseUi, link: p('/openapi/choose-ui') },
+    { text: t.openapi, link: p('/openapi/') },
+    ...(options.includeOpenapiExtras
+      ? [
+          { text: t.openapiTags, link: p('/openapi/tags') },
+          { text: t.openapiMarkdown, link: p('/openapi/markdown') },
+        ]
+      : []),
+  ];
 
   return [
     {
@@ -519,15 +555,6 @@ const makeSidebar = (
             { text: t.jwt, link: p('/plugins/auth-jwt-strategy') },
           ],
         },
-        {
-          text: t.docs,
-          collapsed: true,
-          items: [
-            { text: t.openapi, link: p('/plugins/openapi') },
-            { text: t.swagger, link: p('/plugins/swagger-ui') },
-            { text: t.redoc, link: p('/plugins/redoc-ui') },
-          ],
-        },
       ],
     },
     {
@@ -538,7 +565,6 @@ const makeSidebar = (
         { text: t.commander, link: p('/console/commander') },
         { text: t.options, link: p('/console/options') },
         { text: t.cron, link: p('/plugins/cron') },
-        { text: t.openapiDisk, link: p('/console/openapi') },
       ],
     },
     {
@@ -597,6 +623,11 @@ const makeSidebar = (
       ],
     },
     {
+      text: t.docs,
+      collapsed: false,
+      items: docsItems,
+    },
+    {
       text: t.advanced,
       collapsed: true,
       items: [
@@ -649,7 +680,7 @@ export default defineConfig({
           label: 'On this page',
         },
         nav: makeNav('en'),
-        sidebar: makeSidebar('en', enLabels),
+        sidebar: makeSidebar('en', enLabels, { includeOpenapiExtras: true }),
         lastUpdated: {
           text: 'Last updated',
         },
@@ -680,7 +711,7 @@ export default defineConfig({
           label: '当前页大纲',
         },
         nav: makeNav('zh'),
-        sidebar: makeSidebar('zh', zhLabels),
+        sidebar: makeSidebar('zh', zhLabels, { includeOpenapiExtras: true }),
         lastUpdated: {
           text: '最后更新于',
         },
@@ -711,7 +742,7 @@ export default defineConfig({
           label: '本頁大綱',
         },
         nav: makeNav('zh-TW'),
-        sidebar: makeSidebar('zh-TW', zhTWLabels),
+        sidebar: makeSidebar('zh-TW', zhTWLabels, { includeOpenapiExtras: true }),
         lastUpdated: {
           text: '最後更新於',
         },
@@ -742,7 +773,7 @@ export default defineConfig({
           label: "目次",
         },
         nav: makeNav('ja'),
-        sidebar: makeSidebar('ja', jaLabels),
+        sidebar: makeSidebar('ja', jaLabels, { includeOpenapiExtras: true }),
         lastUpdated: {
           text: "最終更新",
         },
@@ -773,7 +804,7 @@ export default defineConfig({
           label: "목차",
         },
         nav: makeNav('ko'),
-        sidebar: makeSidebar('ko', koLabels),
+        sidebar: makeSidebar('ko', koLabels, { includeOpenapiExtras: true }),
         lastUpdated: {
           text: "마지막 업데이트",
         },
@@ -804,7 +835,7 @@ export default defineConfig({
           label: "Содержание",
         },
         nav: makeNav('ru'),
-        sidebar: makeSidebar('ru', ruLabels),
+        sidebar: makeSidebar('ru', ruLabels, { includeOpenapiExtras: true }),
         lastUpdated: {
           text: "Обновлено",
         },

@@ -71,7 +71,7 @@ commander.create(commandName | string[], {
 | `commanders([a, b])` | 테스트나 일부만 마운트 |
 | 도메인당 한 파일 | `cache.commander.ts`, `user.commander.ts` |
 | Cron과 공유 | 스케줄과 수동 실행이 같은 파일·`action`; Cron `args`도 같은 `options()`를 거침 — [Cron](/ko/plugins/cron) |
-| OpenAPI 내보내기 | `openapi()`와 `commanders()`를 Console `mount`에 함께 — [OpenAPI 내보내기](/ko/console/openapi) |
+| OpenAPI 내보내기 | `openapi()`와 `commanders()`를 Console `mount`에 함께 — [OpenAPI 생성](/ko/openapi/) |
 
 ## docs와 disabled
 

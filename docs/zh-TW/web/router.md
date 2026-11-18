@@ -50,7 +50,7 @@ import { postRouter } from './routers/post.js';
 mount: [routers([userRouter, postRouter])],
 ```
 
-單條路由的 mount 裡掛了 query() / body() / params() / response() 後，action 裡的 ctx 會合並對應欄位型別。**方法級** mount 隻影響當前介面；**路由級** `Router({ mount: [...] })` 對該檔案內所有方法生效。
+單條路由的 mount 裡掛了 query() / body() / params() / response() 後，action 裡的 ctx 會合並對應欄位型別。**方法級** mount 只影響當前介面；**路由級** `Router({ mount: [...] })` 對該檔案內所有方法生效。
 
 ```typescript
 router.get('/users', { // [!code focus:11]
@@ -96,7 +96,7 @@ router.get('/:id', {
 });
 ```
 
-最終路徑 = prefix + 註冊時的 uri（多餘斜槓會歸一）。聯調 404 時別隻看 `router.get('/:id')`，要先拼上 prefix 全路徑。
+最終路徑 = prefix + 註冊時的 uri（多餘斜槓會歸一）。聯調 404 時別只看 `router.get('/:id')`，要先拼上 prefix 全路徑。
 
 OpenAPI 按域分組用 `Router({ docs: { tags: ['User'] } })`；單路由 `docs.summary` 可覆蓋。
 
@@ -140,7 +140,7 @@ router.get('/users', { // [!code focus:11]
 });
 ```
 
-OpenAPI 後設資料詳見 [OpenAPI 外掛](/zh-TW/plugins/openapi)。
+OpenAPI 後設資料詳見 [生成OpenAPI](/zh-TW/openapi/) · [Tags 分組](/zh-TW/openapi/tags)。
 
 單條路徑引數：
 

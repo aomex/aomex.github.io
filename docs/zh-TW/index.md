@@ -8,7 +8,7 @@ hero:
   actions:
     - theme: brand
       text: 開始使用
-      link: /zh-TW/starting/installation
+      link: /zh/starting/installation
     - theme: alt
       text: GitHub
       link: https://github.com/aomex/aomex

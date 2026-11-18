@@ -71,7 +71,7 @@ pnpm aomex hello
 pnpm aomex hello --user Ada
 ```
 
-定時任務、OpenAPI 落盤也走 `src/cli.ts`，見 [Cron](/zh-TW/plugins/cron) · [OpenAPI 落盤](/zh-TW/console/openapi)。
+定時任務、OpenAPI 落盤也走 `src/cli.ts`，見 [Cron](/zh-TW/plugins/cron) · [生成OpenAPI](/zh-TW/openapi/)。
 
 ## 下一步
 

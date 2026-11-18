@@ -134,4 +134,4 @@ onLoaded が false なら未ログイン（**401**）。業務例外で代用し
 
 - [認証](/ja/plugins/auth)
 - [JWT 戦略](/ja/plugins/auth-jwt-strategy)
-- [OpenAPI 生成](/ja/plugins/openapi)
+- [生成OpenAPI](/ja/openapi/)

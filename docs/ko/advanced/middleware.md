@@ -106,7 +106,7 @@ export const traceId = middleware.web<{
 });
 ```
 
-[OpenAPI 생성](/ko/plugins/openapi)을 다시 돌리거나 Swagger를 열면 해당 미들웨어가 걸린 operation에 `X-Trace-Id`가 보여야 합니다. 훅 구조 오류는 `pnpm start`에서 안 터지므로 생성 결과를 확인하세요.
+[OpenAPI 생성](/ko/openapi/)을 다시 돌리거나 Swagger를 열면 해당 미들웨어가 걸린 operation에 `X-Trace-Id`가 보여야 합니다. 훅 구조 오류는 `pnpm start`에서 안 터지므로 생성 결과를 확인하세요.
 
 ::: tip
 런타임에서 **아무 것도 안 하고** 문서만 바꾸는 미들웨어라면 라우트 `docs`나 생성기 설정으로 충분한지 먼저 보세요. 빈 레이어는 `mount` 읽기를 어렵게 합니다.
@@ -175,4 +175,4 @@ export const consoleTraceId = middleware.console<{ readonly traceId: string }>({
 
 - 순서, `.skip()`, `dependsOn`, ctx 병합: [미들웨어](/ko/core/middleware)
 - 플러그인: [HTTP 액세스 로그](/ko/plugins/http-access-log), [Auth](/ko/plugins/auth)
-- 문서 생성: [OpenAPI 생성](/ko/plugins/openapi)
+- 문서 생성: [OpenAPI 생성](/ko/openapi/)

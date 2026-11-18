@@ -110,4 +110,4 @@ On verify failure check server clock skew. No silver bullet for revocation—sho
 
 - [Authentication](/en/plugins/auth)
 - [Bearer strategy](/en/plugins/auth-bearer-strategy)
-- [OpenAPI generation](/en/plugins/openapi)
+- [Generate OpenAPI](/en/openapi/)

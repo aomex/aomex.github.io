@@ -162,12 +162,12 @@ user: {
 | `prismaOutput` | `response({ content })` |
 | `prismaEnum` | 表 enum に合わせた `rule.enum` |
 
-ルートの prisma schema 参照は [OpenAPI](/ja/plugins/openapi) に入る。表や Json 変更後：prisma generate → 上書き確認 → [契約のファイル出力](/ja/console/openapi)。generate 忘れは型が古いまま、上書きが新フィールドと合わない。
+ルートの prisma schema 参照は [OpenAPI](/ja/openapi/) に入る。表や Json 変更後：prisma generate → 上書き確認 → [OpenAPI を生成](/ja/openapi/)。generate 忘れは型が古いまま、上書きが新フィールドと合わない。
 
 本パッケージは** HTTP ミドルウェアではない**。`WebApp.mount` は不要。
 
 ## 関連
 
 - [バリデータ概要](/ja/validators/)
-- [OpenAPI 生成](/ja/plugins/openapi)
-- [OpenAPI のファイル出力](/ja/console/openapi)
+- [生成OpenAPI](/ja/openapi/)
+- [OpenAPI を生成](/ja/openapi/)

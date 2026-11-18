@@ -68,4 +68,4 @@ prettyJson({
 
 - JSON 業務形態：[約束響應](/zh-TW/web/response)
 - 壓體積：[Compress](/zh-TW/plugins/compress)
-- 開發期文件 UI：[Swagger UI](/zh-TW/plugins/swagger-ui)
+- 開發期文件 UI：[Swagger UI](/zh-TW/openapi/swagger-ui)

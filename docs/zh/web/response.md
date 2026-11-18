@@ -186,4 +186,4 @@ router.get('/report.pdf', { // [!code focus:12]
 - [错误格式](/zh/web/errors)（4xx/5xx JSON 与 response 配合）
 - [响应体套壳](/zh/web/envelope)（外层固定 200、body 统一外壳；`skipEnvelope`）
 - [请求实体](/zh/web/body) / [查询参数](/zh/web/query)（入参侧对称写法）
-- [OpenAPI 文档生成](/zh/plugins/openapi)
+- [OpenAPI 文档生成](/zh/openapi/)
