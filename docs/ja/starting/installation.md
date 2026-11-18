@@ -6,21 +6,29 @@ outline: deep
 
 ゼロから動く aomex プロジェクトを立ち上げる：HTTP もターミナルコマンドも使える。スキャフォールドが logger / language / shutdown などの必須項目を揃えてくれるので、ゼロから組むより手早い。
 
+スキャフォールドは **Node.js `^22.22.2 || ^24.15.0 || >=26`** が必要。必ず `@latest` を付けてください。どれで起動したかに応じて、対応するパッケージマネージャが選ばれます（`--pm` で上書き可）。
+
 ```bash
-npx create-aomex@latest
-cd your-project
-pnpm install
-pnpm start
+pnpm create aomex@latest
+yarn create aomex@latest
+npm create aomex@latest
 ```
-::: tip 環境
-**Node.js ≥ 24**（先に `node -v` を確認）。パッケージマネージャは **pnpm** がいちばん楽。npm / yarn も多くの場合使える。
-:::
+
+プロンプトに従って ORM・認証・ミドルウェアなどを選び、生成後にディレクトリへ入って起動：
+
+```bash
+cd <project>
+pnpm start   # または yarn start / npm start
+```
+
+生成プロジェクトのルートには `AGENTS.md` → `aomex-skill.md` があり、AI が規約に沿ってコードを拡張できます。
 
 起動後、ブラウザでヘルスチェックやトップ（ポートはテンプレートの PORT を参照）。ターミナル側：
 
 ```bash
 pnpm aomex -h
 ```
+
 ## ディレクトリ構成
 
 スキャフォールドはおおよそ次の形（バージョンで微調整あり）。まず三つの線を押さえる：`src/web.ts` で HTTP、`src/cli.ts` でターミナル / Cron / OpenAPI 書き出し、`src/routers/` と `src/commanders/` に API と CLI を書く。認証、エラー形式、アクセスログなど再利用可能なミドルウェアは `src/middleware/` に置き、DB・キャッシュは `src/services/` に入れ、**Web / Console で共有**する。

@@ -4,23 +4,66 @@ outline: deep
 
 # 快速安裝
 
-從零拉起一個能跑的 aomex 專案：HTTP 能訪問，終端也能跑指令。腳手架把 logger / language / 關停等必填項帶好，比空手搭省事。
+從零拉起一個能跑的 aomex 專案：HTTP 能訪問，終端也能跑指令。腳手架把 logger / language / 關停等必填項帶好，比空手搭省事。腳手架要求 **Node.js `^22.22.2 || ^24.15.0 || >=26`**。
+
+務必帶上 `@latest`，否則本地快取常會跑到舊版腳手架。用哪條命令啟動，就會自動選用對應包管理器（也可用 `--pm` 覆蓋）。
 
 ```bash
-npx create-aomex@latest
-cd your-project
-pnpm install
-pnpm start
+pnpm create aomex@latest
+yarn create aomex@latest
+npm create aomex@latest
 ```
 
-::: tip 環境
-**Node.js ≥ 24**（先 node -v）。包管理器用 **pnpm** 最省心；npm / yarn 一般也能用。
-:::
+按提示選擇 ORM、認證、中介軟體等；生成後進入目錄啟動：
+
+```bash
+cd <project>
+pnpm start   # 或 yarn start / npm start
+```
+
+生成專案根目錄含 `AGENTS.md` → `aomex-skill.md`，供 AI 按約定擴充程式碼。
 
 起來之後瀏覽器打一下健康檢查或首頁（埠看模板的 PORT）。終端側：
 
 ```bash
 pnpm aomex -h
+```
+
+## 非互動參數
+
+所有可選項都可用 CLI 參數跳過詢問（適合腳本 / CI）。未傳的項仍會互動詢問。
+
+| 參數 | 說明 | 範例 |
+| --- | --- | --- |
+| `--project` | 專案目錄名 | `--project=my-api` |
+| `--node` | Node 版本（不傳則互動選擇 LTS，≥24） | `--node=24.22.0` |
+| `--pm` | 包管理器（預設跟 create 命令走） | `--pm=pnpm` \| `yarn` \| `npm` |
+| `--orm` | ORM | `--orm=prisma` \| `mongoose` \| `none` |
+| `--db` | Prisma 資料庫（僅 `--orm=prisma`） | `--db=mysql` \| `postgresql` \| … |
+| `--auth` | 認證策略，逗號多選；`none` 表示無 | `--auth=bearer,jwt` \| `--auth=none` |
+| `--web-plugins` | 可選 Web 中介軟體（`cors` / `etag` / `helmet` / `response-time` 始終安裝） | `--web-plugins=http-access-log,async-trace` |
+| `--docs` | 文件 UI | `--docs=swagger` \| `redoc` \| `scalar` \| `none` |
+| `--logger` | 日誌出口，逗號多選 | `--logger=console,file` |
+| `--console-middlewares` | Console 外掛；`cron` 始終安裝，可追加 | `--console-middlewares=openapi` |
+| `--lang` | 預設語言（BCP 47） | `--lang=zh-CN` |
+| `--docker` | 是否產生 Docker 生產部署產物 | `--docker=true` \| `false` |
+| `--tz` / `--timezone` | 行程時區 | `--tz=Asia/Shanghai` |
+| `--cluster` | 叢集方案（勿疊用） | `--cluster=none` \| `cluster-listen` \| `pm2` |
+
+```bash
+pnpm create aomex@latest -- \
+  --project=HelloAomex \
+  --pm=pnpm \
+  --orm=prisma \
+  --db=mysql \
+  --auth=bearer \
+  --docs=swagger \
+  --lang=zh-CN \
+  --docker=true \
+  --tz=Asia/Shanghai \
+  --web-plugins=http-access-log,async-trace \
+  --logger=console,file \
+  --cluster=none
 ```
 
 ## 目錄結構

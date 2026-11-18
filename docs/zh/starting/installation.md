@@ -4,23 +4,66 @@ outline: deep
 
 # 快速安装
 
-从零拉起一个能跑的 aomex 项目：HTTP 能访问，终端也能跑指令。脚手架把 logger / language / 关停等必填项带好，比空手搭省事。
+从零拉起一个能跑的 aomex 项目：HTTP 能访问，终端也能跑指令。脚手架把 logger / language / 关停等必填项带好，比空手搭省事。脚手架要求 **Node.js `^22.22.2 || ^24.15.0 || >=26`**。
+
+务必带上 `@latest`，否则本地缓存常会跑到旧版脚手架。用哪条命令启动，就会自动选用对应包管理器（也可用 `--pm` 覆盖）。
 
 ```bash
-npx create-aomex@latest
-cd your-project
-pnpm install
-pnpm start
+pnpm create aomex@latest
+yarn create aomex@latest
+npm create aomex@latest
 ```
 
-::: tip 环境
-**Node.js ≥ 24**（先 node -v）。包管理器用 **pnpm** 最省心；npm / yarn 一般也能用。
-:::
+按提示选择 ORM、认证、中间件等；生成后进入目录启动：
+
+```bash
+cd <project>
+pnpm start   # 或 yarn start / npm start
+```
+
+生成项目根目录含 `AGENTS.md` → `aomex-skill.md`，供 AI 按约定扩展代码。
 
 起来之后浏览器打一下健康检查或首页（端口看模板的 PORT）。终端侧：
 
 ```bash
 pnpm aomex -h
+```
+
+## 非交互参数
+
+所有可选项都可用 CLI 参数跳过询问（适合脚本 / CI）。未传的项仍会交互询问。
+
+| 参数 | 说明 | 示例 |
+| --- | --- | --- |
+| `--project` | 项目目录名 | `--project=my-api` |
+| `--node` | Node 版本（不传则交互选择 LTS，≥24） | `--node=24.22.0` |
+| `--pm` | 包管理器（默认跟 create 命令走） | `--pm=pnpm` \| `yarn` \| `npm` |
+| `--orm` | ORM | `--orm=prisma` \| `mongoose` \| `none` |
+| `--db` | Prisma 数据库（仅 `--orm=prisma`） | `--db=mysql` \| `postgresql` \| … |
+| `--auth` | 认证策略，逗号多选；`none` 表示无 | `--auth=bearer,jwt` \| `--auth=none` |
+| `--web-plugins` | 可选 Web 中间件（`cors` / `etag` / `helmet` / `response-time` 始终安装） | `--web-plugins=http-access-log,async-trace` |
+| `--docs` | 文档 UI | `--docs=swagger` \| `redoc` \| `scalar` \| `none` |
+| `--logger` | 日志出口，逗号多选 | `--logger=console,file` |
+| `--console-middlewares` | Console 插件；`cron` 始终安装，可追加 | `--console-middlewares=openapi` |
+| `--lang` | 默认语言（BCP 47） | `--lang=zh-CN` |
+| `--docker` | 是否生成 Docker 生产部署产物 | `--docker=true` \| `false` |
+| `--tz` / `--timezone` | 进程时区 | `--tz=Asia/Shanghai` |
+| `--cluster` | 集群方案（勿叠用） | `--cluster=none` \| `cluster-listen` \| `pm2` |
+
+```bash
+pnpm create aomex@latest -- \
+  --project=HelloAomex \
+  --pm=pnpm \
+  --orm=prisma \
+  --db=mysql \
+  --auth=bearer \
+  --docs=swagger \
+  --lang=zh-CN \
+  --docker=true \
+  --tz=Asia/Shanghai \
+  --web-plugins=http-access-log,async-trace \
+  --logger=console,file \
+  --cluster=none
 ```
 
 ## 目录结构

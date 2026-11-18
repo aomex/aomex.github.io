@@ -6,16 +6,22 @@ outline: deep
 
 처음부터 실행 가능한 aomex 프로젝트를 만듭니다. HTTP가 동작하고 터미널에서 명령을 실행할 수 있습니다. 비계는 logger, language, 종료 등 필수 항목을 연결해 빈손으로 조립하는 수고를 줄입니다.
 
+스캐폴드는 **Node.js `^22.22.2 || ^24.15.0 || >=26`**가 필요합니다. 반드시 `@latest`를 붙이세요. 어떤 create 명령을 쓰느냐에 따라 해당 패키지 관리자가 선택됩니다(`--pm`으로 덮어쓸 수 있음).
+
 ```bash
-npx create-aomex@latest
-cd your-project
-pnpm install
-pnpm start
+pnpm create aomex@latest
+yarn create aomex@latest
+npm create aomex@latest
 ```
 
-::: tip 환경
-**Node.js ≥ 24** (`node -v`로 확인). 패키지 관리자는 **pnpm**이 가장 수월합니다. npm / yarn도 보통 동작합니다.
-:::
+안내에 따라 ORM, 인증, 미들웨어 등을 선택한 뒤, 생성된 디렉터리로 들어가 기동합니다:
+
+```bash
+cd <project>
+pnpm start   # 또는 yarn start / npm start
+```
+
+생성된 프로젝트 루트에는 `AGENTS.md` → `aomex-skill.md`가 있어, AI가 규약에 맞춰 코드를 확장할 수 있습니다.
 
 기동 후 브라우저에서 헬스 체크나 홈을 호출하세요(포트는 템플릿 `PORT`). 터미널:
 
