@@ -23,7 +23,7 @@ pnpm aomex -h
 ```
 ## ディレクトリ構成
 
-スキャフォールドはおおよそ次の形（バージョンで微調整あり）。まず三つの線を押さえる：`src/web.ts` で HTTP、`src/cli.ts` でターミナル / Cron / OpenAPI 書き出し、`src/routers/` と `src/commanders/` に API と CLI を書く。DB・キャッシュは `src/services/` に置き、**Web / Console で共有**する。
+スキャフォールドはおおよそ次の形（バージョンで微調整あり）。まず三つの線を押さえる：`src/web.ts` で HTTP、`src/cli.ts` でターミナル / Cron / OpenAPI 書き出し、`src/routers/` と `src/commanders/` に API と CLI を書く。認証、エラー形式、アクセスログなど再利用可能なミドルウェアは `src/middleware/` に置き、DB・キャッシュは `src/services/` に入れ、**Web / Console で共有**する。
 
 | ファイル / ディレクトリ | 何のために触るか |
 | --- | --- |
@@ -31,17 +31,9 @@ pnpm aomex -h
 | `src/cli.ts` | ターミナルコマンド / Cron / OpenAPI 書き出し |
 | `src/routers/` | API を書く |
 | `src/commanders/` | CLI コマンドを書く |
+| `src/middleware/` | 認証、formatError、アクセスログ、Swagger など再利用ミドルウェアを置き、`web.ts` / ルート mount に載せる |
 | `src/services/` | DB、キャッシュ、メール送信——ビジネス SQL はルートの `action` に直書きしない |
 | `src/schemas/` | 再利用可能な検証。ファイル名 `xxx.schema.ts`（OpenAPI と CLI で同じ定義） |
-
-```text
-src/web.ts          # HTTP 入口
-src/cli.ts          # Console / Cron / OpenAPI 落盘
-src/routers/        # 接口
-src/commanders/     # CLI 指令
-src/services/       # Web 与 Console 共用
-src/schemas/        # 可复用 rule / schema
-```
 使わないもの（prisma、i18n など）は削除してよい。飾りで残す必要はない。CORS、認証、OpenAPI などは独立パッケージで、必要になってから入れる。
 
 ## インターフェースを1本試す

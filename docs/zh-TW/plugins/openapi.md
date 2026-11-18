@@ -113,7 +113,7 @@ await writeFile('openapi.json', JSON.stringify(document, null, 2));
 
 - 路由上掛 body / query / params 後，ctx.body、ctx.query 等在 action 裡已是收窄後的型別——和文件 schema 同源。
 - 掛 `response({ statusCode, content })` 後，`ctx.send(200, …)` 的第二個引數要對上 content；聲明瞭 200 卻 send(201) 通常會型別報錯。
-- 只用手寫 `openapi.onMethod` 補某條響應時，**一般隻影響生成的 JSON**，不會自動收窄 ctx.send——那種場景要自己盯型別。
+- 只用手寫 `openapi.onMethod` 補某條響應時，**一般只影響生成的 JSON**，不會自動收窄 ctx.send——那種場景要自己盯型別。
 
 `response()` 常用欄位：
 
@@ -121,7 +121,7 @@ await writeFile('openapi.json', JSON.stringify(document, null, 2));
 | --- | --- |
 | `statusCode` | 每個出口掛一次（200 / 201 / 204 / 404…） |
 | `content` | JSON 成功體；順帶收窄 `ctx.send` |
-| `contentType` | CSV、HTML、二進位制等非預設 JSON |
+| `contentType` | CSV、HTML、二進制等非預設 JSON |
 | `headers` | 要文件化 `X-Request-Id` 等 |
 | `example` | 文件站示例，不影響執行時 |
 
@@ -136,7 +136,7 @@ response({
 });
 ```
 
-驗證器套不上的少數響應（二進位制流等），可在該路由掛帶 `openapi.onMethod` 的中介軟體，只改生成結果：
+驗證器套不上的少數響應（二進制流等），可在該路由掛帶 `openapi.onMethod` 的中介軟體，只改生成結果：
 
 ```typescript
 import { middleware } from '@aomex/common';
@@ -208,7 +208,7 @@ CI / 本地**固定落盤**用 Console：`openapi()` + `aomex openapi`，見 [Op
 ## 相關
 
 - [約束響應](/zh-TW/web/response)
-- [響應體套殼](/zh-TW/web/envelope)（傳 `app` 時自動把成敗支收成 200）
+- [響應體套殼](/zh-TW/web/envelope)（傳 `app` 時自動把成敗支收成 200；`skipEnvelope` 的狀態碼原樣保留）
 - [錯誤格式](/zh-TW/web/errors)
 - [OpenAPI 落盤](/zh-TW/console/openapi)
 - [Swagger UI](/zh-TW/plugins/swagger-ui) · [Redoc UI](/zh-TW/plugins/redoc-ui)

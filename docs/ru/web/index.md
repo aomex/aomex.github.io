@@ -230,7 +230,7 @@ const app = new WebApp({
 
 Когда успех и ошибка делят одну JSON-обёртку с внешним HTTP **200** (реальный статус в body), задайте `envelope` на `new WebApp`. В маршрутах по-прежнему `send` / `throw`; обёртка на этапе flush.
 
-Дерево из `envelope.success` / `envelope.payload` / `envelope.statusCode` и опционального `envelope.slot`; часто вместе с [formatError](/ru/web/errors). Детали и исключения (редирект, 204, SSE): [Обёртка ответа](/ru/web/envelope).
+Дерево из `envelope.success` / `envelope.payload` / `envelope.statusCode` и опционального `envelope.slot`; часто вместе с [formatError](/ru/web/errors). Для «голого» ответа по коду — `response({ skipEnvelope: true })`. Детали и автоматические исключения (редирект, 204, SSE и т.д.): [Обёртка ответа](/ru/web/envelope).
 
 ## listen, http, https
 

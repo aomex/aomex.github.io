@@ -25,7 +25,7 @@ pnpm aomex -h
 
 ## Project layout
 
-The scaffold looks roughly like this (versions may differ). Remember three threads: `src/web.ts` starts HTTP, `src/cli.ts` runs terminal / Cron / OpenAPI export, `src/routers/` and `src/commanders/` hold routes and commands; put DB and cache in `src/services/` and **share them across both**.
+The scaffold looks roughly like this (versions may differ). Remember three threads: `src/web.ts` starts HTTP, `src/cli.ts` runs terminal / Cron / OpenAPI export, `src/routers/` and `src/commanders/` hold routes and commands; reusable middleware (auth, `formatError`, access logs, etc.) goes in `src/middleware/` and mounts from `web.ts` or route `mount`; put DB and cache in `src/services/` and **share them across both**.
 
 | File / directory | What you change it for |
 | --- | --- |
@@ -33,17 +33,9 @@ The scaffold looks roughly like this (versions may differ). Remember three threa
 | `src/cli.ts` | Terminal commands / Cron / OpenAPI export |
 | `src/routers/` | HTTP routes |
 | `src/commanders/` | CLI commands |
+| `src/middleware/` | Reusable middleware—auth, `formatError`, access logs, Swagger UI, etc.—then mount on `web.ts` / route `mount` |
 | `src/services/` | DB, cache, email—do not stuff SQL into route `action`s |
 | `src/schemas/` | Reusable validation, files named `xxx.schema.ts` (OpenAPI and CLI share the same defs) |
-
-```text
-src/web.ts          # HTTP entry
-src/cli.ts          # Console / Cron / OpenAPI export
-src/routers/        # HTTP routes
-src/commanders/     # CLI commands
-src/services/       # shared by Web and Console
-src/schemas/        # reusable rule / schema
-```
 
 Remove what you do not need (prisma, i18n, …)—no need to keep placeholders. CORS, auth, OpenAPI, etc. are separate packages; install when you use them.
 

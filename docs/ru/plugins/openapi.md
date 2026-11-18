@@ -208,7 +208,7 @@ router.get('/openapi.json', {
 ## Связанное
 
 - [Ограничение ответов](/ru/web/response)
-- [Обёртка ответа](/ru/web/envelope) (с `app` успех/ошибка сводятся в 200)
+- [Обёртка ответа](/ru/web/envelope) (с `app` успех/ошибка сводятся в 200; коды с `skipEnvelope` остаются как в рантайме)
 - [Формат ошибок](/ru/web/errors)
 - [Экспорт OpenAPI](/ru/console/openapi)
 - [Swagger UI](/ru/plugins/swagger-ui) · [Redoc UI](/ru/plugins/redoc-ui)

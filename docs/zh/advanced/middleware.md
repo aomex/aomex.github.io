@@ -23,7 +23,7 @@ outline: deep
 目标：每条请求带上 `traceId`，下游 action 能读到。
 
 ```typescript
-// src/middlewares/trace-id.ts
+// src/middleware/trace-id.ts
 import { middleware } from '@aomex/common';
 
 export const traceId = middleware.web<{ // [!code highlight]

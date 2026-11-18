@@ -156,11 +156,34 @@ response({
 }),
 ```
 
+## Skip response envelope
+
+With site-wide [envelope](/en/web/envelope), a status code can still write **bare** by adding `skipEnvelope: true` on that `response()`. Only that mount’s `statusCode` is affected; other status codes on the route still wrap. Registered in runtime and OpenAPI together.
+
+```typescript
+router.get('/report.pdf', { // [!code focus:12]
+  mount: [
+    response({
+      statusCode: 200,
+      contentType: 'application/pdf',
+      content: rule.string(),
+      skipEnvelope: true, // [!code highlight]
+    }),
+    response({ statusCode: 404 }),
+  ],
+  action: async (ctx) => {
+    ctx.send(await loadPdf());
+  },
+});
+```
+
+Doc pages and bare OpenAPI JSON can also set `ctx.response.skipEnvelope = true` in the action (unconditional skip for that write). Business routes should prefer the mount option so docs do not miss the status.
+
 You can `ctx.send` without `response()`; before launch add success and common 400/404 so OpenAPI and types are not hollow. Declared 200 but `send(201)` in the action type-errors—fix status or `response()` declaration.
 
 ## Next steps
 
 - [Error format](/en/web/errors) (4xx/5xx JSON with `response`)
-- [Response envelope](/en/web/envelope) (outer HTTP 200 wrapper)
+- [Response envelope](/en/web/envelope) (outer HTTP 200 wrapper; `skipEnvelope`)
 - [Request body](/en/web/body) / [Query string](/en/web/query) (symmetric input side)
 - [OpenAPI generation](/en/plugins/openapi)

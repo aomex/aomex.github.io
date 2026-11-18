@@ -77,9 +77,13 @@ envelope: {
 ## formatError, response()와의 관계
 
 - **[formatError](/ko/web/errors)**: `ctx.throw`를 먼저 통일된 오류 JSON으로 모은 뒤 `envelope.payload`로 넣습니다. 함께 두는 것을 권장합니다. formatError 없으면 기본 순 텍스트 오류도 payload에 들어가며(JSON 문자열 값으로).
-- **[response()](/ko/web/response)**: «실제» 상태 코드 기준으로 성공·실패 body 형태를 선언합니다. 래핑은 action의 send/throw 방식을 바꾸지 않고 쓰기 직전 껍데기만 바꿉니다. OpenAPI에서는 성공·실패 분기가 200 아래 래핑 schema로 모입니다(아래 참고).
+- **[response()](/ko/web/response)**: «실제» 상태 코드 기준으로 성공·실패 body 형태를 선언합니다. 래핑은 action의 send/throw 방식을 바꾸지 않고 쓰기 직전 껍데기만 바꿉니다. OpenAPI에서는 성공·실패 분기가 200 아래 래핑 schema로 모입니다(아래 참고). 일부 상태 코드만 **래핑하지 않을** 때는 해당 `response({ skipEnvelope: true })`에 등록합니다(다음 절).
 
 업무 코드는 `send(201)`, `throw(404)`를 그대로 쓰고, 타입·라우트 선언을 «항상 200»으로 바꿀 필요는 없습니다.
+
+::: tip
+래핑 시 body가 이미 JSON 문자열이고 `Content-Type`이 `application/json`(예: 미들웨어에서 수동 `JSON.stringify`)이면, 프레임워크가 먼저 `JSON.parse`한 뒤 `envelope.payload`에 넣어 `data`가 이스케이프된 한 덩어리 문자열이 되지 않게 합니다.
+:::
 
 ## 래핑하지 않는 경우
 
@@ -94,9 +98,54 @@ envelope: {
 
 일반 json / string / null(명시적 send 없는 기본 404 포함)은 래핑됩니다.
 
+[ETag](/ko/plugins/etag)를 켠 경우: 래핑으로 body가 바뀌면 프레임워크가 **기존 ETag를 제거**합니다. 요약이 래핑 전 내용을 가리키지 않게 하기 위해서입니다.
+
+## 래핑을 건너뛰기
+
+사이트 전체에 envelope를 켰는데 일부 출구는 **맨 응답**이 필요할 때(다운로드, 구 클라이언트 호환, HTML 문서 등)는 두 가지 방법이 있습니다.
+
+**업무 라우트는 우선 `response({ skipEnvelope: true })`**: 해당 **선언**의 `statusCode`만 건너뜁니다. 다른 상태 코드는 계속 래핑됩니다. 런타임과 OpenAPI가 같습니다.
+
+```typescript
+import { rule } from '@aomex/common';
+import { response, Router } from '@aomex/web';
+
+export const router = new Router();
+
+router.get('/export.csv', { // [!code focus:14]
+  mount: [
+    response({
+      statusCode: 200,
+      contentType: 'text/csv',
+      content: rule.string(),
+      skipEnvelope: true, // [!code highlight]
+    }),
+    response({ statusCode: 400 }),
+  ],
+  action: async (ctx) => {
+    ctx.send(await buildCsv());
+  },
+});
+```
+
+위 라우트는 성공 200이 맨 CSV이고, 검증 실패 400은 여전히 사이트 껍데기(이후 formatError로 payload)를 탑니다.
+
+같은 라우트에 `response()`를 여러 번 걸어 각각 `skipEnvelope`를 정할 수 있습니다 — 성공만 래핑·오류는 맨으로, 또는 그 반대.
+
+**인프라 응답**(Swagger / Redoc 페이지, 맨 OpenAPI JSON)은 action에서 `ctx.response.skipEnvelope = true`로 이번 쓰기 전체를 무조건 스킵할 수 있습니다(최종 상태 코드와 무관). 업무 API는 위 `response({ skipEnvelope })`를 우선해 문서에도 해당 상태가 남게 하세요.
+
+```typescript
+action: async (ctx) => {
+  ctx.response.skipEnvelope = true; // [!code highlight]
+  ctx.send(rawOpenapiDocument);
+},
+```
+
 ## OpenAPI
 
-`generateOpenapi` / Console `openapi()`에 **envelope가 설정된 같은 `WebApp`(`app`)**을 넘기면, 생성기는 `app`의 래핑 설정을 읽습니다. 다른 `response` / `formatError` 주입 후 문서의 2xx와 4xx·5xx·default를 **HTTP 200** 래핑 schema로 모읍니다(성공·실패는 보통 `oneOf`, `success`는 `true` / `false` 고정). **3xx**와 204 등 본문 없음 상태 코드는 런타임 스킵 규칙과 같이 **유지**합니다.
+`generateOpenapi` / Console `openapi()`에 **envelope가 설정된 같은 `WebApp`(`app`)**을 넘기면, 생성기는 `app`의 래핑 설정을 읽습니다. 다른 `response` / `formatError` 주입 후 문서의 2xx와 4xx·5xx·default를 **HTTP 200** 래핑 schema로 모읍니다(성공·실패는 보통 `oneOf`, `success`는 `true` / `false` 고정). **3xx**, 204 등 본문 없음 상태 코드와 `response({ skipEnvelope: true })`로 등록된 상태 코드는 **유지**합니다 — 런타임 스킵 규칙과 같습니다.
+
+같은 operation에 «스킵한 200»과 래핑되는 성공·실패 가지가 같이 있으면, 생성기는 해당 `200`의 `application/json`에서 맨 schema와 래핑 schema를 `oneOf`로 합치고, 다른 media(`text/html` 등)는 그대로 둡니다.
 
 `envelope.description`은 모인 `200` 응답 설명에 씁니다. `mount` 배열을 또 손으로 넘기지 말고 `app`을 빼먹지도 마세요. 그렇지 않으면 계약은 «201 + 맨 body»인데 실서비스는 «200 + 껍데기»가 됩니다. 자세히는 [OpenAPI 생성](/ko/plugins/openapi).
 

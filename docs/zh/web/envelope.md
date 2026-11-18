@@ -77,9 +77,13 @@ envelope: {
 ## 和 formatError、response() 的关系
 
 - **[formatError](/zh/web/errors)**：先把 `ctx.throw` 收成统一错误 JSON，再作为 `envelope.payload` 装进外壳。推荐一起配；不挂 formatError 时，默认纯文本错误也会进 payload（变成 JSON 字符串值）。
-- **[response()](/zh/web/response)**：仍按「真实」状态码声明成功/失败体形状；套壳不改变你在 action 里怎么 send / throw，只改写出前的外壳。OpenAPI 里成败支会被收成 200 下的套壳 schema（见下）。
+- **[response()](/zh/web/response)**：仍按「真实」状态码声明成功/失败体形状；套壳不改变你在 action 里怎么 send / throw，只改写出前的外壳。OpenAPI 里成败支会被收成 200 下的套壳 schema（见下）。需要某几个状态码**不套壳**时，在对应 `response({ skipEnvelope: true })` 上登记（下一节）。
 
 业务代码继续写 `send(201)`、`throw(404)`，类型与路由声明不用改成「永远 200」。
+
+::: tip
+套壳时若 body 已是 JSON 字符串、且 `Content-Type` 为 `application/json`（例如中间件里手动 `JSON.stringify`），框架会先 `JSON.parse` 再填进 `envelope.payload`，避免 `data` 里变成一整段带转义的文本。
+:::
 
 ## 不会套壳的情况
 
@@ -94,9 +98,54 @@ envelope: {
 
 普通 json / string / null（含未显式 send 的默认 404）都会套。
 
+配了 [ETag](/zh/plugins/etag) 时：一旦套壳改写 body，框架会**去掉原 ETag**，避免摘要还对应套壳前的内容。
+
+## 主动跳过套壳
+
+全站开了 envelope，个别出口仍要**裸响应**（下载页、兼容旧客户端、HTML 文档页等）时，有两种写法：
+
+**业务路由优先用 `response({ skipEnvelope: true })`**：只跳过**这一条**声明里的 `statusCode`；其它状态码仍套壳。运行时与 OpenAPI 一致。
+
+```typescript
+import { rule } from '@aomex/common';
+import { response, Router } from '@aomex/web';
+
+export const router = new Router();
+
+router.get('/export.csv', { // [!code focus:14]
+  mount: [
+    response({
+      statusCode: 200,
+      contentType: 'text/csv',
+      content: rule.string(),
+      skipEnvelope: true, // [!code highlight]
+    }),
+    response({ statusCode: 400 }),
+  ],
+  action: async (ctx) => {
+    ctx.send(await buildCsv());
+  },
+});
+```
+
+上面这条：成功 200 是裸 CSV；校验失败的 400 仍走全站外壳（再经 formatError 进 payload）。
+
+同一路由可多次挂 `response()`，各自决定要不要 `skipEnvelope`——例如成功套壳、错误裸出，或反过来。
+
+**基础设施响应**（Swagger / Redoc 页、裸 OpenAPI JSON）可在 action 里设 `ctx.response.skipEnvelope = true`：无条件跳过本次写出，不论最终状态码。业务接口请优先用上面的 `response({ skipEnvelope })`，好让文档也登记到对应状态。
+
+```typescript
+action: async (ctx) => {
+  ctx.response.skipEnvelope = true; // [!code highlight]
+  ctx.send(rawOpenapiDocument);
+},
+```
+
 ## OpenAPI
 
-给 `generateOpenapi` / Console `openapi()` 传入**配置了 envelope 的同一份 `WebApp`（`app`）**时，生成器会自动读 `app` 上的套壳配置：在其它 `response` / `formatError` 注入之后，把文档里的 2xx 与 4xx·5xx·default **收成 HTTP 200** 的套壳 schema（成败常用 `oneOf`，`success` 分别固定为 `true` / `false`）；**保留** 3xx 与 204 等无内容状态码，和运行时跳过规则一致。
+给 `generateOpenapi` / Console `openapi()` 传入**配置了 envelope 的同一份 `WebApp`（`app`）**时，生成器会自动读 `app` 上的套壳配置：在其它 `response` / `formatError` 注入之后，把文档里的 2xx 与 4xx·5xx·default **收成 HTTP 200** 的套壳 schema（成败常用 `oneOf`，`success` 分别固定为 `true` / `false`）；**保留** 3xx、204 等无内容状态码，以及 `response({ skipEnvelope: true })` 登记过的状态码——和运行时跳过规则一致。
+
+若同一 operation 既有「skip 的 200」又有需要套壳的成败支，生成器会在该 `200` 的 `application/json` 上把裸 schema 与套壳 schema 做成 `oneOf`，其它 media（如 `text/html`）原样留下。
 
 `envelope.description` 会写到收拢后的 `200` 响应说明上。不必再手传一份 `mount` 数组，也别漏传 `app`——否则契约仍是「201 + 裸 body」、线上却是「200 + 外壳」。详见 [OpenAPI 生成](/zh/plugins/openapi)。
 

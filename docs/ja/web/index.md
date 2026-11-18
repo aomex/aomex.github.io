@@ -217,7 +217,7 @@ const app = new WebApp({
 
 **成功・失敗で同じ JSON 外殻**、外側 HTTP **200** 固定（実コードは body 内）なら `new WebApp` で `envelope`。ルートは従来 send/throw、フレームワークが書き出し前にラップ。
 
-宣言ツリーは `envelope.success` / `envelope.payload` / `envelope.statusCode` と任意 `envelope.slot`。[formatError](/ja/web/errors) と併用が多い。詳細・スキップ規則（リダイレクト、204、SSE 等）は [レスポンスエンベロープ](/ja/web/envelope)。
+宣言ツリーは `envelope.success` / `envelope.payload` / `envelope.statusCode` と任意 `envelope.slot`。[formatError](/ja/web/errors) と併用が多い。特定ステータスを裸レスポンスにするには `response({ skipEnvelope: true })`。詳細・自動スキップ規則（リダイレクト、204、SSE 等）は [レスポンスエンベロープ](/ja/web/envelope)。
 
 ## listen、http、https
 

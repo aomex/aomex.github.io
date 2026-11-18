@@ -34,6 +34,10 @@ const app = new WebApp({
 
 普通 WebMiddleware，不寫 ctx 新欄位。效果側：首次響應帶 ETag；再次請求頭帶 If-None-Match 且一致 → **304**。已有 Etag 頭、非 2xx、非 GET/HEAD 時一般不會改寫。
 
+::: tip
+全站開了 [響應體套殼](/zh-TW/web/envelope) 時，套殼會改寫 body 並把外層改成 200；框架會**去掉原 ETag**，避免摘要還對應套殼前的內容。需要條件快取的介面，確認摘要落在套殼之後，或對該出口 `skipEnvelope`。
+:::
+
 ## 弱校驗與疊用
 
 | 選項 | 什麼時候用 | 預設 |

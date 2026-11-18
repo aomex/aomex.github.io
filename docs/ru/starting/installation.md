@@ -25,25 +25,17 @@ pnpm aomex -h
 
 ## Структура каталогов
 
-Леса выглядят примерно так (в зависимости от версии они будут немного скорректированы). Сначала возьмите три строки:` src/web.ts `Начиная с HTTP,` src/cli.ts `Запустите терминал/Cron/OpenAPI и скачайте диск,` src/routers/`и ` src/commanders/`Каждый интерфейс записи и инструкции; проверь базу данных и кеш ` src/services/`, **разделяется обеими сторонами**.
+Шаблон выглядит примерно так (версия чуть подправит детали). Три линии: `src/web.ts` поднимает HTTP, `src/cli.ts` — терминал / Cron / экспорт OpenAPI; `src/routers/` и `src/commanders/` — API и CLI-команды; переиспользуемые middleware (аутентификация, formatError, access log, Swagger и т.д.) лежат в `src/middleware/` и подключаются в `web.ts` или в mount маршрута; БД и кэш — в `src/services/`, **общие для Web и Console**.
 
-| файл/каталог | На что ты его меняешь? |
+| Файл / каталог | Зачем трогать |
 | --- | --- |
-| ` src/web.ts ` | Начиная с HTTP |
-| ` src/cli.ts ` | Запустить команду терминала/Cron/Удалить диск OpenAPI |
-| ` src/routers/` | Написать интерфейс |
-| ` src/commanders/` | Написание команд CLI |
-| ` src/services/` | Проверка базы данных, кэширование и отправка электронной почты — не вставляйте бизнес-SQL в маршрутизацию. ` action` |
-| ` src/schemas/` | Многоразовая проверка, имя файла ` xxx.schema.ts`(OpenAPI и CLI используют одну и ту же копию) |
-
-```text
-src/web.ts          # HTTP 入口
-src/cli.ts          # Console / Cron / OpenAPI 落盘
-src/routers/        # 接口
-src/commanders/     # CLI 指令
-src/services/       # Web 与 Console 共用
-src/schemas/        # 可复用 rule / schema
-```
+| `src/web.ts` | Запуск HTTP |
+| `src/cli.ts` | CLI / Cron / экспорт OpenAPI в файл |
+| `src/routers/` | HTTP-маршруты |
+| `src/commanders/` | CLI-команды |
+| `src/middleware/` | Переиспользуемые middleware: аутентификация, formatError, access log, Swagger — смонтировать в `web.ts` или mount маршрута |
+| `src/services/` | БД, кэш, почта — бизнес-SQL не в `action` маршрута |
+| `src/schemas/` | Общие валидаторы, файлы `xxx.schema.ts` (одна схема для OpenAPI и CLI) |
 
 Просто удалите те, которые вам не нужны (prisma, i18n...), нет необходимости держать их напоказ. CORS, аутентификация, OpenAPI и т. д. являются независимыми пакетами и должны быть установлены после использования.
 

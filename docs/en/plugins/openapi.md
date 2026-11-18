@@ -208,7 +208,7 @@ Maintain responses with `response()` on routes when you can, not only `fix` per 
 ## Related
 
 - [Constrain responses](/en/web/response)
-- [Response envelope](/en/web/envelope) (with `app`, success/error folded into 200)
+- [Response envelope](/en/web/envelope) (with `app`, success/error folded into 200; `skipEnvelope` statuses kept as declared)
 - [Error format](/en/web/errors)
 - [OpenAPI export](/en/console/openapi)
 - [Swagger UI](/en/plugins/swagger-ui) · [Redoc UI](/en/plugins/redoc-ui)

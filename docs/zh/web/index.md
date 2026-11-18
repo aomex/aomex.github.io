@@ -230,7 +230,7 @@ const app = new WebApp({
 
 需要**成功和失败共用同一种 JSON 外壳**、外层 HTTP 固定 **200**（真实状态码写在 body 里）时，在 `new WebApp` 上配 `envelope`。路由里仍照常 `send` / `throw`，框架在写出前套壳。
 
-声明树用 `envelope.success` / `envelope.payload` / `envelope.statusCode` 和可选的 `envelope.slot` 拼装；常与 [formatError](/zh/web/errors) 一起用。细节、跳过规则（重定向、204、SSE 等）见 [响应体套壳](/zh/web/envelope)。
+声明树用 `envelope.success` / `envelope.payload` / `envelope.statusCode` 和可选的 `envelope.slot` 拼装；常与 [formatError](/zh/web/errors) 一起用。个别状态要裸响应时用 `response({ skipEnvelope: true })`。细节与自动跳过规则（重定向、204、SSE 等）见 [响应体套壳](/zh/web/envelope)。
 
 ## listen、http、https
 

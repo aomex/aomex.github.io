@@ -156,11 +156,34 @@ response({
 }),
 ```
 
+## 跳過響應套殼
+
+全站配了 [envelope](/zh-TW/web/envelope) 時，某個狀態碼仍要**裸寫出**，在對應 `response()` 上加 `skipEnvelope: true`。只影響本條的 `statusCode`；同路由其它狀態碼照常套殼。執行時與 OpenAPI 一起登記。
+
+```typescript
+router.get('/report.pdf', { // [!code focus:12]
+  mount: [
+    response({
+      statusCode: 200,
+      contentType: 'application/pdf',
+      content: rule.string(),
+      skipEnvelope: true, // [!code highlight]
+    }),
+    response({ statusCode: 404 }),
+  ],
+  action: async (ctx) => {
+    ctx.send(await loadPdf());
+  },
+});
+```
+
+文件頁、裸 OpenAPI JSON 這類基礎設施出口，也可在 action 裡設 `ctx.response.skipEnvelope = true`（無條件跳過本次）。業務路由優先用上面的選項，避免文件漏記。
+
 不掛 response() 也能 ctx.send；上線前補上成功態和常見的 400/404，避免 OpenAPI 和型別裡響應是空洞。宣告 200 卻在 action 裡 `send(201)` 會直接型別報錯——改狀態碼或改 response() 宣告。
 
 ## 下一步
 
 - [錯誤格式](/zh-TW/web/errors)（4xx/5xx JSON 與 response 配合）
-- [響應體套殼](/zh-TW/web/envelope)（外層固定 200、body 統一外殼）
+- [響應體套殼](/zh-TW/web/envelope)（外層固定 200、body 統一外殼；`skipEnvelope`）
 - [請求實體](/zh-TW/web/body) / [查詢引數](/zh-TW/web/query)（入參側對稱寫法）
 - [OpenAPI 文件生成](/zh-TW/plugins/openapi)

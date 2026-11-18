@@ -149,11 +149,35 @@ response({
   content: rule.string(),
 }),
 ```
+
+## レスポンスラップのスキップ
+
+サイト全体で [envelope](/ja/web/envelope) を有効にしているとき、特定のステータスだけ**裸で書き出す**なら、該当 `response()` に `skipEnvelope: true` を付ける。この宣言の `statusCode` だけ影響し、同ルートの他ステータスは従来どおりラップ。実行時と OpenAPI の両方に登録される。
+
+```typescript
+router.get('/report.pdf', { // [!code focus:12]
+  mount: [
+    response({
+      statusCode: 200,
+      contentType: 'application/pdf',
+      content: rule.string(),
+      skipEnvelope: true, // [!code highlight]
+    }),
+    response({ statusCode: 404 }),
+  ],
+  action: async (ctx) => {
+    ctx.send(await loadPdf());
+  },
+});
+```
+
+ドキュメントページや裸の OpenAPI JSON といったインフラ出口は、action 内で `ctx.response.skipEnvelope = true`（今回の書き出しを無条件スキップ）も使える。業務ルートは上記オプションを優先し、ドキュメント漏れを避ける。
+
 `response()` なしでも send 可。本番前に成功態とよくある 400/404 を足し、OpenAPI と型のレスポンスが空洞にならないように。200 宣言で action が `send(201)` すると型エラー——ステータスか `response()` を直す。
 
 ## 次のステップ
 
 - [エラー形式](/ja/web/errors)（4xx/5xx JSON と response）
-- [レスポンスエンベロープ](/ja/web/envelope)（外側固定 200）
+- [レスポンスエンベロープ](/ja/web/envelope)（外側固定 200・`skipEnvelope`）
 - [リクエストボディ](/ja/web/body) / [クエリ](/ja/web/query)
 - [OpenAPI 生成](/ja/plugins/openapi)

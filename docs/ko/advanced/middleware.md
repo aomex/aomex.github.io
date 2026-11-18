@@ -23,7 +23,7 @@ outline: deep
 목표: 모든 요청에 `traceId`, downstream action에서 읽기.
 
 ```typescript
-// src/middlewares/trace-id.ts
+// src/middleware/trace-id.ts
 import { middleware } from '@aomex/common';
 
 export const traceId = middleware.web<{ // [!code highlight]

@@ -34,6 +34,10 @@ Handlers still `ctx.send(data)`; when the tag matches and content is fresh, midd
 
 Plain `WebMiddleware`—no new `ctx` fields. First response carries ETag; a repeat request with matching `If-None-Match` → **304**. Existing `Etag` header, non-2xx, or non GET/HEAD usually skip rewriting.
 
+::: tip
+With site-wide [response envelope](/en/web/envelope), wrapping rewrites the body and forces outer **200**; the framework **drops the original ETag** so the digest does not still match pre-wrap content. For conditional caching, ensure the tag reflects the wrapped body—or use `skipEnvelope` on that exit.
+:::
+
 ## Weak validation and stacking
 
 | Option | When to use | Default |

@@ -208,7 +208,7 @@ CI·로컬 **고정 내보내기**는 Console: `openapi()` + `aomex openapi`, [O
 ## 관련
 
 - [응답 제약](/ko/web/response)
-- [응답 래핑](/ko/web/envelope)(`app` 전달 시 성공·실패 가지를 200으로 맞춤)
+- [응답 본문 래핑](/ko/web/envelope)(`app` 전달 시 성공·실패 가지를 200으로 맞춤; `skipEnvelope` 상태 코드는 원문 유지)
 - [오류 형식](/ko/web/errors)
 - [OpenAPI 내보내기](/ko/console/openapi)
 - [Swagger UI](/ko/plugins/swagger-ui) · [Redoc UI](/ko/plugins/redoc-ui)

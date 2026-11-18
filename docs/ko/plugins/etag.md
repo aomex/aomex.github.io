@@ -34,6 +34,10 @@ const app = new WebApp({
 
 일반 `WebMiddleware`—새 `ctx` 필드 없음. 첫 응답에 ETag; 같은 `If-None-Match` 재요청 → **304**. 기존 `Etag` 헤더, 비 2xx, GET/HEAD 아니면 보통 재작성 안 함.
 
+::: tip
+사이트에 [응답 본문 래핑](/ko/web/envelope)을 켠 경우, 래핑이 body를 바꾸고 바깥을 200으로 맞춥니다. 프레임워크는 **기존 ETag를 제거**해 요약이 래핑 전 내용을 가리키지 않게 합니다. 조건부 캐시가 필요한 API는 요약이 래핑 이후인지 확인하거나, 해당 출구에 `skipEnvelope`를 쓰세요.
+:::
+
 ## 약한 검증과 스태킹
 
 | 옵션 | 언제 쓰나 | 기본값 |

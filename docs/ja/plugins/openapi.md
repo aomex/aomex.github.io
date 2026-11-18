@@ -208,7 +208,7 @@ CI / ローカルで**固定ファイル**にするなら Console の `openapi()
 ## 関連
 
 - [制約付きレスポンス](/ja/web/response)
-- [レスポンスエンベロープ](/ja/web/envelope)（`app` 渡しで成否を 200 に収める）
+- [レスポンスエンベロープ](/ja/web/envelope)（`app` 渡しで成否を 200 に収める；`skipEnvelope` のステータスはそのまま保持）
 - [エラーフォーマット](/ja/web/errors)
 - [OpenAPI のファイル出力](/ja/console/openapi)
 - [Swagger UI](/ja/plugins/swagger-ui) · [Redoc UI](/ja/plugins/redoc-ui)

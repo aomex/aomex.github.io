@@ -208,7 +208,7 @@ CI / 本地**固定落盘**用 Console：`openapi()` + `aomex openapi`，见 [Op
 ## 相关
 
 - [约束响应](/zh/web/response)
-- [响应体套壳](/zh/web/envelope)（传 `app` 时自动把成败支收成 200）
+- [响应体套壳](/zh/web/envelope)（传 `app` 时自动把成败支收成 200；`skipEnvelope` 的状态码原样保留）
 - [错误格式](/zh/web/errors)
 - [OpenAPI 落盘](/zh/console/openapi)
 - [Swagger UI](/zh/plugins/swagger-ui) · [Redoc UI](/zh/plugins/redoc-ui)

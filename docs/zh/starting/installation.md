@@ -25,7 +25,7 @@ pnpm aomex -h
 
 ## 目录结构
 
-脚手架大概长这样（版本不同会微调）。先抓住三条线：`src/web.ts` 起 HTTP，`src/cli.ts` 起终端 / Cron / OpenAPI 落盘，`src/routers/` 与 `src/commanders/` 各写接口与指令；查库、缓存放进 `src/services/`，**两边共用**。
+脚手架大概长这样（版本不同会微调）。先抓住三条线：`src/web.ts` 起 HTTP，`src/cli.ts` 起终端 / Cron / OpenAPI 落盘，`src/routers/` 与 `src/commanders/` 各写接口与指令；鉴权、错误格式、访问日志等可复用中间件放 `src/middleware/`，查库、缓存放进 `src/services/`，**两边共用**。
 
 | 文件 / 目录 | 你改它做什么 |
 | --- | --- |
@@ -33,17 +33,9 @@ pnpm aomex -h
 | `src/cli.ts` | 起终端指令 / Cron / 落盘 OpenAPI |
 | `src/routers/` | 写接口 |
 | `src/commanders/` | 写 CLI 指令 |
+| `src/middleware/` | 鉴权、formatError、访问日志、Swagger 等可复用中间件，再挂到 `web.ts` / 路由 mount |
 | `src/services/` | 查库、缓存、发邮件——业务 SQL 别塞进路由 `action` |
 | `src/schemas/` | 可复用校验，文件名 `xxx.schema.ts`（OpenAPI 与 CLI 共用同一份） |
-
-```text
-src/web.ts          # HTTP 入口
-src/cli.ts          # Console / Cron / OpenAPI 落盘
-src/routers/        # 接口
-src/commanders/     # CLI 指令
-src/services/       # Web 与 Console 共用
-src/schemas/        # 可复用 rule / schema
-```
 
 用不到的（prisma、i18n…）删掉即可，不必留着装门面。CORS、鉴权、OpenAPI 等是独立包，用到再装。
 

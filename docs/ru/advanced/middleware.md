@@ -23,7 +23,7 @@ outline: deep
 Цель: приносить с каждым запросом ` traceId`, нижестоящее действие может его прочитать.
 
 ```typescript
-// src/middlewares/trace-id.ts
+// src/middleware/trace-id.ts
 import { middleware } from '@aomex/common';
 
 export const traceId = middleware.web<{ // [!code highlight]

@@ -156,11 +156,34 @@ response({
 }),
 ```
 
+## 응답 래핑 건너뛰기
+
+사이트에 [envelope](/ko/web/envelope)가 설정된 경우, 특정 상태 코드만 **맨으로** 내보내려면 해당 `response()`에 `skipEnvelope: true`를 붙입니다. 이 선언의 `statusCode`만 영향을 받고, 같은 라우트의 다른 상태는 계속 래핑됩니다. 런타임과 OpenAPI에 함께 기록됩니다.
+
+```typescript
+router.get('/report.pdf', { // [!code focus:12]
+  mount: [
+    response({
+      statusCode: 200,
+      contentType: 'application/pdf',
+      content: rule.string(),
+      skipEnvelope: true, // [!code highlight]
+    }),
+    response({ statusCode: 404 }),
+  ],
+  action: async (ctx) => {
+    ctx.send(await loadPdf());
+  },
+});
+```
+
+문서 페이지, 맨 OpenAPI JSON 같은 인프라 출구는 action에서 `ctx.response.skipEnvelope = true`로 이번 응답을 무조건 스킵할 수도 있습니다. 업무 라우트는 위 옵션을 우선해 문서 누락을 피하세요.
+
 `response()` 없이도 `ctx.send`는 됩니다. 배포 전 성공 상태와 흔한 400/404를 보완해 OpenAPI·타입에 응답 구멍이 없게 하세요. 200을 선언했는데 action에서 `send(201)`이면 타입 오류가 납니다. 상태 코드를 바꾸거나 `response()` 선언을 바꾸세요.
 
 ## 다음 단계
 
 - [오류 형식](/ko/web/errors)(4xx/5xx JSON과 response 연동)
-- [응답 본문 래핑](/ko/web/envelope)(바깥 200 고정, body 통일 껍데기)
+- [응답 본문 래핑](/ko/web/envelope)(바깥 200 고정, body 통일 껍데기; `skipEnvelope`)
 - [요청 본문](/ko/web/body) / [쿼리 문자열](/ko/web/query)(입력 쪽 대칭 표기)
 - [OpenAPI 문서 생성](/ko/plugins/openapi)

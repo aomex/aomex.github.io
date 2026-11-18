@@ -230,7 +230,7 @@ const app = new WebApp({
 
 성공·실패가 **같은 JSON 껍데기**이고 바깥 HTTP는 **200**(실제 상태는 body)이면 `new WebApp`에 `envelope`를 씁니다. 라우트는 그대로 `send` / `throw`하고, 프레임워크가 쓰기 전에 래핑합니다.
 
-`envelope.success` / `envelope.payload` / `envelope.statusCode`와 선택적 `envelope.slot`로 트리를 만들며, [formatError](/ko/web/errors)와 자주 함께 씁니다. 예외(리다이렉트, 204, SSE 등)는 [응답 본문 래핑](/ko/web/envelope).
+`envelope.success` / `envelope.payload` / `envelope.statusCode`와 선택적 `envelope.slot`로 트리를 만들며, [formatError](/ko/web/errors)와 자주 함께 씁니다. 특정 상태만 맨 응답이 필요하면 `response({ skipEnvelope: true })`를 씁니다. 자동 스킵(리다이렉트, 204, SSE 등)과 세부는 [응답 본문 래핑](/ko/web/envelope).
 
 ## listen, http, https
 

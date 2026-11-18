@@ -159,7 +159,7 @@ proxyIP: {
 
 `mount` 是整站中介軟體佇列：每個請求都會按陣列順序走進來（洋蔥模型，可在 `await next()` 前後做事）。跨域、全站鑑權、訪問日誌、以及 `routers('./src/routers')` 掃出來的介面，都掛在這裡。
 
-隻影響某一組 URL 的邏輯，請放到 [Router](/zh-TW/web/router) 或單條路由的 mount，別全塞進 WebApp。
+只影響某一組 URL 的邏輯，請放到 [Router](/zh-TW/web/router) 或單條路由的 mount，別全塞進 WebApp。
 
 ```typescript
 import { middleware } from '@aomex/common';
@@ -230,7 +230,7 @@ const app = new WebApp({
 
 需要**成功和失敗共用同一種 JSON 外殼**、外層 HTTP 固定 **200**（真實狀態碼寫在 body 裡）時，在 `new WebApp` 上配 `envelope`。路由裡仍照常 `send` / `throw`，框架在寫出前套殼。
 
-宣告樹用 `envelope.success` / `envelope.payload` / `envelope.statusCode` 和可選的 `envelope.slot` 拼裝；常與 [formatError](/zh-TW/web/errors) 一起用。細節、跳過規則（重定向、204、SSE 等）見 [響應體套殼](/zh-TW/web/envelope)。
+宣告樹用 `envelope.success` / `envelope.payload` / `envelope.statusCode` 和可選的 `envelope.slot` 拼裝；常與 [formatError](/zh-TW/web/errors) 一起用。個別狀態要裸響應時用 `response({ skipEnvelope: true })`。細節與自動跳過規則（重定向、204、SSE 等）見 [響應體套殼](/zh-TW/web/envelope)。
 
 ## listen、http、https
 

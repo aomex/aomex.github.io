@@ -23,7 +23,7 @@ outline: deep
 目標：各リクエストに `traceId` を付け、下流 action が読めるようにする。
 
 ```typescript
-// src/middlewares/trace-id.ts
+// src/middleware/trace-id.ts
 import { middleware } from '@aomex/common';
 
 export const traceId = middleware.web<{ // [!code highlight]

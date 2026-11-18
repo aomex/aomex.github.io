@@ -23,7 +23,7 @@ A `middleware.web` instance **cannot** mount on Console as-is; the reverse is al
 Goal: every request carries a `traceId` that downstream actions can read.
 
 ```typescript
-// src/middlewares/trace-id.ts
+// src/middleware/trace-id.ts
 import { middleware } from '@aomex/common';
 
 export const traceId = middleware.web<{ // [!code highlight]

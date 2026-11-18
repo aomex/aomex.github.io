@@ -25,7 +25,7 @@ pnpm aomex -h
 
 ## 프로젝트 구조
 
-비계는 대략 아래와 같습니다(버전마다 조금 다를 수 있음). 세 가지 줄을 기억하세요. `src/web.ts`는 HTTP, `src/cli.ts`는 터미널 / Cron / OpenAPI 내보내기, `src/routers/`와 `src/commanders/`는 라우트와 명령입니다. DB·캐시는 `src/services/`에 두고 **Web·Console이 공유**합니다.
+비계는 대략 아래와 같습니다(버전마다 조금 다를 수 있음). 세 가지 줄을 기억하세요. `src/web.ts`는 HTTP, `src/cli.ts`는 터미널 / Cron / OpenAPI 내보내기, `src/routers/`와 `src/commanders/`는 라우트와 명령입니다. 인증, formatError, 접근 로그, Swagger 등 재사용 미들웨어는 `src/middleware/`에 두고 `web.ts` / 라우트 mount에 겁니다. DB·캐시는 `src/services/`에 두고 **Web·Console이 공유**합니다.
 
 | 파일 / 디렉터리 | 무엇을 바꾸나 |
 | --- | --- |
@@ -33,17 +33,9 @@ pnpm aomex -h
 | `src/cli.ts` | 터미널 명령 / Cron / OpenAPI 내보내기 |
 | `src/routers/` | HTTP 라우트 |
 | `src/commanders/` | CLI 명령 |
+| `src/middleware/` | 인증, formatError, 접근 로그, Swagger 등 재사용 미들웨어, `web.ts` / 라우트 mount에 연결 |
 | `src/services/` | DB, 캐시, 메일 — 라우트 `action`에 SQL 넣지 말 것 |
 | `src/schemas/` | 재사용 검증, 파일명 `xxx.schema.ts`(OpenAPI·CLI가 같은 정의 공유) |
-
-```text
-src/web.ts          # HTTP 入口
-src/cli.ts          # Console / Cron / OpenAPI 落盘
-src/routers/        # 接口
-src/commanders/     # CLI 指令
-src/services/       # Web 与 Console 共用
-src/schemas/        # 可复用 rule / schema
-```
 
 쓰지 않는 것(prisma, i18n 등)은 지워도 됩니다. 자리 채우기로 남길 필요 없습니다. CORS, 인증, OpenAPI 등은 별도 패키지이며 필요할 때 설치합니다.
 

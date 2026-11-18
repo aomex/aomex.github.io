@@ -77,9 +77,13 @@ In `get`, do not touch `ctx`, `services`, etc.—only the three values above exi
 ## formatError and response()
 
 - **[formatError](/en/web/errors)** shapes `ctx.throw` into unified error JSON, then that becomes `envelope.payload`. Configure together; without `formatError`, default plain-text errors still enter payload (as JSON string values).
-- **[response()](/en/web/response)** still declares shapes per “real” status; wrapping does not change how you `send` / `throw` in actions—only the outer shell at flush. OpenAPI success/error branches fold into 200 envelope schema (below).
+- **[response()](/en/web/response)** still declares shapes per “real” status; wrapping does not change how you `send` / `throw` in actions—only the outer shell at flush. OpenAPI success/error branches fold into 200 envelope schema (below). For status codes that must **not** be wrapped, register them on the matching `response({ skipEnvelope: true })` (next section).
 
 Keep writing `send(201)`, `throw(404)` in business code—types and route declarations stay on real status codes.
+
+::: tip
+When wrapping, if the body is already a JSON string and `Content-Type` is `application/json` (e.g. manual `JSON.stringify` in middleware), the framework `JSON.parse`s first before filling `envelope.payload`, so `data` is not a single escaped text blob.
+:::
 
 ## When wrapping is skipped
 
@@ -94,9 +98,54 @@ These responses write **unchanged**—no wrapper, no forced 200:
 
 Normal json / string / null (including default 404 without explicit send) are wrapped.
 
+With the [ETag](/en/plugins/etag) plugin: once wrapping rewrites the body, the framework **removes the original ETag** so the digest does not still refer to pre-wrap content.
+
+## Skipping the envelope
+
+When envelope is on site-wide, some exits still need **bare responses** (download pages, legacy clients, HTML doc pages). Two patterns:
+
+**Business routes: prefer `response({ skipEnvelope: true })`**—skips only that mount’s `statusCode`; other status codes on the route still wrap. Runtime and OpenAPI stay aligned.
+
+```typescript
+import { rule } from '@aomex/common';
+import { response, Router } from '@aomex/web';
+
+export const router = new Router();
+
+router.get('/export.csv', { // [!code focus:14]
+  mount: [
+    response({
+      statusCode: 200,
+      contentType: 'text/csv',
+      content: rule.string(),
+      skipEnvelope: true, // [!code highlight]
+    }),
+    response({ statusCode: 400 }),
+  ],
+  action: async (ctx) => {
+    ctx.send(await buildCsv());
+  },
+});
+```
+
+Here, successful `200` is bare CSV; validation failure `400` still uses the site wrapper (and `formatError` in payload).
+
+You can mount `response()` multiple times on one route, each with its own `skipEnvelope`—e.g. success wrapped, errors bare, or the opposite.
+
+**Infrastructure responses** (Swagger / Redoc pages, bare OpenAPI JSON) can set `ctx.response.skipEnvelope = true` in the action: unconditional skip for that write, regardless of final status. For business APIs, prefer `response({ skipEnvelope })` above so the contract documents the status.
+
+```typescript
+action: async (ctx) => {
+  ctx.response.skipEnvelope = true; // [!code highlight]
+  ctx.send(rawOpenapiDocument);
+},
+```
+
 ## OpenAPI
 
-Pass the **same `WebApp` (`app`) with `envelope` configured** to `generateOpenapi` / Console `openapi()`: after other `response` / `formatError` injection, 2xx and 4xx·5xx·default fold to **HTTP 200** envelope schema (often `oneOf` with `success` true/false); **3xx** and 204-style codes stay per runtime skip rules.
+Pass the **same `WebApp` (`app`) with `envelope` configured** to `generateOpenapi` / Console `openapi()`: after other `response` / `formatError` injection, 2xx and 4xx·5xx·default fold to **HTTP 200** envelope schema (often `oneOf` with `success` true/false); **keep** 3xx, 204-style no-body codes, and status codes registered with `response({ skipEnvelope: true })`—same skip rules as runtime.
+
+When one operation has both a skipped `200` and wrapped success/error branches, the generator builds `oneOf` on that `200` `application/json` between bare and wrapped schemas; other media (e.g. `text/html`) stay as declared.
 
 `envelope.description` lands on the collapsed `200` response docs. Do not hand-copy a `mount` array or omit `app`—contract stays “201 + bare body” while production is “200 + wrapper”. See [OpenAPI generation](/en/plugins/openapi).
 

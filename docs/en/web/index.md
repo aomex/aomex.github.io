@@ -230,7 +230,7 @@ Public webhooks or large JSON: whole body loads in memory; overflow is **413**, 
 
 When success and failure share one JSON wrapper with outer HTTP **200** (real status inside body), set `envelope` on `new WebApp`. Routes still `send` / `throw`; framework wraps at flush.
 
-Tree uses `envelope.success` / `envelope.payload` / `envelope.statusCode` and optional `envelope.slot`; often with [formatError](/en/web/errors). Details and skip rules (redirect, 204, SSE): [Response envelope](/en/web/envelope).
+Tree uses `envelope.success` / `envelope.payload` / `envelope.statusCode` and optional `envelope.slot`; often with [formatError](/en/web/errors). For bare responses on specific statuses use `response({ skipEnvelope: true })`. Details and auto-skip rules (redirect, 204, SSE, etc.): [Response envelope](/en/web/envelope).
 
 ## listen, http, https
 
