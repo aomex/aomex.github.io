@@ -81,5 +81,6 @@ CSP 從嚴抄模板卻忘放行 CDN / 指令碼域名時，頁面白屏、控制
 ## 下一步
 
 - 跨域：[CORS](/zh-TW/plugins/cors)
+- Cookie 登入防偽造：[CSRF](/zh-TW/plugins/csrf)
 - 公開 API 文件 UI：[Swagger UI](/zh-TW/openapi/swagger-ui)、[Redoc UI](/zh-TW/openapi/redoc-ui)
 - 中介軟體掛載位置：[中介軟體](/zh-TW/core/middleware)

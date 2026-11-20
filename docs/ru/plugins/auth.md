@@ -14,18 +14,20 @@ outline: deep
 
 ```bash
 pnpm add @aomex/auth
-# JWT 另装：pnpm add @aomex/auth-jwt-strategy
+# JWT также: pnpm add @aomex/auth-jwt-strategy
+# Session также: pnpm add @aomex/cache (для cross-origin ещё @aomex/cors @aomex/csrf)
 ```
 
 | Пакет стратегии | Типичный сценарий |
 | --- | --- |
 | [`@aomex/auth/bearer`](/ru/plugins/auth-bearer-strategy) | Непрозрачный token, сессия на сервере |
+| [`@aomex/auth/session`](/ru/plugins/auth-session-strategy) | Cookie-логин в браузере; вместе с CORS + CSRF |
 | [`@aomex/auth/api-key`](/ru/plugins/auth-api-key-strategy) | Machine-to-machine, открытая платформа |
 | [`@aomex/auth-jwt-strategy`](/ru/plugins/auth-jwt-strategy) | Самодостаточный JWT, меньше обращений к БД |
 
 ## authenticate на Router
 
-Стратегии в `Auth` (Bearer / API Key / JWT); `authenticate(name)` — middleware идентичности на Router или маршрут. После успеха `ctx.auth[name]`; на маршруте `authorize` для детальных прав.
+Стратегии в `Auth` (Bearer / Session / API Key / JWT); `authenticate(name)` — middleware идентичности на Router или маршрут. После успеха `ctx.auth[name]`; на маршруте `authorize` для детальных прав.
 
 ```typescript
 import { Auth } from '@aomex/auth';
@@ -117,6 +119,7 @@ const token = auth.strategy('bearer').signature('sha256', user.id);
 ## Связанное
 
 - [Bearer](/ru/plugins/auth-bearer-strategy)
-- [API Key](/ru/plugins/auth-api-key-strategy)
+- [Стратегия Session](/ru/plugins/auth-session-strategy)
+ [API Key](/ru/plugins/auth-api-key-strategy)
 - [JWT](/ru/plugins/auth-jwt-strategy)
 - Нестандартный протокол: [Своя стратегия auth](/ru/advanced/auth-strategy)

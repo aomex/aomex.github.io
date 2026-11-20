@@ -15,17 +15,19 @@ outline: deep
 ```bash
 pnpm add @aomex/auth
 # JWT 另装：pnpm add @aomex/auth-jwt-strategy
+# Session 另需：pnpm add @aomex/cache（跨域再加 @aomex/cors @aomex/csrf）
 ```
 
 | 策略包 | 典型场景 |
 | --- | --- |
 | [`@aomex/auth/bearer`](/zh/plugins/auth-bearer-strategy) | 不透明 token，服务端存会话 |
+| [`@aomex/auth/session`](/zh/plugins/auth-session-strategy) | 浏览器 Cookie 登录态；配合 CORS + CSRF |
 | [`@aomex/auth/api-key`](/zh/plugins/auth-api-key-strategy) | 机器对机器、开放平台 |
 | [`@aomex/auth-jwt-strategy`](/zh/plugins/auth-jwt-strategy) | 自包含 JWT，少查库 |
 
 ## Router 上挂 authenticate
 
-`Auth` 实例里注册各策略（Bearer / API Key / JWT）；`authenticate(name)` 返回「先验身份」的中间件，挂到 Router 或单条路由。验过以后 `ctx.auth[name]` 可读身份；再在单条路由上 `authorize` 做细粒度权限。
+`Auth` 实例里注册各策略（Bearer / Session / API Key / JWT）；`authenticate(name)` 返回「先验身份」的中间件，挂到 Router 或单条路由。验过以后 `ctx.auth[name]` 可读身份；再在单条路由上 `authorize` 做细粒度权限。
 
 ```typescript
 import { Auth } from '@aomex/auth';
@@ -117,6 +119,7 @@ const token = auth.strategy('bearer').signature('sha256', user.id);
 ## 相关
 
 - [Bearer 策略](/zh/plugins/auth-bearer-strategy)
+- [Session 策略](/zh/plugins/auth-session-strategy)
 - [API Key 策略](/zh/plugins/auth-api-key-strategy)
 - [JWT 策略](/zh/plugins/auth-jwt-strategy)
 - 协议很特殊时：[高级：自定义鉴权策略](/zh/advanced/auth-strategy)

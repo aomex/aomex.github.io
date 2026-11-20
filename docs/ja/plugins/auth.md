@@ -14,18 +14,20 @@ outline: deep
 
 ```bash
 pnpm add @aomex/auth
-# JWT 另装：pnpm add @aomex/auth-jwt-strategy
+# JWT も: pnpm add @aomex/auth-jwt-strategy
+# Session も: pnpm add @aomex/cache（クロスオリジンなら @aomex/cors @aomex/csrf）
 ```
 
 | 戦略パッケージ | 典型的なシーン |
 | --- | --- |
 | [`@aomex/auth/bearer`](/ja/plugins/auth-bearer-strategy) | 不透明 token、サーバー側セッション |
+| [`@aomex/auth/session`](/ja/plugins/auth-session-strategy) | ブラウザ Cookie ログイン。CORS + CSRF と併用 |
 | [`@aomex/auth/api-key`](/ja/plugins/auth-api-key-strategy) | マシン間、オープンプラットフォーム |
 | [`@aomex/auth-jwt-strategy`](/ja/plugins/auth-jwt-strategy) | 自己完結 JWT、DB 参照を減らす |
 
 ## Router に authenticate を載せる
 
-`Auth` インスタンスに各戦略（Bearer / API Key / JWT）を登録。`authenticate(name)` は「先に身元を検証」するミドルウェアを返し、Router または単一ルートに載せる。通過後 `ctx.auth[name]` で身元を読める。単一ルートで `authorize` により細かい権限。
+`Auth` インスタンスに各戦略（Bearer / Session / API Key / JWT）を登録。`authenticate(name)` は「先に身元を検証」するミドルウェアを返し、Router または単一ルートに載せる。通過後 `ctx.auth[name]` で身元を読める。単一ルートで `authorize` により細かい権限。
 
 ```typescript
 import { Auth } from '@aomex/auth';
@@ -117,6 +119,7 @@ OpenAPI 生成時、本番と同じ `app` を `generateOpenapi` に渡すとド�
 ## 関連
 
 - [Bearer 戦略](/ja/plugins/auth-bearer-strategy)
+- [Session ストラテジー](/ja/plugins/auth-session-strategy)
 - [API Key 戦略](/ja/plugins/auth-api-key-strategy)
 - [JWT 戦略](/ja/plugins/auth-jwt-strategy)
 - 特殊プロトコル：[上級：カスタム認証戦略](/ja/advanced/auth-strategy)

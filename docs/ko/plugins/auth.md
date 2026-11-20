@@ -14,18 +14,20 @@ outline: deep
 
 ```bash
 pnpm add @aomex/auth
-# JWT 另装：pnpm add @aomex/auth-jwt-strategy
+# JWT도: pnpm add @aomex/auth-jwt-strategy
+# Session도: pnpm add @aomex/cache (교차 출처면 @aomex/cors @aomex/csrf)
 ```
 
 | 전략 패키지 | 일반적인 용도 |
-| --- | --- | --- |
+| --- | --- |
 | [`@aomex/auth/bearer`](/ko/plugins/auth-bearer-strategy) | 불투명 토큰, 서버 측 세션 |
+| [`@aomex/auth/session`](/ko/plugins/auth-session-strategy) | 브라우저 Cookie 로그인; CORS + CSRF와 함께 |
 | [`@aomex/auth/api-key`](/ko/plugins/auth-api-key-strategy) | 기계 간 호출, 오픈 플랫폼 |
 | [`@aomex/auth-jwt-strategy`](/ko/plugins/auth-jwt-strategy) | 자체 포함 JWT, DB 조회 감소 |
 
 ## Router에 authenticate 마운트
 
-`Auth`에 전략(Bearer / API Key / JWT)을 등록하고 `authenticate(name)`는 `Router` 또는 단일 라우트용 신원 미들웨어를 반환합니다. 성공 후 `ctx.auth[name]`을 읽고, 라우트별 `authorize`로 세분 권한을 겁니다.
+`Auth`에 전략(Bearer / Session / API Key / JWT)을 등록하고 `authenticate(name)`는 `Router` 또는 단일 라우트용 신원 미들웨어를 반환합니다. 성공 후 `ctx.auth[name]`을 읽고, 라우트별 `authorize`로 세분 권한을 겁니다.
 
 ```typescript
 import { Auth } from '@aomex/auth';
@@ -117,6 +119,7 @@ OpenAPI `generateOpenapi`에는 프로덕션과 같은 `app`을 넘기면 `secur
 ## 관련
 
 - [Bearer 전략](/ko/plugins/auth-bearer-strategy)
-- [API Key 전략](/ko/plugins/auth-api-key-strategy)
+- [Session 전략](/ko/plugins/auth-session-strategy)
+ [API Key 전략](/ko/plugins/auth-api-key-strategy)
 - [JWT 전략](/ko/plugins/auth-jwt-strategy)
 - 특수 프로토콜: [고급: 커스텀 auth 전략](/ko/advanced/auth-strategy)

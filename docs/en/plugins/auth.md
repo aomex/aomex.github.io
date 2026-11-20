@@ -15,17 +15,19 @@ Install packages for the strategies you use; treat this page as a roadmap before
 ```bash
 pnpm add @aomex/auth
 # JWT also: pnpm add @aomex/auth-jwt-strategy
+# Session also needs: pnpm add @aomex/cache (plus @aomex/cors @aomex/csrf cross-origin)
 ```
 
 | Strategy package | Typical use |
 | --- | --- |
 | [`@aomex/auth/bearer`](/en/plugins/auth-bearer-strategy) | Opaque token, server-side session |
+| [`@aomex/auth/session`](/en/plugins/auth-session-strategy) | Browser Cookie login; pair with CORS + CSRF |
 | [`@aomex/auth/api-key`](/en/plugins/auth-api-key-strategy) | Machine-to-machine, open platform |
 | [`@aomex/auth-jwt-strategy`](/en/plugins/auth-jwt-strategy) | Self-contained JWT, fewer DB lookups |
 
 ## Mount authenticate on Router
 
-Register strategies on `Auth` (Bearer / API Key / JWT); `authenticate(name)` returns identity middleware for `Router` or single routes. After success read `ctx.auth[name]`; use per-route `authorize` for fine-grained permission.
+Register strategies on `Auth` (Bearer / Session / API Key / JWT); `authenticate(name)` returns identity middleware for `Router` or single routes. After success read `ctx.auth[name]`; use per-route `authorize` for fine-grained permission.
 
 ```typescript
 import { Auth } from '@aomex/auth';
@@ -117,6 +119,7 @@ Pass the same `app` as production to `generateOpenapi` so OpenAPI `security` mat
 ## Related
 
 - [Bearer strategy](/en/plugins/auth-bearer-strategy)
+- [Session strategy](/en/plugins/auth-session-strategy)
 - [API Key strategy](/en/plugins/auth-api-key-strategy)
 - [JWT strategy](/en/plugins/auth-jwt-strategy)
 - Unusual protocols: [Advanced: custom auth strategies](/en/advanced/auth-strategy)

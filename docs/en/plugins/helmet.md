@@ -81,5 +81,6 @@ Copy-paste CSP without CDN/script hosts → blank pages and console CSP errors. 
 ## Next steps
 
 - Cross-origin: [CORS](/en/plugins/cors)
+- Cookie login CSRF: [CSRF](/en/plugins/csrf)
 - Public API doc UIs: [Swagger UI](/en/openapi/swagger-ui), [Redoc UI](/en/openapi/redoc-ui)
 - Middleware placement: [Middleware](/en/core/middleware)

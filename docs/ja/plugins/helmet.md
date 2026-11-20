@@ -81,5 +81,6 @@ CSP を厳しめのテンプレから写して CDN / スクリプトドメイン
 ## 次のステップ
 
 - クロスオリジン：[CORS](/ja/plugins/cors)
+- Cookie ログインの偽造防止：[CSRF](/ja/plugins/csrf)
 - 公開 API ドキュメント UI：[Swagger UI](/ja/openapi/swagger-ui)、[Redoc UI](/ja/openapi/redoc-ui)
 - ミドルウェアの位置：[ミドルウェア](/ja/core/middleware)

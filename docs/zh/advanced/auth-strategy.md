@@ -11,9 +11,9 @@ outline: deep
 - 业务里用 `ctx.auth.策略名.data`  
 - OpenAPI 里有对应的 security  
 
-典型场景：Cookie Session、网关注入的自定义头、mTLS 摘下的身份。若只是往 `ctx` 挂 user、不在乎 Auth 约定，普通中间件也能跑——但 security 与未登录分支要自己兜全。
+典型场景：Session、网关注入的自定义头、mTLS 摘下的身份。若只是往 `ctx` 挂 user、不在乎 Auth 约定，普通中间件也能跑——但 security 与未登录分支要自己兜全。
 
-下面用 **Cookie Session** 从头做到挂上路由。
+下面用 **Session** 从头做到挂上路由。
 
 ## 第一步：想清楚「身份长什么样」
 

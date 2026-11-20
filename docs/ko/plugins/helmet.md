@@ -79,5 +79,6 @@ CSP를 CDN·스크립트 호스트 없이 붙이면 빈 화면·콘솔 CSP 오�
 ## 다음 단계
 
 - 교차 출처: [CORS](/ko/plugins/cors)
+- Cookie 로그인 위조 방지: [CSRF](/ko/plugins/csrf)
 - 공개 API 문서 UI: [Swagger UI](/ko/openapi/swagger-ui), [Redoc UI](/ko/openapi/redoc-ui)
 - 미들웨어 위치: [미들웨어](/ko/core/middleware)

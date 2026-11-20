@@ -6,7 +6,7 @@ outline: deep
 
 先分清兩件事：**這個人是誰**（認證），以及**能不能幹這件事**（授權）。`@aomex/auth` 把多套策略收進同一個 Auth 例項：驗不過身份一般是 **401**，身份有了但許可權不夠是 **403**。前端和監控都能據此判斷「去登入」還是「換賬號 / 升許可權」。
 
-給一組業務接口加上「必須先登入」，其中少數介面還要更高角色；登入介面本身不掛鑑權，登進去之後能在 ctx.auth 裡讀到身份。
+給一組業務介面加上「必須先登入」，其中少數介面還要更高角色；登入介面本身不掛鑑權，登進去之後能在 ctx.auth 裡讀到身份。
 
 ## 安裝
 
@@ -15,17 +15,19 @@ outline: deep
 ```bash
 pnpm add @aomex/auth
 # JWT 另装：pnpm add @aomex/auth-jwt-strategy
+# Session 另需：pnpm add @aomex/cache（跨域再加 @aomex/cors @aomex/csrf）
 ```
 
 | 策略包 | 典型場景 |
 | --- | --- |
 | [`@aomex/auth/bearer`](/zh-TW/plugins/auth-bearer-strategy) | 不透明 token，服務端存會話 |
+| [`@aomex/auth/session`](/zh-TW/plugins/auth-session-strategy) | 瀏覽器 Cookie 登入態；配合 CORS + CSRF |
 | [`@aomex/auth/api-key`](/zh-TW/plugins/auth-api-key-strategy) | 機器對機器、開放平臺 |
 | [`@aomex/auth-jwt-strategy`](/zh-TW/plugins/auth-jwt-strategy) | 自包含 JWT，少查庫 |
 
 ## Router 上掛 authenticate
 
-`Auth` 例項裡註冊各策略（Bearer / API Key / JWT）；`authenticate(name)` 返回「先驗身份」的中介軟體，掛到 Router 或單條路由。驗過以後 `ctx.auth[name]` 可讀身份；再在單條路由上 `authorize` 做細粒度許可權。
+`Auth` 例項裡註冊各策略（Bearer / Session / API Key / JWT）；`authenticate(name)` 返回「先驗身份」的中介軟體，掛到 Router 或單條路由。驗過以後 `ctx.auth[name]` 可讀身份；再在單條路由上 `authorize` 做細粒度許可權。
 
 ```typescript
 import { Auth } from '@aomex/auth';
@@ -117,6 +119,7 @@ const token = auth.strategy('bearer').signature('sha256', user.id);
 ## 相關
 
 - [Bearer 策略](/zh-TW/plugins/auth-bearer-strategy)
+- [Session 策略](/zh-TW/plugins/auth-session-strategy)
 - [API Key 策略](/zh-TW/plugins/auth-api-key-strategy)
 - [JWT 策略](/zh-TW/plugins/auth-jwt-strategy)
 - 協議很特殊時：[高階：自定義鑑權策略](/zh-TW/advanced/auth-strategy)

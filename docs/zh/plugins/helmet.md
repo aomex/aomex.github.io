@@ -81,5 +81,6 @@ CSP 从严抄模板却忘放行 CDN / 脚本域名时，页面白屏、控制台
 ## 下一步
 
 - 跨域：[CORS](/zh/plugins/cors)
+- Cookie 登录防伪造：[CSRF](/zh/plugins/csrf)
 - 公开 API 文档 UI：[Swagger UI](/zh/openapi/swagger-ui)、[Redoc UI](/zh/openapi/redoc-ui)
 - 中间件挂载位置：[中间件](/zh/core/middleware)

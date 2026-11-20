@@ -37,6 +37,7 @@ type SidebarLabels = {
   envelope: string;
   middlewares: string;
   cors: string;
+  csrf: string;
   compress: string;
   helmet: string;
   etag: string;
@@ -48,6 +49,7 @@ type SidebarLabels = {
   auth: string;
   authEntry: string;
   bearer: string;
+  session: string;
   apiKey: string;
   jwt: string;
   docs: string;
@@ -103,6 +105,7 @@ const zhLabels: SidebarLabels = {
   envelope: '响应体套壳',
   middlewares: '常用中间件',
   cors: '跨域 CORS',
+  csrf: 'CSRF 防护',
   compress: '压缩 Compress',
   helmet: '安全报文 Helmet',
   etag: 'ETag',
@@ -114,6 +117,7 @@ const zhLabels: SidebarLabels = {
   auth: '身份认证',
   authEntry: '统一入口 Auth',
   bearer: 'Bearer 策略',
+  session: 'Session 策略',
   apiKey: 'API Key 策略',
   jwt: 'JWT 策略',
   docs: '业务文档',
@@ -169,6 +173,7 @@ const zhTWLabels: SidebarLabels = {
   envelope: '響應體套殼',
   middlewares: '常用中介軟體',
   cors: '跨域 CORS',
+  csrf: 'CSRF 防護',
   compress: '壓縮 Compress',
   helmet: '安全報文 Helmet',
   etag: 'ETag',
@@ -180,6 +185,7 @@ const zhTWLabels: SidebarLabels = {
   auth: '身份認證',
   authEntry: '統一入口 Auth',
   bearer: 'Bearer 策略',
+  session: 'Session 策略',
   apiKey: 'API Key 策略',
   jwt: 'JWT 策略',
   docs: '業務文件',
@@ -235,6 +241,7 @@ const enLabels: SidebarLabels = {
   envelope: 'Response envelope',
   middlewares: 'Common middleware',
   cors: 'CORS',
+  csrf: 'CSRF',
   compress: 'Compress',
   helmet: 'Helmet',
   etag: 'ETag',
@@ -246,6 +253,7 @@ const enLabels: SidebarLabels = {
   auth: 'Authentication',
   authEntry: 'Auth entry',
   bearer: 'Bearer strategy',
+  session: 'Session strategy',
   apiKey: 'API Key strategy',
   jwt: 'JWT strategy',
   docs: 'Business docs',
@@ -301,6 +309,7 @@ const jaLabels: SidebarLabels = {
   envelope: "レスポンスのエンベロープ",
   middlewares: "よく使うミドルウェア",
   cors: "CORS",
+  csrf: "CSRF",
   compress: "Compress",
   helmet: "Helmet（セキュリティヘッダ）",
   etag: "ETag",
@@ -312,6 +321,7 @@ const jaLabels: SidebarLabels = {
   auth: "認証",
   authEntry: "Auth エントリ",
   bearer: "Bearer ストラテジー",
+  session: "Session ストラテジー",
   apiKey: "API Key ストラテジー",
   jwt: "JWT ストラテジー",
   docs: "業務ドキュメント",
@@ -367,6 +377,7 @@ const koLabels: SidebarLabels = {
   envelope: "응답 봉투",
   middlewares: "자주 쓰는 미들웨어",
   cors: "CORS",
+  csrf: "CSRF",
   compress: "압축 Compress",
   helmet: "보안 헤더 Helmet",
   etag: "ETag",
@@ -378,6 +389,7 @@ const koLabels: SidebarLabels = {
   auth: "인증",
   authEntry: "Auth",
   bearer: "Bearer 전략",
+  session: "Session 전략",
   apiKey: "API Key 전략",
   jwt: "JWT 전략",
   docs: "업무 문서",
@@ -433,6 +445,7 @@ const ruLabels: SidebarLabels = {
   envelope: "Обёртка ответа",
   middlewares: "Частые middleware",
   cors: "CORS",
+  csrf: "CSRF",
   compress: "Compress",
   helmet: "Helmet",
   etag: "ETag",
@@ -444,6 +457,7 @@ const ruLabels: SidebarLabels = {
   auth: "Аутентификация",
   authEntry: "Auth",
   bearer: "Bearer",
+  session: "Session",
   apiKey: "API Key",
   jwt: "JWT",
   docs: "Бизнес-документация",
@@ -535,6 +549,7 @@ const makeSidebar = (
           collapsed: true,
           items: [
             { text: t.cors, link: p('/plugins/cors') },
+            { text: t.csrf, link: p('/plugins/csrf') },
             { text: t.compress, link: p('/plugins/compress') },
             { text: t.helmet, link: p('/plugins/helmet') },
             { text: t.etag, link: p('/plugins/etag') },
@@ -551,6 +566,7 @@ const makeSidebar = (
           items: [
             { text: t.authEntry, link: p('/plugins/auth') },
             { text: t.bearer, link: p('/plugins/auth-bearer-strategy') },
+            { text: t.session, link: p('/plugins/auth-session-strategy') },
             { text: t.apiKey, link: p('/plugins/auth-api-key-strategy') },
             { text: t.jwt, link: p('/plugins/auth-jwt-strategy') },
           ],
