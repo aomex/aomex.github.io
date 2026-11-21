@@ -28,7 +28,7 @@ export default class CacheService extends BaseCacheService { // [!code focus:28]
     await this.cache.set(
       this.loginTokenKey.key(token),
       session,
-      this.ttl.DAY * 7,
+      '7 days',
     );
   }
 
@@ -38,7 +38,7 @@ export default class CacheService extends BaseCacheService { // [!code focus:28]
 }
 ```
 
-`get` / `set` / `delete` 등은 **문자열 또는 `CacheKey`**를 받는다. `get<T>(key)`에 제네릭을 붙이면 반환 타입은 `T | null`. `set` 세 번째 인자는 만료 **밀리초**. `this.ttl.DAY`, `this.ttl.MINUTE`로 매직 넘버를 줄인다. `services.cache.xxx`의 메서드 이름·인자는 CacheService에 선언한 것과 같다. 시그니처를 바꾸면 컴파일러가 라우트와 인증 콜백까지 따라 간다.
+`get` / `set` / `delete` 등은 **문자열 또는 `CacheKey`**를 받는다. `get<T>(key)`에 제네릭을 붙이면 반환 타입은 `T | null`. `set` / `setNX` / `expire` 만료와 `@remember`의 `duration`은 **`DurationInput`**: 밀리초 또는 `'7 days'`, `'30m'`, `'1.5 hours'` 같은 문자열(아래 참고). `services.cache.xxx`의 메서드 이름·인자는 CacheService에 선언한 것과 같다. 시그니처를 바꾸면 컴파일러가 라우트와 인증 콜백까지 따라 간다.
 
 등록과 워밍업(프로덕션에서 Redis로 바꿀 때는 특히 `eager` 권장):
 
@@ -136,6 +136,21 @@ this.keyHash('user', 1); // 同上，整键哈希
 protected readonly loginTokenKey = this.key('login-token', 'v2');
 ```
 
+## 기간 DurationInput
+
+만료 시간에 `60_000`을 직접 쓰지 않아도 된다. `set` / `setNX` / `expire`, `@remember`의 `duration`은 다음을 받는다:
+
+- **number**: 밀리초(이전과 동일)
+- **문자열**: 숫자 + 단위, 공백 선택——`'30m'`, `'1 hour'`, `'7 days'`
+
+자주 쓰는 단위: `ms` / `s`(`sec` / `second`) / `m`(`min` / `minute`) / `h`(`hr` / `hour`) / `d`(`day`) / `w`(`week`) / `month` / `y`(`year`). `month`는 30일, `year`는 365일. 다른 곳에서 읽을 수 있는 기간을 밀리초로 바꿀 때 `import { parseDuration } from '@aomex/common'`도 쓸 수 있다.
+
+```typescript
+await this.cache.set(key, session, '7 days');
+await this.cache.setNX(lockKey, '1', '30 seconds');
+await this.cache.expire(key, '1 hour');
+```
+
 ## exists: 있는지 여부만
 
 키가 **있는지**만 알면 되고 값을 읽어 디코딩할 필요가 없을 때는 `exists`를 쓴다. `boolean`을 반환하며 문자열 또는 `CacheKey`를 받는다.
@@ -143,7 +158,7 @@ protected readonly loginTokenKey = this.key('login-token', 'v2');
 ```typescript
 const key = this.loginTokenKey.key(token);
 if (await this.cache.exists(key)) {
-  // 会话还在，再决定要不要 get 详情
+  // 세션이 아직 있음 — get 할지 결정
 }
 ```
 
@@ -160,13 +175,24 @@ if (await this.cache.exists(key)) {
 락 획득·멱등(TTL은 작업 최악 시간보다 커야 함):
 
 ```typescript
-const ok = await this.cache.setNX(lockKey, '1', 30_000);
-if (ok) {
-  await this.cache.expire(lockKey, 30_000);
+const ok = await this.cache.setNX(lockKey, '1', '30 seconds');
+if (!ok) {
+  return;
 }
 ```
 
-인증 코드 실패 횟수 등 윈도우 카운트는 `increment` / `expire`.
+인증 코드 실패 횟수: 먼저 `increment`, 첫 호출(또는 TTL이 아직 없을 때)에 `expire`로 창을 연다——Redis `INCR`과 같은 습관. memory 어댑터의 증감은 **기존 TTL을 유지**하고 숫자를 바꿔도 만료를 지우지 않는다.
+
+```typescript
+const key = this.key('otp-fail', phone);
+const n = await this.cache.increment(key);
+if (n === 1 || (await this.cache.ttl(key)) === -1) {
+  await this.cache.expire(key, '15 minutes'); // [!code highlight]
+}
+if (n > 5) {
+  ctx.throw(429);
+}
+```
 
 ## 캐시 데코레이터
 
@@ -191,26 +217,26 @@ export const remember = createRemember(CacheService); // [!code highlight]
 
 ### 업무 메서드에 적용
 
-메서드는 **async**(Promise 반환)여야 한다. 밀리초만 넘기면 「캐시 유지 시간」이다:
+메서드는 **async**(Promise 반환)여야 한다. 기간만 넘기면 「캐시 유지 시간」(`DurationInput`):
 
 ```typescript
 import { Service } from '@aomex/common';
 import { remember } from './cache.service.js';
 
 class ReportService extends Service {
-  @remember(60_000)
+  @remember('1 minute')
   async build(id: number) {
     return heavyCompute(id);
   }
 }
 ```
 
-key나 기본값을 쓰려면 객체를 넘긴다. 이때 `await services.report.find(1)` 첫 호출은 DB로 가고, 창 안에서 같은 인자로 다시 호출하면 캐시를 읽는다. `duration`은 기록 후 만료 **밀리초**다:
+key나 기본값을 쓰려면 객체를 넘긴다. 이때 `await services.report.find(1)` 첫 호출은 DB로 가고, 창 안에서 같은 인자로 다시 호출하면 캐시를 읽는다. `duration`은 기록 후 만료 시간:
 
 ```typescript
 class ReportService extends Service {
   @remember({ // [!code focus:8]
-    duration: 60_000,
+    duration: '1 minute',
     key: (id) => {
       return `report:${id}`;
     },
@@ -224,7 +250,7 @@ class ReportService extends Service {
 
 | 쓰는 법 | 역할 |
 | --- | --- |
-| `@remember(60_000)` | 만료만 지정. key는 기본 규칙 |
+| `@remember('1 minute')` / `@remember(60_000)` | 만료만 지정. key는 기본 규칙 |
 | `duration` | 필수(객체 형태). 캐시 기간 |
 | `key: '고정 문자열'` | 메서드 전체 하나의 키(무인자·전역 단일 결과) |
 | `key: (...args) => string` | 인자로 키 조합. `this`는 업무 인스턴스 |
@@ -255,5 +281,6 @@ class ReportService extends Service {
 ## 다음 단계
 
 - 서비스 등록과 eager: [서비스 계층](/ko/core/service)
+- 남용 카운트 `store`: [남용 방어](/ko/plugins/abuse)
 - 인증에서 session 사용: [Auth 통합 진입점](/ko/plugins/auth)
 - Bearer와 token 전략: [Bearer 전략](/ko/plugins/auth-bearer-strategy)

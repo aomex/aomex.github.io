@@ -128,6 +128,7 @@ IP만으로 제한하면 NAT 뒤 한 건물이 하나의 key를 공유해 오탐
 
 ## 다음 단계
 
+- 허니팟 / 오류 누적 / IP 차단: [남용 방어](/ko/plugins/abuse)
 - 실제 IP(제한 key): [Web 앱](/ko/web/)의 proxyIP
 - 신원 차원: [Auth](/ko/plugins/auth)
 - 오류 형태: [오류 형식](/ko/web/errors)

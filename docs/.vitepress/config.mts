@@ -44,6 +44,7 @@ type SidebarLabels = {
   accessLog: string;
   prettyJson: string;
   rateLimit: string;
+  abuse: string;
   responseTime: string;
   serveStatic: string;
   auth: string;
@@ -112,6 +113,7 @@ const zhLabels: SidebarLabels = {
   accessLog: '访问日志',
   prettyJson: '美化 JSON',
   rateLimit: '请求限速',
+  abuse: '滥用防护',
   responseTime: '响应时间',
   serveStatic: '静态文件',
   auth: '身份认证',
@@ -180,6 +182,7 @@ const zhTWLabels: SidebarLabels = {
   accessLog: '訪問日誌',
   prettyJson: '美化 JSON',
   rateLimit: '請求限速',
+  abuse: '濫用防護',
   responseTime: '響應時間',
   serveStatic: '靜態檔案',
   auth: '身份認證',
@@ -248,6 +251,7 @@ const enLabels: SidebarLabels = {
   accessLog: 'Access log',
   prettyJson: 'Pretty JSON',
   rateLimit: 'Rate limit',
+  abuse: 'Abuse protection',
   responseTime: 'Response time',
   serveStatic: 'Static files',
   auth: 'Authentication',
@@ -316,6 +320,7 @@ const jaLabels: SidebarLabels = {
   accessLog: "アクセスログ",
   prettyJson: "JSON の整形",
   rateLimit: "レート制限",
+  abuse: "乱用対策",
   responseTime: "レスポンス時間",
   serveStatic: "静的ファイル",
   auth: "認証",
@@ -384,6 +389,7 @@ const koLabels: SidebarLabels = {
   accessLog: "액세스 로그",
   prettyJson: "JSON 포맷",
   rateLimit: "요청 제한",
+  abuse: "남용 방어",
   responseTime: "응답 시간",
   serveStatic: "정적 파일",
   auth: "인증",
@@ -452,6 +458,7 @@ const ruLabels: SidebarLabels = {
   accessLog: "Лог доступа",
   prettyJson: "Pretty JSON",
   rateLimit: "Ограничение частоты",
+  abuse: "Защита от злоупотреблений",
   responseTime: "Время ответа",
   serveStatic: "Статические файлы",
   auth: "Аутентификация",
@@ -556,6 +563,7 @@ const makeSidebar = (
             { text: t.accessLog, link: p('/plugins/http-access-log') },
             { text: t.prettyJson, link: p('/plugins/pretty-json') },
             { text: t.rateLimit, link: p('/plugins/rate-limit') },
+            { text: t.abuse, link: p('/plugins/abuse') },
             { text: t.responseTime, link: p('/plugins/response-time') },
             { text: t.serveStatic, link: p('/plugins/serve-static') },
           ],

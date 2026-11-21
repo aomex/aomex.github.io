@@ -128,6 +128,7 @@ IP-only limits behind NAT share one key for a whole office—easy false positive
 
 ## Next steps
 
+- Honeypot / error tallies / IP blocks: [Abuse protection](/en/plugins/abuse)
 - Real client IP (rate-limit key): `proxyIP` on [Web entry](/en/web/)
 - Identity dimension: [Auth](/en/plugins/auth)
 - Error shape: [Error format](/en/web/errors)

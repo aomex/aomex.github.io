@@ -28,7 +28,7 @@ export default class CacheService extends BaseCacheService { // [!code focus:28]
     await this.cache.set(
       this.loginTokenKey.key(token),
       session,
-      this.ttl.DAY * 7,
+      '7 days',
     );
   }
 
@@ -38,7 +38,8 @@ export default class CacheService extends BaseCacheService { // [!code focus:28]
 }
 ```
 
-`get` / `set` / `delete` 等接受 **字符串或 `CacheKey`**。`get<T>(key)` 带上泛型后，返回值类型上是 `T | null`；set 第三参是过期**毫秒**，`this.ttl.DAY`、`this.ttl.MINUTE` 用来少写魔法数字。`services.cache.xxx` 的方法名、参数跟你在 CacheService 里声明的一致，改签名时编译器会追着路由和鉴权回调改。
+`get` / `set` / `delete` 等接受 **字符串或 `CacheKey`**。`get<T>(key)` 带上泛型后，返回值类型上是 `T | null`；`set` / `setNX` / `expire` 的过期时间是 **`DurationInput`**：毫秒数或可读字符串（`'7 days'`、`'30m'`、`'1.5 hours'`），见下文。`services.cache.xxx` 的方法名、参数跟你在 CacheService 里声明的一致，改签名时编译器会追着路由和鉴权回调改。
+
 注册并预热（生产换 Redis 时尤其建议 eager）：
 
 ```typescript
@@ -135,6 +136,21 @@ this.keyHash('user', 1); // 同上，整键哈希
 protected readonly loginTokenKey = this.key('login-token', 'v2');
 ```
 
+## 时长 DurationInput
+
+过期时间不必再手写 `60_000`。`set` / `setNX` / `expire`，以及 `@remember` 的 `duration`，都接受：
+
+- **number**：毫秒（与以前一样）
+- **字符串**：数字 + 单位，空格可选——`'30m'`、`'1 hour'`、`'7 days'`
+
+常用单位：`ms` / `s`（`sec` / `second`）/ `m`（`min` / `minute`）/ `h`（`hr` / `hour`）/ `d`（`day`）/ `w`（`week`）/ `month` / `y`（`year`）。`month` 按 30 天、`year` 按 365 天。也可直接 `import { parseDuration } from '@aomex/common'`，在别处把可读时长换成毫秒。
+
+```typescript
+await this.cache.set(key, session, '7 days');
+await this.cache.setNX(lockKey, '1', '30 seconds');
+await this.cache.expire(key, '1 hour');
+```
+
 ## exists：只要有没有
 
 只想知道某个键**在不在**、不必把值读出来解码时，用 `exists`。返回 `boolean`，同样接受字符串或 `CacheKey`。
@@ -154,18 +170,29 @@ if (await this.cache.exists(key)) {
 
 ## setNX 与计数
 
-`setNX` 在 key 不存在时写入，用来做分布式锁、幂等「只处理一次」；TTL 要覆盖任务最坏耗时，否则锁过期后可能被第二个 worker 抢走。`increment` / `expire` 适合验证码错误次数、滑动窗口计数。
+`setNX` 在 key 不存在时写入，用来做分布式锁、幂等「只处理一次」；TTL 要覆盖任务最坏耗时，否则锁过期后可能被第二个 worker 抢走。`increment` / `expire` 适合验证码错误次数、固定窗口计数。
 
 抢锁、幂等（TTL 要大于任务最坏耗时）：
 
 ```typescript
-const ok = await this.cache.setNX(lockKey, '1', 30_000);
-if (ok) {
-  await this.cache.expire(lockKey, 30_000);
+const ok = await this.cache.setNX(lockKey, '1', '30 seconds');
+if (!ok) {
+  return;
 }
 ```
 
-验证码错误次数等窗口计数用 increment / expire。
+验证码错误次数：先 `increment`，首次（或尚未设过期）再 `expire` 拉开窗口——与 Redis `INCR` 习惯一致。memory 适配器的自增 / 自减会**保留已有 TTL**，不会因为改数字把过期清掉。
+
+```typescript
+const key = this.key('otp-fail', phone);
+const n = await this.cache.increment(key);
+if (n === 1 || (await this.cache.ttl(key)) === -1) {
+  await this.cache.expire(key, '15 minutes'); // [!code highlight]
+}
+if (n > 5) {
+  ctx.throw(429);
+}
+```
 
 ## 缓存装饰器
 
@@ -190,26 +217,26 @@ export const remember = createRemember(CacheService); // [!code highlight]
 
 ### 挂到业务方法
 
-方法必须是 **async**（返回 Promise）。只传毫秒数时，等于「缓存多久」：
+方法必须是 **async**（返回 Promise）。只传时长时，等于「缓存多久」（`DurationInput`）：
 
 ```typescript
 import { Service } from '@aomex/common';
 import { remember } from './cache.service.js';
 
 class ReportService extends Service {
-  @remember(60_000)
+  @remember('1 minute')
   async build(id: number) {
     return heavyCompute(id);
   }
 }
 ```
 
-要自定义 key 或缺省值时改传对象；这时 `await services.report.find(1)` 的第一次会进库，窗口内再调同参就读缓存。`duration` 是写入后的过期**毫秒**：
+要自定义 key 或缺省值时改传对象；这时 `await services.report.find(1)` 的第一次会进库，窗口内再调同参就读缓存。`duration` 仍是写入后的过期时间：
 
 ```typescript
 class ReportService extends Service {
   @remember({ // [!code focus:8]
-    duration: 60_000,
+    duration: '1 minute',
     key: (id) => {
       return `report:${id}`;
     },
@@ -223,7 +250,7 @@ class ReportService extends Service {
 
 | 写法 | 干什么 |
 | --- | --- |
-| `@remember(60_000)` | 只定过期时间；key 用默认规则 |
+| `@remember('1 minute')` / `@remember(60_000)` | 只定过期时间；key 用默认规则 |
 | `duration` | 必填（对象写法里）；缓存多久 |
 | `key: '固定串'` | 整方法共用一个键（无参、全站单例结果） |
 | `key: (...args) => string` | 按参数拼键；`this` 仍是业务实例 |
@@ -254,5 +281,6 @@ class ReportService extends Service {
 ## 下一步
 
 - 服务注册与 eager：[服务层](/zh/core/service)
+- 滥用计数的 `store`：[滥用防护](/zh/plugins/abuse)
 - 鉴权里怎么用 session：[统一入口 Auth](/zh/plugins/auth)
 - Bearer 与 token 策略：[Bearer 策略](/zh/plugins/auth-bearer-strategy)

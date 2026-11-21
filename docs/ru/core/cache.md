@@ -28,7 +28,7 @@ export default class CacheService extends BaseCacheService { // [!code focus:28]
     await this.cache.set(
       this.loginTokenKey.key(token),
       session,
-      this.ttl.DAY * 7,
+      '7 days',
     );
   }
 
@@ -38,7 +38,7 @@ export default class CacheService extends BaseCacheService { // [!code focus:28]
 }
 ```
 
-`get` / `set` / `delete` и др. принимают **строку или `CacheKey`**. С дженериком у `get<T>(key)` возврат типизируется как `T | null`; третий аргумент `set` — TTL в **миллисекундах**. `this.ttl.DAY`, `this.ttl.MINUTE` сокращают магические числа. Имена и параметры `services.cache.xxx` совпадают с объявлением в CacheService; смена сигнатуры заставит компилятор пройтись по маршрутам и колбэкам авторизации.
+`get` / `set` / `delete` и др. принимают **строку или `CacheKey`**. С дженериком у `get<T>(key)` возврат типизируется как `T | null`; срок у `set` / `setNX` / `expire` и у `duration` в `@remember` — это **`DurationInput`**: миллисекунды или читаемые строки (`'7 days'`, `'30m'`, `'1.5 hours'`) — см. ниже. Имена и параметры `services.cache.xxx` совпадают с объявлением в CacheService; смена сигнатуры заставит компилятор пройтись по маршрутам и колбэкам авторизации.
 
 Регистрация и прогрев (в проде при переходе на Redis особенно нужен `eager`):
 
@@ -136,6 +136,21 @@ this.keyHash('user', 1); // 同上，整键哈希
 protected readonly loginTokenKey = this.key('login-token', 'v2');
 ```
 
+## Длительность DurationInput
+
+Срок не обязательно писать как `60_000`. `set` / `setNX` / `expire` и `duration` у `@remember` принимают:
+
+- **number**: миллисекунды (как раньше)
+- **строка**: число + единица, пробел по желанию — `'30m'`, `'1 hour'`, `'7 days'`
+
+Частые единицы: `ms` / `s` (`sec` / `second`) / `m` (`min` / `minute`) / `h` (`hr` / `hour`) / `d` (`day`) / `w` (`week`) / `month` / `y` (`year`). `month` — 30 дней, `year` — 365. В других местах можно `import { parseDuration } from '@aomex/common'`.
+
+```typescript
+await this.cache.set(key, session, '7 days');
+await this.cache.setNX(lockKey, '1', '30 seconds');
+await this.cache.expire(key, '1 hour');
+```
+
 ## exists: только наличие
 
 Когда нужно лишь узнать, **есть ли** ключ, без чтения и декодирования значения, используй `exists`. Возвращает `boolean`, принимает строку или `CacheKey`.
@@ -143,7 +158,7 @@ protected readonly loginTokenKey = this.key('login-token', 'v2');
 ```typescript
 const key = this.loginTokenKey.key(token);
 if (await this.cache.exists(key)) {
-  // 会话还在，再决定要不要 get 详情
+  // сессия ещё есть — решать, нужен ли get
 }
 ```
 
@@ -160,13 +175,24 @@ if (await this.cache.exists(key)) {
 Замок, идемпотентность (TTL больше худшего времени задачи):
 
 ```typescript
-const ok = await this.cache.setNX(lockKey, '1', 30_000);
-if (ok) {
-  await this.cache.expire(lockKey, 30_000);
+const ok = await this.cache.setNX(lockKey, '1', '30 seconds');
+if (!ok) {
+  return;
 }
 ```
 
-Оконные счётчики вроде неудачных попыток кода — `increment` / `expire`.
+Ошибки кода: сначала `increment`, при первом срабатывании (или если TTL ещё нет) — `expire` на окно; как привычка Redis `INCR`. В memory-адаптере `increment` / `decrement` **сохраняют текущий TTL**, смена числа не сбрасывает срок.
+
+```typescript
+const key = this.key('otp-fail', phone);
+const n = await this.cache.increment(key);
+if (n === 1 || (await this.cache.ttl(key)) === -1) {
+  await this.cache.expire(key, '15 minutes'); // [!code highlight]
+}
+if (n > 5) {
+  ctx.throw(429);
+}
+```
 
 ## Декоратор кэша
 
@@ -191,26 +217,26 @@ export const remember = createRemember(CacheService); // [!code highlight]
 
 ### На бизнес-методы
 
-Метод должен быть **async** (возвращать `Promise`). Одно число — «сколько держать в кэше»:
+Метод должен быть **async** (возвращать `Promise`). Одна длительность — «сколько держать в кэше» (`DurationInput`):
 
 ```typescript
 import { Service } from '@aomex/common';
 import { remember } from './cache.service.js';
 
 class ReportService extends Service {
-  @remember(60_000)
+  @remember('1 minute')
   async build(id: number) {
     return heavyCompute(id);
   }
 }
 ```
 
-Чтобы задать ключ или значение по умолчанию, передай объект. Тогда первый `await services.report.find(1)` идёт в БД; повтор с теми же аргументами в окне читает кэш. `duration` — TTL в **миллисекундах**:
+Чтобы задать ключ или значение по умолчанию, передай объект. Тогда первый `await services.report.find(1)` идёт в БД; повтор с теми же аргументами в окне читает кэш. `duration` — срок после записи:
 
 ```typescript
 class ReportService extends Service {
   @remember({ // [!code focus:8]
-    duration: 60_000,
+    duration: '1 minute',
     key: (id) => {
       return `report:${id}`;
     },
@@ -224,7 +250,7 @@ class ReportService extends Service {
 
 | Форма | Назначение |
 | --- | --- |
-| `@remember(60_000)` | Только срок; ключ по умолчанию |
+| `@remember('1 minute')` / `@remember(60_000)` | Только срок; ключ по умолчанию |
 | `duration` | Обязательно (объектная форма); срок кэша |
 | `key: 'фиксированная строка'` | Один ключ на весь метод (без аргументов, один результат на сайт) |
 | `key: (...args) => string` | Ключ из аргументов; `this` — экземпляр сервиса |
@@ -255,5 +281,6 @@ class ReportService extends Service {
 ## Дальше
 
 - Регистрация сервисов и `eager`: [Сервисный слой](/ru/core/service)
+- `store` для счётчиков abuse: [Защита от злоупотреблений](/ru/plugins/abuse)
 - Session в авторизации: [Единая точка Auth](/ru/plugins/auth)
 - Bearer и стратегии token: [Стратегия Bearer](/ru/plugins/auth-bearer-strategy)

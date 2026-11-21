@@ -28,7 +28,7 @@ export default class CacheService extends BaseCacheService { // [!code focus:28]
     await this.cache.set(
       this.loginTokenKey.key(token),
       session,
-      this.ttl.DAY * 7,
+      '7 days',
     );
   }
 
@@ -38,7 +38,7 @@ export default class CacheService extends BaseCacheService { // [!code focus:28]
 }
 ```
 
-`get` / `set` / `delete` accept **string or `CacheKey`**. With a generic on `get<T>(key)`, the return type is `T | null`; the third argument to `set` is TTL in **milliseconds**—use `this.ttl.DAY` and `this.ttl.MINUTE` to avoid magic numbers. Method names and parameters on `services.cache.xxx` match what you declare on `CacheService`; change a signature and the compiler nudges routes and auth callbacks too.
+`get` / `set` / `delete` accept **string or `CacheKey`**. With a generic on `get<T>(key)`, the return type is `T | null`; expiry on `set` / `setNX` / `expire`, and on `@remember`'s `duration`, is **`DurationInput`**: milliseconds or readable strings (`'7 days'`, `'30m'`, `'1.5 hours'`)—see below. Method names and parameters on `services.cache.xxx` match what you declare on `CacheService`; change a signature and the compiler nudges routes and auth callbacks too.
 
 Register and warm up (use `eager` in production when switching to Redis):
 
@@ -136,6 +136,21 @@ Use hashing when a segment is long, has odd characters, or you do not want plain
 protected readonly loginTokenKey = this.key('login-token', 'v2');
 ```
 
+## DurationInput
+
+You no longer need to hand-write `60_000`. `set` / `setNX` / `expire`, and `@remember`'s `duration`, all accept:
+
+- **number**: milliseconds (same as before)
+- **string**: number + unit, optional space—`'30m'`, `'1 hour'`, `'7 days'`
+
+Common units: `ms` / `s` (`sec` / `second`) / `m` (`min` / `minute`) / `h` (`hr` / `hour`) / `d` (`day`) / `w` (`week`) / `month` / `y` (`year`). A `month` is 30 days, a `year` is 365 days. You can also `import { parseDuration } from '@aomex/common'` to turn readable durations into milliseconds elsewhere.
+
+```typescript
+await this.cache.set(key, session, '7 days');
+await this.cache.setNX(lockKey, '1', '30 seconds');
+await this.cache.expire(key, '1 hour');
+```
+
 ## exists: just presence
 
 When you only need to know whether a key **is present**—without reading and decoding the value—use `exists`. It returns a `boolean` and accepts a string or `CacheKey`.
@@ -143,7 +158,7 @@ When you only need to know whether a key **is present**—without reading and de
 ```typescript
 const key = this.loginTokenKey.key(token);
 if (await this.cache.exists(key)) {
-  // 会话还在，再决定要不要 get 详情
+  // session still present — decide whether to get details
 }
 ```
 
@@ -160,13 +175,24 @@ Between「exists then get」another client may delete or change the key—do not
 Lock grab, idempotency (TTL greater than worst-case task time):
 
 ```typescript
-const ok = await this.cache.setNX(lockKey, '1', 30_000);
-if (ok) {
-  await this.cache.expire(lockKey, 30_000);
+const ok = await this.cache.setNX(lockKey, '1', '30 seconds');
+if (!ok) {
+  return;
 }
 ```
 
-Window counters such as failed verification attempts use `increment` / `expire`.
+Failed verification attempts: `increment` first, then `expire` on the first hit (or when TTL is not set yet)—same habit as Redis `INCR`. On the memory adapter, `increment` / `decrement` **keep the existing TTL** instead of clearing expiry when the number changes.
+
+```typescript
+const key = this.key('otp-fail', phone);
+const n = await this.cache.increment(key);
+if (n === 1 || (await this.cache.ttl(key)) === -1) {
+  await this.cache.expire(key, '15 minutes'); // [!code highlight]
+}
+if (n > 5) {
+  ctx.throw(429);
+}
+```
 
 ## Cache decorator
 
@@ -191,26 +217,26 @@ After `BaseCacheService` connects the adapter in `onInit`, remember is wired aut
 
 ### Apply to business methods
 
-The method must be **async** (return a `Promise`). Passing only milliseconds means “how long to cache”:
+The method must be **async** (return a `Promise`). Passing only a duration means “how long to cache” (`DurationInput`):
 
 ```typescript
 import { Service } from '@aomex/common';
 import { remember } from './cache.service.js';
 
 class ReportService extends Service {
-  @remember(60_000)
+  @remember('1 minute')
   async build(id: number) {
     return heavyCompute(id);
   }
 }
 ```
 
-To customize the key or default value, pass an object. The first `await services.report.find(1)` hits the DB; later calls with the same args within the window read the cache. `duration` is TTL in **milliseconds**:
+To customize the key or default value, pass an object. The first `await services.report.find(1)` hits the DB; later calls with the same args within the window read the cache. `duration` is how long the entry lives after write:
 
 ```typescript
 class ReportService extends Service {
   @remember({ // [!code focus:8]
-    duration: 60_000,
+    duration: '1 minute',
     key: (id) => {
       return `report:${id}`;
     },
@@ -224,7 +250,7 @@ class ReportService extends Service {
 
 | Form | Purpose |
 | --- | --- |
-| `@remember(60_000)` | TTL only; default key rule |
+| `@remember('1 minute')` / `@remember(60_000)` | TTL only; default key rule |
 | `duration` | Required (object form); how long to cache |
 | `key: 'fixed-string'` | One key for the whole method (no args, site-wide singleton result) |
 | `key: (...args) => string` | Key from args; `this` is still the business instance |
@@ -255,5 +281,6 @@ Use only on **read-heavy, write-light** queries that can go slightly stale. Do n
 ## Next steps
 
 - Service registration and `eager`: [Service layer](/en/core/service)
+- `store` for abuse counters: [Abuse protection](/en/plugins/abuse)
 - Using session in auth: [Auth entry point](/en/plugins/auth)
 - Bearer and token strategies: [Bearer strategy](/en/plugins/auth-bearer-strategy)

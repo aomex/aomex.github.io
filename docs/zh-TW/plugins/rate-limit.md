@@ -8,7 +8,7 @@ outline: deep
 
 **按 IP / 連線的全站限流，生產優先用 Nginx**（如 `limit_req_zone` / `limit_req`）：請求還沒進 Node 就被擋住，多副本也不用先上 Redis。`@aomex/rate-limit` 更適合：**按使用者 / API Key 等業務鍵**、登入簡訊等單路由收緊，或本地沒有反代時先頂一陣。
 
-預設**程序內記憶體**計數——單機夠用；多副本且必須在應用內計數時要換 Redis，否則總限額約等於 `maxRequest × 实例数`。
+預設**程序內記憶體**計數——單機夠用；多副本且必須在應用內計數時要換 Redis，否則總限額約等於 `maxRequest × 例項數`。
 
 ```bash
 pnpm add @aomex/rate-limit
@@ -128,6 +128,7 @@ rateLimit({
 
 ## 下一步
 
+- 蜜罐 / 錯誤累計 / 封 IP：[濫用防護](/zh-TW/plugins/abuse)
 - 真實 IP（限流鍵）：[應用入口](/zh-TW/web/) 裡 proxyIP
 - 身份維度：[Auth](/zh-TW/plugins/auth)
 - 錯誤形態：[錯誤格式](/zh-TW/web/errors)

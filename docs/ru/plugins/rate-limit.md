@@ -128,6 +128,7 @@ rateLimit({
 
 ## Дальше
 
+- Honeypot / ошибки / блок IP: [Защита от злоупотреблений](/ru/plugins/abuse)
 - Реальный IP (ключ лимита): `proxyIP` во [входе Web](/ru/web/)
 - Измерение по идентичности: [Auth](/ru/plugins/auth)
 - Формат ошибок: [Формат ошибок](/ru/web/errors)

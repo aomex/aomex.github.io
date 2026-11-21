@@ -128,6 +128,7 @@ IP のみの制限だと、NAT 背後のオフィス全体が 1 キーになり�
 
 ## 次のステップ
 
+- ハニーポット / エラー累計 / IP ブロック：[乱用対策](/ja/plugins/abuse)
 - 実 IP（レート制限キー）：[アプリ入口](/ja/web/) の proxyIP
 - 認証の軸：[Auth](/ja/plugins/auth)
 - エラーの形：[エラーフォーマット](/ja/web/errors)

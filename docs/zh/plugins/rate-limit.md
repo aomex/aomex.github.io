@@ -128,6 +128,7 @@ rateLimit({
 
 ## 下一步
 
+- 蜜罐 / 错误累计 / 封 IP：[滥用防护](/zh/plugins/abuse)
 - 真实 IP（限流键）：[应用入口](/zh/web/) 里 proxyIP
 - 身份维度：[Auth](/zh/plugins/auth)
 - 错误形态：[错误格式](/zh/web/errors)

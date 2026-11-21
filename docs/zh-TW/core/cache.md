@@ -28,7 +28,7 @@ export default class CacheService extends BaseCacheService { // [!code focus:28]
     await this.cache.set(
       this.loginTokenKey.key(token),
       session,
-      this.ttl.DAY * 7,
+      '7 days',
     );
   }
 
@@ -38,7 +38,8 @@ export default class CacheService extends BaseCacheService { // [!code focus:28]
 }
 ```
 
-`get` / `set` / `delete` 等接受 **字串或 `CacheKey`**。`get<T>(key)` 帶上泛型後，返回值型別上是 `T | null`；set 第三參是過期**毫秒**，`this.ttl.DAY`、`this.ttl.MINUTE` 用來少寫魔法數字。`services.cache.xxx` 的方法名、引數跟你在 CacheService 裡宣告的一致，改簽名時編譯器會追著路由和鑑權回撥改。
+`get` / `set` / `delete` 等接受 **字串或 `CacheKey`**。`get<T>(key)` 帶上泛型後，返回值型別上是 `T | null`；`set` / `setNX` / `expire` 的過期時間是 **`DurationInput`**：毫秒數或可讀字串（`'7 days'`、`'30m'`、`'1.5 hours'`），見下文。`services.cache.xxx` 的方法名、引數跟你在 CacheService 裡宣告的一致，改簽名時編譯器會追著路由和鑑權回撥改。
+
 註冊並預熱（生產換 Redis 時尤其建議 eager）：
 
 ```typescript
@@ -135,6 +136,21 @@ this.keyHash('user', 1); // 同上，整键哈希
 protected readonly loginTokenKey = this.key('login-token', 'v2');
 ```
 
+## 時長 DurationInput
+
+過期時間不必再手寫 `60_000`。`set` / `setNX` / `expire`，以及 `@remember` 的 `duration`，都接受：
+
+- **number**：毫秒（與以前一樣）
+- **字串**：數字 + 單位，空格可選——`'30m'`、`'1 hour'`、`'7 days'`
+
+常用單位：`ms` / `s`（`sec` / `second`）/ `m`（`min` / `minute`）/ `h`（`hr` / `hour`）/ `d`（`day`）/ `w`（`week`）/ `month` / `y`（`year`）。`month` 按 30 天、`year` 按 365 天。也可直接 `import { parseDuration } from '@aomex/common'`，在別處把可讀時長換成毫秒。
+
+```typescript
+await this.cache.set(key, session, '7 days');
+await this.cache.setNX(lockKey, '1', '30 seconds');
+await this.cache.expire(key, '1 hour');
+```
+
 ## exists：只要有沒有
 
 只想知道某個鍵**在不在**、不必把值讀出來解碼時，用 `exists`。返回 `boolean`，同樣接受字串或 `CacheKey`。
@@ -154,18 +170,29 @@ if (await this.cache.exists(key)) {
 
 ## setNX 與計數
 
-`setNX` 在 key 不存在時寫入，用來做分散式鎖、冪等「只處理一次」；TTL 要覆蓋任務最壞耗時，否則鎖過期後可能被第二個 worker 搶走。`increment` / `expire` 適合驗證碼錯誤次數、滑動視窗計數。
+`setNX` 在 key 不存在時寫入，用來做分散式鎖、冪等「只處理一次」；TTL 要覆蓋任務最壞耗時，否則鎖過期後可能被第二個 worker 搶走。`increment` / `expire` 適合驗證碼錯誤次數、固定視窗計數。
 
 搶鎖、冪等（TTL 要大於任務最壞耗時）：
 
 ```typescript
-const ok = await this.cache.setNX(lockKey, '1', 30_000);
-if (ok) {
-  await this.cache.expire(lockKey, 30_000);
+const ok = await this.cache.setNX(lockKey, '1', '30 seconds');
+if (!ok) {
+  return;
 }
 ```
 
-驗證碼錯誤次數等視窗計數用 increment / expire。
+驗證碼錯誤次數：先 `increment`，首次（或尚未設過期）再 `expire` 拉開視窗——與 Redis `INCR` 習慣一致。memory 介面卡的自增 / 自減會**保留已有 TTL**，不會因為改數字把過期清掉。
+
+```typescript
+const key = this.key('otp-fail', phone);
+const n = await this.cache.increment(key);
+if (n === 1 || (await this.cache.ttl(key)) === -1) {
+  await this.cache.expire(key, '15 minutes'); // [!code highlight]
+}
+if (n > 5) {
+  ctx.throw(429);
+}
+```
 
 ## 快取裝飾器
 
@@ -190,26 +217,26 @@ export const remember = createRemember(CacheService); // [!code highlight]
 
 ### 掛到業務方法
 
-方法必須是 **async**（返回 Promise）。只傳毫秒數時，等於「快取多久」：
+方法必須是 **async**（返回 Promise）。只傳時長時，等於「快取多久」（`DurationInput`）：
 
 ```typescript
 import { Service } from '@aomex/common';
 import { remember } from './cache.service.js';
 
 class ReportService extends Service {
-  @remember(60_000)
+  @remember('1 minute')
   async build(id: number) {
     return heavyCompute(id);
   }
 }
 ```
 
-要自定義 key 或預設值時改傳物件；這時 `await services.report.find(1)` 的第一次會進庫，視窗內再調同參就讀快取。`duration` 是寫入後的過期**毫秒**：
+要自定義 key 或預設值時改傳物件；這時 `await services.report.find(1)` 的第一次會進庫，視窗內再調同參就讀快取。`duration` 仍是寫入後的過期時間：
 
 ```typescript
 class ReportService extends Service {
   @remember({ // [!code focus:8]
-    duration: 60_000,
+    duration: '1 minute',
     key: (id) => {
       return `report:${id}`;
     },
@@ -223,7 +250,7 @@ class ReportService extends Service {
 
 | 寫法 | 幹什麼 |
 | --- | --- |
-| `@remember(60_000)` | 只定過期時間；key 用預設規則 |
+| `@remember('1 minute')` / `@remember(60_000)` | 只定過期時間；key 用預設規則 |
 | `duration` | 必填（物件寫法裡）；快取多久 |
 | `key: '固定串'` | 整方法共用一個鍵（無參、全站單例結果） |
 | `key: (...args) => string` | 按引數拼鍵；`this` 仍是業務例項 |
@@ -233,7 +260,7 @@ class ReportService extends Service {
 
 沒寫 `key` 時，框架用：
 
-`类名或 displayName` + `-` + `方法名` + `-` + `JSON.stringify(参数)`
+`類名或 displayName` + `-` + `方法名` + `-` + `JSON.stringify(引數)`
 
 繼承 `Service` 且類名以 `Service` 結尾時，會用去掉字尾的 `displayName`（`ReportService` → `Report`），避免鍵裡一長串字尾。引數會進 JSON，**別塞不可序列化或會抖的值**（`Date`、迴圈引用、每次不同的物件字面量），否則 key 對不上、等於沒快取。引數多或結構亂時，自己寫 `key` 更穩。
 
@@ -254,5 +281,6 @@ class ReportService extends Service {
 ## 下一步
 
 - 服務註冊與 eager：[服務層](/zh-TW/core/service)
+- 濫用計數的 `store`：[濫用防護](/zh-TW/plugins/abuse)
 - 鑑權裡怎麼用 session：[統一入口 Auth](/zh-TW/plugins/auth)
 - Bearer 與 token 策略：[Bearer 策略](/zh-TW/plugins/auth-bearer-strategy)

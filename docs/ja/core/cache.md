@@ -28,7 +28,7 @@ export default class CacheService extends BaseCacheService { // [!code focus:28]
     await this.cache.set(
       this.loginTokenKey.key(token),
       session,
-      this.ttl.DAY * 7,
+      '7 days',
     );
   }
 
@@ -38,7 +38,7 @@ export default class CacheService extends BaseCacheService { // [!code focus:28]
 }
 ```
 
-`get` / `set` / `delete` などは **文字列または `CacheKey`** を受け付ける。`get<T>(key)` にジェネリックを付けると戻り値の型は `T | null`。`set` の第三引数は有効期限の**ミリ秒**。`this.ttl.DAY` や `this.ttl.MINUTE` でマジックナンバーを減らせる。`services.cache.xxx` のメソッド名・引数は CacheService で宣言したものと一致する。署名を変えるとコンパイラがルートや認証コールバックまで追ってくれる。
+`get` / `set` / `delete` などは **文字列または `CacheKey`** を受け付ける。`get<T>(key)` にジェネリックを付けると戻り値の型は `T | null`。`set` / `setNX` / `expire` の有効期限、および `@remember` の `duration` は **`DurationInput`**：ミリ秒または `'7 days'`、`'30m'`、`'1.5 hours'` のような文字列（下記参照）。`services.cache.xxx` のメソッド名・引数は CacheService で宣言したものと一致する。署名を変えるとコンパイラがルートや認証コールバックまで追ってくれる。
 
 登録とウォームアップ（本番で Redis に替えるときは特に eager を推奨）：
 
@@ -136,6 +136,21 @@ this.keyHash('user', 1); // 同上，整键哈希
 protected readonly loginTokenKey = this.key('login-token', 'v2');
 ```
 
+## 期間 DurationInput
+
+有効期限に `60_000` を直書きしなくてよい。`set` / `setNX` / `expire`、および `@remember` の `duration` は次を受け付ける：
+
+- **number**：ミリ秒（従来どおり）
+- **文字列**：数字 + 単位、スペース任意——`'30m'`、`'1 hour'`、`'7 days'`
+
+よく使う単位：`ms` / `s`（`sec` / `second`）/ `m`（`min` / `minute`）/ `h`（`hr` / `hour`）/ `d`（`day`）/ `w`（`week`）/ `month` / `y`（`year`）。`month` は 30 日、`year` は 365 日。ほかの場所で読める時間をミリ秒にするなら `import { parseDuration } from '@aomex/common'` も使える。
+
+```typescript
+await this.cache.set(key, session, '7 days');
+await this.cache.setNX(lockKey, '1', '30 seconds');
+await this.cache.expire(key, '1 hour');
+```
+
 ## exists：あるかどうかだけ
 
 キーが**あるかどうか**だけ知りたく、値を読み出してデコードする必要がないときは `exists` を使う。戻り値は `boolean` で、文字列または `CacheKey` を受け付ける。
@@ -143,7 +158,7 @@ protected readonly loginTokenKey = this.key('login-token', 'v2');
 ```typescript
 const key = this.loginTokenKey.key(token);
 if (await this.cache.exists(key)) {
-  // 会话还在，再决定要不要 get 详情
+  // セッション存続中。詳細を get するか決める
 }
 ```
 
@@ -155,18 +170,29 @@ if (await this.cache.exists(key)) {
 
 ## setNX とカウンタ
 
-`setNX` はキーがないときだけ書き込む。分散ロックや冪等な「一度だけ処理」に使う。TTL はタスクの最悪時間をカバーすること。足りないとロック期限後に別 worker が奪う。`increment` / `expire` は認証コード失敗回数やスライディングウィンドウ向け。
+`setNX` はキーがないときだけ書き込む。分散ロックや冪等な「一度だけ処理」に使う。TTL はタスクの最悪時間をカバーすること。足りないとロック期限後に別 worker が奪う。`increment` / `expire` は認証コード失敗回数や固定ウィンドウ向け。
 
 ロック取得・冪等（TTL はタスク最悪時間より大きく）：
 
 ```typescript
-const ok = await this.cache.setNX(lockKey, '1', 30_000);
-if (ok) {
-  await this.cache.expire(lockKey, 30_000);
+const ok = await this.cache.setNX(lockKey, '1', '30 seconds');
+if (!ok) {
+  return;
 }
 ```
 
-認証コード失敗回数などのウィンドウカウントは `increment` / `expire`。
+認証コード失敗回数：先に `increment`、初回（またはまだ TTL がない）に `expire` でウィンドウを張る——Redis の `INCR` と同じ習慣。memory アダプタの増減は**既存 TTL を残し**、数字を変えても期限を消さない。
+
+```typescript
+const key = this.key('otp-fail', phone);
+const n = await this.cache.increment(key);
+if (n === 1 || (await this.cache.ttl(key)) === -1) {
+  await this.cache.expire(key, '15 minutes'); // [!code highlight]
+}
+if (n > 5) {
+  ctx.throw(429);
+}
+```
 
 ## キャッシュデコレータ
 
@@ -191,26 +217,26 @@ export const remember = createRemember(CacheService); // [!code highlight]
 
 ### 業務メソッドへ適用
 
-メソッドは **async**（Promise を返す）であること。ミリ秒だけ渡すと「キャッシュ保持時間」の意味：
+メソッドは **async**（Promise を返す）であること。期間だけ渡すと「キャッシュ保持時間」（`DurationInput`）の意味：
 
 ```typescript
 import { Service } from '@aomex/common';
 import { remember } from './cache.service.js';
 
 class ReportService extends Service {
-  @remember(60_000)
+  @remember('1 minute')
   async build(id: number) {
     return heavyCompute(id);
   }
 }
 ```
 
-キーやデフォルト値を変えたいときはオブジェクトを渡す。このとき `await services.report.find(1)` の初回は DB へ行き、ウィンドウ内の同引数の再呼び出しはキャッシュを読む。`duration` は書き込み後の有効期限（**ミリ秒**）：
+キーやデフォルト値を変えたいときはオブジェクトを渡す。このとき `await services.report.find(1)` の初回は DB へ行き、ウィンドウ内の同引数の再呼び出しはキャッシュを読む。`duration` は書き込み後の有効期限：
 
 ```typescript
 class ReportService extends Service {
   @remember({ // [!code focus:8]
-    duration: 60_000,
+    duration: '1 minute',
     key: (id) => {
       return `report:${id}`;
     },
@@ -224,7 +250,7 @@ class ReportService extends Service {
 
 | 書き方 | 役割 |
 | --- | --- |
-| `@remember(60_000)` | 有効期限のみ。キーはデフォルト規則 |
+| `@remember('1 minute')` / `@remember(60_000)` | 有効期限のみ。キーはデフォルト規則 |
 | `duration` | 必須（オブジェクト形式）。キャッシュ期間 |
 | `key: '固定文字列'` | メソッド全体で一キー（引数なし・サイト単一結果） |
 | `key: (...args) => string` | 引数からキー組み立て。`this` は業務インスタンスのまま |
@@ -255,5 +281,6 @@ class ReportService extends Service {
 ## 次のステップ
 
 - サービス登録と eager：[サービス層](/ja/core/service)
+- 乱用カウントの `store`：[乱用対策](/ja/plugins/abuse)
 - 認証での session の使い方：[Auth 統一入口](/ja/plugins/auth)
 - Bearer と token 戦略：[Bearer 戦略](/ja/plugins/auth-bearer-strategy)
