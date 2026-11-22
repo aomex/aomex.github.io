@@ -24,6 +24,7 @@ pnpm add @aomex/auth
 | [`@aomex/auth/session`](/ja/plugins/auth-session-strategy) | ブラウザ Cookie ログイン。CORS + CSRF と併用 |
 | [`@aomex/auth/api-key`](/ja/plugins/auth-api-key-strategy) | マシン間、オープンプラットフォーム |
 | [`@aomex/auth-jwt-strategy`](/ja/plugins/auth-jwt-strategy) | 自己完結 JWT、DB 参照を減らす |
+| [`@aomex/oauth2-client`](/ja/plugins/oauth2-client) | 第三者の認可コードログイン；よく使うベンダーは [aomex-contrib](https://github.com/aomex/aomex-contrib) のプリセット（Auth 戦略ではない。callback のあと上記のいずれかで発行） |
 
 ## Router に authenticate を載せる
 
@@ -122,4 +123,5 @@ OpenAPI 生成時、本番と同じ `app` を `generateOpenapi` に渡すとド�
 - [Session ストラテジー](/ja/plugins/auth-session-strategy)
 - [API Key 戦略](/ja/plugins/auth-api-key-strategy)
 - [JWT 戦略](/ja/plugins/auth-jwt-strategy)
+- 第三者の認可コードログイン：[OAuth2 クライアント](/ja/plugins/oauth2-client)
 - 特殊プロトコル：[上級：カスタム認証戦略](/ja/advanced/auth-strategy)

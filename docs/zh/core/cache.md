@@ -38,7 +38,7 @@ export default class CacheService extends BaseCacheService { // [!code focus:28]
 }
 ```
 
-`get` / `set` / `delete` 等接受 **字符串或 `CacheKey`**。`get<T>(key)` 带上泛型后，返回值类型上是 `T | null`；`set` / `setNX` / `expire` 的过期时间是 **`DurationInput`**：毫秒数或可读字符串（`'7 days'`、`'30m'`、`'1.5 hours'`），见下文。`services.cache.xxx` 的方法名、参数跟你在 CacheService 里声明的一致，改签名时编译器会追着路由和鉴权回调改。
+`get` / `set` / `delete` / `getAndDelete` / `singleFlight` 等接受 **字符串或 `CacheKey`**。`get<T>(key)` 带上泛型后，返回值类型上是 `T | null`；`set` / `setNX` / `expire` 的过期时间是 **`DurationInput`**：毫秒数或可读字符串（`'7 days'`、`'30m'`、`'1.5 hours'`），见下文。`services.cache.xxx` 的方法名、参数跟你在 CacheService 里声明的一致，改签名时编译器会追着路由和鉴权回调改。
 
 注册并预热（生产换 Redis 时尤其建议 eager）：
 
@@ -165,8 +165,26 @@ if (await this.cache.exists(key)) {
 和 `get` 的差别：`get` 未命中时是 `null`（你还要自己判断），并把值反序列化一遍；`exists` 只问适配器「这个键还在吗」。适合占位标记、锁是否还握着、或先探一下再决定要不要拉大对象。
 
 ::: tip
-「先 exists 再 get」两步之间别人可能删掉或改掉键，别拿它当严谨的事务条件。抢锁、幂等仍用下面的 `setNX`。
+「先 exists 再 get」两步之间别人可能删掉或改掉键，别拿它当严谨的事务条件。抢锁、幂等仍用下面的 `setNX`；一次性消费见 `getAndDelete`。
 :::
+
+## getAndDelete：读完即删
+
+要对齐 Redis `GETDEL`、做「一次性凭证」时，用 `getAndDelete`：原子地取出并删除。并发两路同时调，只有一方能拿到值，另一边是 `null`（或你传的默认值）。
+
+常见场景：OAuth `state`、邮件验证码、短时下载票——读到就必须作废，防止重放。
+
+```typescript
+const ticket = await this.cache.getAndDelete<{ userId: number }>(
+  this.key('email-verify', code),
+);
+if (!ticket) {
+  ctx.throw(400, '验证码无效或已使用');
+}
+// ticket.userId 可用；键已不在缓存里
+```
+
+和「先 `get` 再 `delete`」的差别：两步之间别人可以再读一次同一键；`getAndDelete` 在适配器层一次完成。可选第二参数当默认值（未命中时返回它，类型跟 `get` 一样）。
 
 ## setNX 与计数
 
@@ -194,9 +212,27 @@ if (n > 5) {
 }
 ```
 
+## singleFlight：并发只跑一次
+
+同一 key 上很多人同时要「现算」一份结果（拉 JWKS、打一次贵接口），又不想把结果长期塞进缓存时，用 `singleFlight`：第一个进 `factory`，其余等共享结果；**飞行结束后不留长期缓存**，下次再调会重新算。
+
+```typescript
+async loadJwks() {
+  return this.cache.singleFlight(this.key('jwks'), async () => { // [!code focus:3]
+    return fetchJwksFromIdp();
+  });
+}
+```
+
+和 `@remember` 的分工：`remember` = 单飞 + **按 `duration` 写入长期缓存**；`singleFlight` = **只要这次并发共享**，算完就散。持锁大约 30 秒、执行中会续期；失败时等待方会收到同一错误。执行方崩溃且没写出结果时，等待方会重新竞争（有轮次上限）。
+
+::: tip
+多实例时 key 要落在共享适配器（如 Redis）上，单飞才跨进程生效；本机 memory 只护住当前进程。
+:::
+
 ## 缓存装饰器
 
-业务方法里反复写「先 get → 没有再算 → set」很啰嗦，同一 key 并发打进来还会算很多次。`createRemember` 做出一个方法装饰器 `@remember`：命中直接返回；未命中才跑原方法并写入；**同一 key 并发时只让一个执行**，其余等结果。
+业务方法里反复写「先 get → 没有再算 → set」很啰嗦，同一 key 并发打进来还会算很多次。`createRemember` 做出一个方法装饰器 `@remember`：命中直接返回；未命中才跑原方法并写入；**同一 key 并发时只让一个执行**，其余等结果（占位锁与 `singleFlight` 同一套约 30 秒续期）。
 
 装饰器要绑在你自己的缓存服务类上——传入 `BaseCacheService` **子类构造函数**（不能传基类、不能传实例）。写在 `cache.service.ts` 里最省事，业务侧直接 import `remember`：
 
@@ -266,7 +302,7 @@ class ReportService extends Service {
 
 ### 并发与空结果
 
-同一 key 打进来时，第一个用 `setNX` 占位去跑原方法，占位键大约 20 秒、执行中会续期；其它调用轮询等到占位消失，再读缓存（或拿到 `defaultValue`）。这是防缓存击穿用的，不是分布式锁业务语义——别拿它当通用锁。
+同一 key 打进来时，第一个用 `setNX` 占位去跑原方法，占位键大约 30 秒、执行中会续期；其它调用轮询等到占位消失，再读缓存（或拿到 `defaultValue`）。这是防缓存击穿用的，不是分布式锁业务语义——别拿它当通用锁。只要「这次并发共享、不长期缓存」，直接用上面的 `singleFlight`。
 
 原方法返回 `null` 时**不会**把 `null` 写进缓存（避免把「没有」锁死太久）；调用方看到的是 `defaultValue`。真要缓存「明确没有」这类结果，需要你自己设计键或换手写 `this.cache.set`。
 
@@ -281,6 +317,7 @@ class ReportService extends Service {
 ## 下一步
 
 - 服务注册与 eager：[服务层](/zh/core/service)
+- OAuth `state` 与 `store`：[OAuth2 客户端](/zh/plugins/oauth2-client)
 - 滥用计数的 `store`：[滥用防护](/zh/plugins/abuse)
 - 鉴权里怎么用 session：[统一入口 Auth](/zh/plugins/auth)
 - Bearer 与 token 策略：[Bearer 策略](/zh/plugins/auth-bearer-strategy)

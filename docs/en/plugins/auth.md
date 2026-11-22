@@ -24,6 +24,7 @@ pnpm add @aomex/auth
 | [`@aomex/auth/session`](/en/plugins/auth-session-strategy) | Browser Cookie login; pair with CORS + CSRF |
 | [`@aomex/auth/api-key`](/en/plugins/auth-api-key-strategy) | Machine-to-machine, open platform |
 | [`@aomex/auth-jwt-strategy`](/en/plugins/auth-jwt-strategy) | Self-contained JWT, fewer DB lookups |
+| [`@aomex/oauth2-client`](/en/plugins/oauth2-client) | Third-party authorization-code login; common vendors via [aomex-contrib](https://github.com/aomex/aomex-contrib) presets (not an Auth strategy; issue one of the above after callback) |
 
 ## Mount authenticate on Router
 
@@ -122,4 +123,5 @@ Pass the same `app` as production to `generateOpenapi` so OpenAPI `security` mat
 - [Session strategy](/en/plugins/auth-session-strategy)
 - [API Key strategy](/en/plugins/auth-api-key-strategy)
 - [JWT strategy](/en/plugins/auth-jwt-strategy)
+- Third-party authorization-code login: [OAuth2 client](/en/plugins/oauth2-client)
 - Unusual protocols: [Advanced: custom auth strategies](/en/advanced/auth-strategy)

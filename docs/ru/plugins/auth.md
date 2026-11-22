@@ -24,6 +24,7 @@ pnpm add @aomex/auth
 | [`@aomex/auth/session`](/ru/plugins/auth-session-strategy) | Cookie-логин в браузере; вместе с CORS + CSRF |
 | [`@aomex/auth/api-key`](/ru/plugins/auth-api-key-strategy) | Machine-to-machine, открытая платформа |
 | [`@aomex/auth-jwt-strategy`](/ru/plugins/auth-jwt-strategy) | Самодостаточный JWT, меньше обращений к БД |
+| [`@aomex/oauth2-client`](/ru/plugins/oauth2-client) | Сторонний authorization-code логин; частые вендоры — пресеты [aomex-contrib](https://github.com/aomex/aomex-contrib) (не стратегия Auth; после callback выдаёте одну из выше) |
 
 ## authenticate на Router
 
@@ -122,4 +123,5 @@ const token = auth.strategy('bearer').signature('sha256', user.id);
 - [Стратегия Session](/ru/plugins/auth-session-strategy)
  [API Key](/ru/plugins/auth-api-key-strategy)
 - [JWT](/ru/plugins/auth-jwt-strategy)
+- Сторонний authorization-code логин: [OAuth2-клиент](/ru/plugins/oauth2-client)
 - Нестандартный протокол: [Своя стратегия auth](/ru/advanced/auth-strategy)

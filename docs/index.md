@@ -13,7 +13,6 @@ title: aomex.js
       <li><a href="/zh-TW/">繁體中文</a></li>
       <li><a href="/en/">English</a></li>
       <li><a href="/ja/">日本語</a></li>
-      <li><a href="/ko/">한국어</a></li>
       <li><a href="/ru/">Русский</a></li>
     </ul>
   </main>

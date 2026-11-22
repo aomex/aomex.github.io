@@ -9,7 +9,6 @@ export const autoLocaleInlineScript = `(function(){
       'zh-TW': '/zh-TW/',
       en: '/en/',
       ja: '/ja/',
-      ko: '/ko/',
       ru: '/ru/'
     };
     var pref = localStorage.getItem(key);
@@ -30,10 +29,6 @@ export const autoLocaleInlineScript = `(function(){
         }
         if (l.indexOf('ja') === 0) {
           target = 'ja';
-          break;
-        }
-        if (l.indexOf('ko') === 0) {
-          target = 'ko';
           break;
         }
         if (l.indexOf('ru') === 0) {

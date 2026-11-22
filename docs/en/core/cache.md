@@ -38,7 +38,7 @@ export default class CacheService extends BaseCacheService { // [!code focus:28]
 }
 ```
 
-`get` / `set` / `delete` accept **string or `CacheKey`**. With a generic on `get<T>(key)`, the return type is `T | null`; expiry on `set` / `setNX` / `expire`, and on `@remember`'s `duration`, is **`DurationInput`**: milliseconds or readable strings (`'7 days'`, `'30m'`, `'1.5 hours'`)—see below. Method names and parameters on `services.cache.xxx` match what you declare on `CacheService`; change a signature and the compiler nudges routes and auth callbacks too.
+`get` / `set` / `delete` / `getAndDelete` / `singleFlight` accept **string or `CacheKey`**. With a generic on `get<T>(key)`, the return type is `T | null`; expiry on `set` / `setNX` / `expire`, and on `@remember`'s `duration`, is **`DurationInput`**: milliseconds or readable strings (`'7 days'`, `'30m'`, `'1.5 hours'`)—see below. Method names and parameters on `services.cache.xxx` match what you declare on `CacheService`; change a signature and the compiler nudges routes and auth callbacks too.
 
 Register and warm up (use `eager` in production when switching to Redis):
 
@@ -165,8 +165,26 @@ if (await this.cache.exists(key)) {
 Compared to `get`: on a miss, `get` returns `null` (you still judge that yourself) and deserializes the value; `exists` only asks the adapter whether the key is still there. Good for placeholder flags, whether a lock is still held, or probing before pulling a large object.
 
 ::: tip
-Between「exists then get」another client may delete or change the key—do not treat it as a strict transactional condition. For lock grabs and idempotency, still use `setNX` below.
+Between「exists then get」another client may delete or change the key—do not treat it as a strict transactional condition. For lock grabs and idempotency, still use `setNX` below; for one-shot consume, see `getAndDelete`.
 :::
+
+## getAndDelete: read once and remove
+
+To match Redis `GETDEL` and one-shot credentials, use `getAndDelete`: atomically fetch and delete. Under concurrent callers, only one gets the value; others see `null` (or your default).
+
+Typical uses: OAuth `state`, email codes, short-lived download tickets—once read, it must be gone so it cannot be replayed.
+
+```typescript
+const ticket = await this.cache.getAndDelete<{ userId: number }>(
+  this.key('email-verify', code),
+);
+if (!ticket) {
+  ctx.throw(400, 'Invalid or already used code');
+}
+// ticket.userId is usable; the key is already gone
+```
+
+Unlike「`get` then `delete`」, nothing else can read the same key between the two steps; `getAndDelete` finishes in one adapter call. An optional second argument is the default on miss (same typing idea as `get`).
 
 ## setNX and counters
 
@@ -194,9 +212,27 @@ if (n > 5) {
 }
 ```
 
+## singleFlight: run once under concurrency
+
+When many callers need the same「compute now」result at once (fetch JWKS, one expensive call) but you do **not** want a long-lived cache entry, use `singleFlight`: the first runs `factory`, the others share the result; **nothing is kept as a long-term cache** after the flight ends—the next call computes again.
+
+```typescript
+async loadJwks() {
+  return this.cache.singleFlight(this.key('jwks'), async () => { // [!code focus:3]
+    return fetchJwksFromIdp();
+  });
+}
+```
+
+Versus `@remember`: `remember` = single-flight **plus** writing a long-lived entry for `duration`; `singleFlight` = **share this concurrent wave only**. The lock lasts about 30s and renews while running; waiters see the same error on failure. If the winner crashes without writing a result, waiters re-contend (with a round limit).
+
+::: tip
+Across instances the key must live on a shared adapter (e.g. Redis); in-process memory only protects the current process.
+:::
+
 ## Cache decorator
 
-Repeating「get → miss → compute → set」in every method is noisy, and concurrent hits on the same key recompute many times. `createRemember` builds a method decorator `@remember`: cache hit returns immediately; on miss only the original method runs and writes; **for the same key under concurrency, only one execution runs**, the rest wait for the result.
+Repeating「get → miss → compute → set」in every method is noisy, and concurrent hits on the same key recompute many times. `createRemember` builds a method decorator `@remember`: cache hit returns immediately; on miss only the original method runs and writes; **for the same key under concurrency, only one execution runs**, the rest wait for the result (placeholder lock ~30s with renewals, same idea as `singleFlight`).
 
 Bind the decorator to **your** cache service class—pass the **subclass constructor** of `BaseCacheService` (not the base class, not an instance). Defining it in `cache.service.ts` is simplest; business code imports `remember`:
 
@@ -266,7 +302,7 @@ If you extend `Service` and the class name ends with `Service`, it uses `display
 
 ### Concurrency and empty results
 
-Concurrent calls on the same key: the first uses `setNX` to reserve and run the original method; the placeholder lasts ~20s and renews while running; others poll until it clears, then read cache (or get `defaultValue`). This prevents cache stampede, not general distributed locking—do not use it as a generic lock.
+Concurrent calls on the same key: the first uses `setNX` to reserve and run the original method; the placeholder lasts ~30s and renews while running; others poll until it clears, then read cache (or get `defaultValue`). This prevents cache stampede, not general distributed locking—do not use it as a generic lock. For「share this wave only, no long-lived cache」, use `singleFlight` above.
 
 When the original method returns `null`, **`null` is not written** (so「missing」is not frozen too long); callers see `defaultValue`. To cache an explicit「not found」, design keys yourself or use hand-written `this.cache.set`.
 
@@ -281,6 +317,7 @@ Use only on **read-heavy, write-light** queries that can go slightly stale. Do n
 ## Next steps
 
 - Service registration and `eager`: [Service layer](/en/core/service)
+- OAuth `state` and `store`: [OAuth2 client](/en/plugins/oauth2-client)
 - `store` for abuse counters: [Abuse protection](/en/plugins/abuse)
 - Using session in auth: [Auth entry point](/en/plugins/auth)
 - Bearer and token strategies: [Bearer strategy](/en/plugins/auth-bearer-strategy)

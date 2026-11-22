@@ -68,7 +68,8 @@
     "customValidator": "カスタムバリデータ",
     "customAuth": "カスタム認証ストラテジー",
     "i18n": "アプリの i18n",
-    "cluster": "マルチプロセスとスケール"
+    "cluster": "マルチプロセスとスケール",
+    "oauth2Client": "OAuth2 クライアント"
   },
   "ui": {
     "editLink": "このページを編集",

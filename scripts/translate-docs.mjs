@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * 从简体 docs/zh/ 生成 ja / ko / ru 文档（跳过代码 fence，保留 API 名）。
+ * 从简体 docs/zh/ 生成 ja / ru 文档（跳过代码 fence，保留 API 名）。
  *
  * 用法：
  *   pnpm translate ja
- *   pnpm translate ja ko ru
+ *   pnpm translate ja ru
  *   pnpm translate ja --force
- *   pnpm translate ko --dry-run
+ *   pnpm translate ru --dry-run
  *   pnpm translate ja --concurrency=3
  *
  * 环境变量（OpenAI 兼容 Chat Completions）：
@@ -15,7 +15,7 @@
  *   TRANSLATE_MODEL     默认 gpt-4o-mini
  *
  * 产物：
- *   docs/ja|ko|ru/ 下全部 .md
+ *   docs/ja|ru/ 下全部 .md
  *   scripts/generated/{id}-labels.json   侧栏 + UI 文案，便于贴进 config.mts
  *   scripts/.translate-cache/{id}/       按源文件 hash 缓存，免重复扣费
  */
@@ -70,7 +70,7 @@ const concurrency = Math.max(
 );
 
 const usage = () => {
-  console.log(`用法: pnpm translate <ja|ko|ru> [...] [--force] [--dry-run] [--concurrency=N]
+  console.log(`用法: pnpm translate <ja|ru> [...] [--force] [--dry-run] [--concurrency=N]
 
 环境变量: TRANSLATE_API_KEY / OPENAI_API_KEY, TRANSLATE_BASE_URL, TRANSLATE_MODEL`);
 };

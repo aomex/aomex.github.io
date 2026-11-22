@@ -9,9 +9,8 @@
     "preview": "vitepress preview docs",
     "translate": "node scripts/translate-docs.mjs",
     "translate:ja": "node scripts/translate-docs.mjs ja",
-    "translate:ko": "node scripts/translate-docs.mjs ko",
     "translate:ru": "node scripts/translate-docs.mjs ru",
-    "translate:all": "node scripts/translate-docs.mjs ja ko ru"
+    "translate:all": "node scripts/translate-docs.mjs ja ru"
   },
   "dependencies": {
     "prettier": "^3.10.1",

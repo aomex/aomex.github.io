@@ -2,7 +2,7 @@ import { inBrowser } from 'vitepress';
 
 export const LOCALE_STORAGE_KEY = 'aomex-docs-locale';
 
-export type DocsLocale = 'zh-CN' | 'zh-TW' | 'en' | 'ja' | 'ko' | 'ru';
+export type DocsLocale = 'zh-CN' | 'zh-TW' | 'en' | 'ja' | 'ru';
 
 /** 所有正文都在带前缀的路径下；`/` 只负责识别后跳转 */
 export const localeHome: Record<DocsLocale, string> = {
@@ -10,7 +10,6 @@ export const localeHome: Record<DocsLocale, string> = {
   'zh-TW': '/zh-TW/',
   en: '/en/',
   ja: '/ja/',
-  ko: '/ko/',
   ru: '/ru/',
 };
 
@@ -18,8 +17,8 @@ export const localeHome: Record<DocsLocale, string> = {
  * 浏览器语言 → 文档 locale。
  * - zh-TW / zh-Hant → 繁体
  * - zh / zh-CN / zh-HK / 其它 zh* → 简体 /zh/
- * - ja* / ko* / ru* → 对应前缀
- * - en* 或无法识别 → /en/
+ * - ja* / ru* → 对应前缀
+ * - en* 或无法识别（含 ko*）→ /en/
  */
 export const detectBrowserLocale = (): DocsLocale => {
   const languages = navigator.languages?.length
@@ -37,9 +36,6 @@ export const detectBrowserLocale = (): DocsLocale => {
     if (lang.startsWith('ja')) {
       return 'ja';
     }
-    if (lang.startsWith('ko')) {
-      return 'ko';
-    }
     if (lang.startsWith('ru')) {
       return 'ru';
     }
@@ -56,7 +52,6 @@ const knownLocales: DocsLocale[] = [
   'zh-TW',
   'en',
   'ja',
-  'ko',
   'ru',
 ];
 
@@ -87,9 +82,6 @@ export const localeFromVitePressLang = (lang: string): DocsLocale => {
   }
   if (lang === 'ja-JP' || lang.startsWith('ja')) {
     return 'ja';
-  }
-  if (lang === 'ko-KR' || lang.startsWith('ko')) {
-    return 'ko';
   }
   if (lang === 'ru-RU' || lang.startsWith('ru')) {
     return 'ru';

@@ -22,9 +22,9 @@ export const joinParts = (parts) => {
   return parts.map((p) => p.value).join('');
 };
 
-/** 绝对站内链接加上 locale 前缀；已有 en/zh-TW/ja/ko/ru 或外链不改 */
+/** 绝对站内链接加上 locale 前缀；已有 en/zh-TW/ja/ru 或外链不改 */
 export const rewriteAbsoluteLinks = (text, prefix) => {
-  const exclude = 'zh/|zh-TW/|en/|ja/|ko/|ru/|https?:|mailto:|#';
+  const exclude = 'zh/|zh-TW/|en/|ja/|ru/|https?:|mailto:|#';
   const linkRe = new RegExp(`(\\]\\()(/)(?!${exclude})`, 'g');
   const fmRe = new RegExp(`(link:\\s*)(/)(?!${exclude})`, 'g');
   return text.replace(linkRe, `$1/${prefix}/`).replace(fmRe, `$1/${prefix}/`);

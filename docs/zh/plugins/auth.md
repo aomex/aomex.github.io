@@ -24,6 +24,7 @@ pnpm add @aomex/auth
 | [`@aomex/auth/session`](/zh/plugins/auth-session-strategy) | 浏览器 Cookie 登录态；配合 CORS + CSRF |
 | [`@aomex/auth/api-key`](/zh/plugins/auth-api-key-strategy) | 机器对机器、开放平台 |
 | [`@aomex/auth-jwt-strategy`](/zh/plugins/auth-jwt-strategy) | 自包含 JWT，少查库 |
+| [`@aomex/oauth2-client`](/zh/plugins/oauth2-client) | 第三方授权码登录；常见厂商用 [aomex-contrib](https://github.com/aomex/aomex-contrib) 预设（非 Auth 策略；回调后再签发上面几套） |
 
 ## Router 上挂 authenticate
 
@@ -122,4 +123,5 @@ const token = auth.strategy('bearer').signature('sha256', user.id);
 - [Session 策略](/zh/plugins/auth-session-strategy)
 - [API Key 策略](/zh/plugins/auth-api-key-strategy)
 - [JWT 策略](/zh/plugins/auth-jwt-strategy)
+- 第三方授权码登录：[OAuth2 客户端](/zh/plugins/oauth2-client)
 - 协议很特殊时：[高级：自定义鉴权策略](/zh/advanced/auth-strategy)

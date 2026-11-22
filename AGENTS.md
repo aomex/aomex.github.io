@@ -14,11 +14,11 @@
 ## 回复与文案语言
 
 - 对用户说明、提交说明：**简体中文**（除非用户明确要求其他语言）。
-- 文档正文按 locale（均带路径前缀）：`docs/zh/` 简体、`docs/zh-TW/` 台湾繁体、`docs/en/` 英文，以及 `docs/ja|ko|ru/`；侧栏文案与链接前缀在 `docs/.vitepress/config.mts` 的 `locales` 里维护。
-- 根路径 `/` **没有正文**，只做语言识别后跳转：`zh-TW` / `zh-Hant`→`/zh-TW/`；其它 `zh*`→`/zh/`；`ja*` / `ko*` / `ru*`→对应前缀；`en*` 或无法识别→`/en/`。顶栏切换写入 `localStorage`（`aomex-docs-locale`）。深链不自动改语言。实现见 `docs/.vitepress/theme/`。
+- 文档正文按 locale（均带路径前缀）：`docs/zh/` 简体、`docs/zh-TW/` 台湾繁体、`docs/en/` 英文，以及 `docs/ja|ru/`；侧栏文案与链接前缀在 `docs/.vitepress/config.mts` 的 `locales` 里维护。
+- 根路径 `/` **没有正文**，只做语言识别后跳转：`zh-TW` / `zh-Hant`→`/zh-TW/`；其它 `zh*`→`/zh/`；`ja*` / `ru*`→对应前缀；`en*` 或无法识别（含 `ko*`）→`/en/`。顶栏切换写入 `localStorage`（`aomex-docs-locale`）。深链不自动改语言。实现见 `docs/.vitepress/theme/`。
 - 代码标识、包名、API 名保持原样（写法与源码一致）。
 - 简体在 `docs/zh/`；改完后同步繁体可用 OpenCC（`cn → twp`）写入 `docs/zh-TW/`，绝对链接用 `/zh-TW` 前缀；勿改代码 fence 内标识符。
-- 日语 / 韩语 / 俄语：用 `pnpm translate ja|ko|ru`（源为 `docs/zh/`，需 `TRANSLATE_API_KEY` 或 `OPENAI_API_KEY`）。脚本跳过代码 fence、加 locale 前缀，并生成 `scripts/generated/{id}-labels.json`；**默认不自动改 config**。未启用前不要提交未审的 `docs/ja|ko|ru`。
+- 日语 / 俄语：用 `pnpm translate ja|ru`（源为 `docs/zh/`，需 `TRANSLATE_API_KEY` 或 `OPENAI_API_KEY`）。脚本跳过代码 fence、加 locale 前缀，并生成 `scripts/generated/{id}-labels.json`；**默认不自动改 config**。未启用前不要提交未审的 `docs/ja|ru`。
 
 ### 正文里的行内代码
 

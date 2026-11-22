@@ -28,9 +28,6 @@ const localeFromPath = (path: string): DocsLocale | null => {
   if (path === '/ja' || path.startsWith('/ja/')) {
     return 'ja';
   }
-  if (path === '/ko' || path.startsWith('/ko/')) {
-    return 'ko';
-  }
   if (path === '/ru' || path.startsWith('/ru/')) {
     return 'ru';
   }

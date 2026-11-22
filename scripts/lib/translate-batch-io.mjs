@@ -126,7 +126,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   } else if (cmd === 'apply' && localeId) {
     console.log({ applied: applyLocaleBatch(localeId).length });
   } else {
-    console.log('Usage: node scripts/lib/translate-batch-io.mjs export|apply <ja|ko|ru>');
+    console.log('Usage: node scripts/lib/translate-batch-io.mjs export|apply <ja|ru>');
     process.exit(1);
   }
 }

@@ -38,7 +38,7 @@ export default class CacheService extends BaseCacheService { // [!code focus:28]
 }
 ```
 
-`get` / `set` / `delete` などは **文字列または `CacheKey`** を受け付ける。`get<T>(key)` にジェネリックを付けると戻り値の型は `T | null`。`set` / `setNX` / `expire` の有効期限、および `@remember` の `duration` は **`DurationInput`**：ミリ秒または `'7 days'`、`'30m'`、`'1.5 hours'` のような文字列（下記参照）。`services.cache.xxx` のメソッド名・引数は CacheService で宣言したものと一致する。署名を変えるとコンパイラがルートや認証コールバックまで追ってくれる。
+`get` / `set` / `delete` / `getAndDelete` / `singleFlight` などは **文字列または `CacheKey`** を受け付ける。`get<T>(key)` にジェネリックを付けると戻り値の型は `T | null`。`set` / `setNX` / `expire` の有効期限、および `@remember` の `duration` は **`DurationInput`**：ミリ秒または `'7 days'`、`'30m'`、`'1.5 hours'` のような文字列（下記参照）。`services.cache.xxx` のメソッド名・引数は CacheService で宣言したものと一致する。署名を変えるとコンパイラがルートや認証コールバックまで追ってくれる。
 
 登録とウォームアップ（本番で Redis に替えるときは特に eager を推奨）：
 
@@ -165,8 +165,26 @@ if (await this.cache.exists(key)) {
 `get` との違い：未ヒット時の `get` は `null`（自分で判定する）であり、値を逆シリアライズする。`exists` はアダプタに「このキーはまだあるか」とだけ聞く。プレースホルダマーク、ロックをまだ握っているか、大きなオブジェクトを取る前の事前確認向け。
 
 ::: tip
-「先に exists してから get」の間に他プロセスがキーを消したり書き換えたりする可能性がある。厳密なトランザクション条件にしないこと。ロック奪取・べき等は下の `setNX` を使う。
+「先に exists してから get」の間に他プロセスがキーを消したり書き換えたりする可能性がある。厳密なトランザクション条件にしないこと。ロック奪取・べき等は下の `setNX`；一度きりの消費は `getAndDelete`。
 :::
+
+## getAndDelete：読んですぐ消す
+
+Redis の `GETDEL` と同じく、一度きりの証憑に `getAndDelete` を使う。原子的に取り出して削除する。同時に二つ来ても片方だけ値が取れ、もう片方は `null`（またはデフォルト値）。
+
+典型例：OAuth `state`、メール確認コード、短命のダウンロード券——読んだら無効にしてリプレイを防ぐ。
+
+```typescript
+const ticket = await this.cache.getAndDelete<{ userId: number }>(
+  this.key('email-verify', code),
+);
+if (!ticket) {
+  ctx.throw(400, 'コードが無効か使用済みです');
+}
+// ticket.userId が使える。キーはもうキャッシュにない
+```
+
+`get` のあと `delete` だと、その間に別の読み取りが挟まる。`getAndDelete` はアダプタ一回で終わる。第 2 引数は未ヒット時のデフォルト（型は `get` と同じ考え方）。
 
 ## setNX とカウンタ
 
@@ -194,9 +212,27 @@ if (n > 5) {
 }
 ```
 
+## singleFlight：同時実行は一度だけ
+
+同じキーで「今すぐ計算」が同時に必要で（JWKS 取得、高い API）、長期キャッシュに残したくないときは `singleFlight`。最初の呼び出しだけ `factory` を実行し、他は結果を共有する。**フライト終了後に長期キャッシュは残さない**。次の呼び出しは再計算する。
+
+```typescript
+async loadJwks() {
+  return this.cache.singleFlight(this.key('jwks'), async () => { // [!code focus:3]
+    return fetchJwksFromIdp();
+  });
+}
+```
+
+`@remember` との分担：`remember` = 単飛 + **`duration` で長期キャッシュ**；`singleFlight` = **今回の同時波だけ共有**。ロックは約 30 秒、実行中に更新。失敗時は待機側も同じエラー。実行側が結果を書かず落ちた場合、待機側は再競争する（回数上限あり）。
+
+::: tip
+複数インスタンスではキーを共有アダプタ（例：Redis）に置く。memory は当プロセスだけを守る。
+:::
+
 ## キャッシュデコレータ
 
-業務メソッドで「get → なければ計算 → set」を繰り返すのは冗長で、同一キーへの同時リクエストで何度も計算が走る。`createRemember` はメソッドデコレータ `@remember` を作る。ヒットなら即返す。ミスなら元メソッドだけ実行して書き込む。**同一キーが同時に来ても実行は一つ**、他は結果を待つ。
+業務メソッドで「get → なければ計算 → set」を繰り返すのは冗長で、同一キーへの同時リクエストで何度も計算が走る。`createRemember` はメソッドデコレータ `@remember` を作る。ヒットなら即返す。ミスなら元メソッドだけ実行して書き込む。**同一キーが同時に来ても実行は一つ**、他は結果を待つ（プレースホルダロックは `singleFlight` と同じく約 30 秒で更新）。
 
 デコレータは自分のキャッシュサービスクラスに結ぶ。`BaseCacheService` の **サブクラスコンストラクタ** を渡す（基底クラスやインスタンスは不可）。`cache.service.ts` に書くのが手軽で、業務側は `remember` を import する：
 
@@ -266,7 +302,7 @@ class ReportService extends Service {
 
 ### 並行と空結果
 
-同一キーが同時に来ると、最初の呼び出しが `setNX` でプレースホルダを取って元メソッドを実行する。プレースホルダは約 20 秒、実行中は更新される。他はプレースホルダが消えるまでポーリングし、キャッシュを読む（または `defaultValue`）。キャッシュスタンピード防止用であり、汎用分散ロックではない——業務ロック代わりに使わない。
+同一キーが同時に来ると、最初の呼び出しが `setNX` でプレースホルダを取って元メソッドを実行する。プレースホルダは約 30 秒、実行中は更新される。他はプレースホルダが消えるまでポーリングし、キャッシュを読む（または `defaultValue`）。キャッシュスタンピード防止用であり、汎用分散ロックではない——業務ロック代わりに使わない。「今回の同時共有だけで長期キャッシュしない」なら上の `singleFlight`。
 
 元メソッドが `null` を返したとき **`null` は書き込まない**（「ない」を長く固定しない）。呼び出し側は `defaultValue` を見る。「明示的にない」結果をキャッシュしたいときはキー設計を変えるか、手書きの `this.cache.set` を使う。
 
@@ -281,6 +317,7 @@ class ReportService extends Service {
 ## 次のステップ
 
 - サービス登録と eager：[サービス層](/ja/core/service)
+- OAuth `state` と `store`：[OAuth2 クライアント](/ja/plugins/oauth2-client)
 - 乱用カウントの `store`：[乱用対策](/ja/plugins/abuse)
 - 認証での session の使い方：[Auth 統一入口](/ja/plugins/auth)
 - Bearer と token 戦略：[Bearer 戦略](/ja/plugins/auth-bearer-strategy)
