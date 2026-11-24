@@ -6,7 +6,7 @@ outline: deep
 
 On realtime channels, probing often means sweeping event names that should not exist. `@aomex/abuse`’s `.socket()` does two things: check whether the IP is already blocked; use a `socket-events` strategy to count bait events and block the IP at the limit.
 
-Block state is **shared** with HTTP (same `createAbuse` instance, same `store`): an IP blocked by a Web honeypot is also refused on WebSocket. Handshake IP depends on `proxyIP` on the Web app—misconfigure it and you block the wrong people.
+Block state is **shared** with HTTP (same `Abuse` instance, same `store`): an IP blocked by a Web honeypot is also refused on WebSocket. Handshake IP depends on `proxyIP` on the Web app—misconfigure it and you block the wrong people.
 
 ```bash
 pnpm add @aomex/abuse
@@ -15,7 +15,7 @@ pnpm add @aomex/abuse
 
 ## Mount an event-name honeypot first
 
-`createAbuse` returns a service, not middleware you drop straight into mount. On WebSocket use **`abuse.socket()`**, ahead of `channels()`. If the HTTP app already created one `abuse`, **reuse that object**—do not `new` again. Memory locally; Redis adapter for multi-replica.
+`new Abuse(...)` gives you a service, not middleware you drop straight into mount. On WebSocket use **`abuse.socket()`**, ahead of `channels()`. If the HTTP app already has one instance, **reuse it**—do not `new` again. Memory locally; Redis adapter for multi-replica.
 
 ::: warning
 You must have already `import '@aomex/websocket'` (registers `middleware.socket`) before calling.
@@ -24,12 +24,12 @@ You must have already `import '@aomex/websocket'` (registers `middleware.socket`
 Put bait events in the `socket-events` strategy’s `events`: strings support `*`, or pass a regex (full-string match on `ctx.event`). Hits count per IP; at the limit the IP is blocked. `events` cannot be empty; creation validates that.
 
 ```typescript
-import { createAbuse } from '@aomex/abuse';
+import { Abuse } from '@aomex/abuse';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 import { WebsocketApp, channels } from '@aomex/websocket';
 import { WsTransport } from '@aomex/websocket-ws-transport';
 
-const abuse = createAbuse({
+const abuse = new Abuse({
   store: new CacheMemoryAdapter(),
   strategies: [
     { // [!code focus:7]
@@ -71,7 +71,7 @@ mount: [
 
 ## Report from a Channel
 
-If `ip-abuse` / `user-abuse` strategies are already configured on `createAbuse`, Channel actions can call the same APIs (e.g. when a user looks like spam). `ctx.client.request` exists from handshake—read the IP directly:
+If `ip-abuse` / `user-abuse` strategies are already configured when you construct `Abuse`, Channel actions can call the same APIs (e.g. when a user looks like spam). `ctx.client.request` exists from handshake—read the IP directly:
 
 ```typescript
 channel.on('chat.send', {

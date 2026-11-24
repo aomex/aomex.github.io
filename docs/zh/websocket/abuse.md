@@ -6,7 +6,7 @@ outline: deep
 
 实时通道上的探测，常见是乱扫「根本不该存在的事件名」。`@aomex/abuse` 的 `.socket()` 做两件事：检查 IP 是否已被封；用 `socket-events` 策略给诱饵事件计数，满额封 IP。
 
-封禁态和 HTTP 侧是**同一份**（同一个 `createAbuse` 实例、同一个 `store`）：Web 蜜罐封掉的 IP，连 WebSocket 也会被拒。握手 IP 依赖 Web 应用上的 `proxyIP`，配错等于封错人。
+封禁态和 HTTP 侧是**同一份**（同一个 `Abuse` 实例、同一个 `store`）：Web 蜜罐封掉的 IP，连 WebSocket 也会被拒。握手 IP 依赖 Web 应用上的 `proxyIP`，配错等于封错人。
 
 ```bash
 pnpm add @aomex/abuse
@@ -15,7 +15,7 @@ pnpm add @aomex/abuse
 
 ## 先挂事件名蜜罐
 
-`createAbuse` 返回的是服务，不是直接能塞进 mount 的中间件。WebSocket 侧用 **`abuse.socket()`**，挂在 `channels()` 前面。若 HTTP 应用里已经 `createAbuse` 过一份，**复用同一个对象**即可，不必再 new。本地用 memory；多副本换 Redis 适配器。
+`new Abuse(...)` 得到的是服务，不是直接能塞进 mount 的中间件。WebSocket 侧用 **`abuse.socket()`**，挂在 `channels()` 前面。若 HTTP 应用里已经 `new` 过一份，**复用同一个实例**即可，不必再 new。本地用 memory；多副本换 Redis 适配器。
 
 ::: warning
 调用前须已 `import '@aomex/websocket'`（注册 `middleware.socket`）。
@@ -24,12 +24,12 @@ pnpm add @aomex/abuse
 把「诱饵事件」写进 `socket-events` 策略的 `events`：字符串支持 `*`，也可以写正则（整串匹配 `ctx.event`）。命中后按 IP 计数，满额封禁。`events` 不能为空，创建时就会校验。
 
 ```typescript
-import { createAbuse } from '@aomex/abuse';
+import { Abuse } from '@aomex/abuse';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 import { WebsocketApp, channels } from '@aomex/websocket';
 import { WsTransport } from '@aomex/websocket-ws-transport';
 
-const abuse = createAbuse({
+const abuse = new Abuse({
   store: new CacheMemoryAdapter(),
   strategies: [
     { // [!code focus:7]
@@ -71,7 +71,7 @@ mount: [
 
 ## 在 Channel 里上报
 
-`ip-abuse` / `user-abuse` 策略若已在 `createAbuse` 里配好，Channel 的 action 里也能调同一套 API（例如发现刷屏用户）。`ctx.client.request` 握手时就有，直接取 IP：
+`ip-abuse` / `user-abuse` 策略若已在构造 `Abuse` 时配好，Channel 的 action 里也能调同一套 API（例如发现刷屏用户）。`ctx.client.request` 握手时就有，直接取 IP：
 
 ```typescript
 channel.on('chat.send', {

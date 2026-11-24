@@ -15,16 +15,16 @@ pnpm add @aomex/abuse
 
 ## 创建并挂上 `.web()`
 
-`createAbuse` 返回的是一份**服务**（上面有 `ipAbuse` / `blockIP` 等 API），不是直接能塞进 mount 的中间件。HTTP 侧用 `.web()` 挂到 `WebApp.mount`。业务代码里继续拿同一个 `abuse` 对象调 API，**不要**指望它出现在 `ctx` 上。
+`new Abuse(...)` 得到的是一份**服务**（上面有 `ipAbuse` / `blockIP` 等 API），不是直接能塞进 mount 的中间件。HTTP 侧用 `.web()` 挂到 `WebApp.mount`。业务代码里继续拿同一个 `abuse` 实例调 API，**不要**指望它出现在 `ctx` 上。
 
 下面这份配置先挂两条常见策略：蜜罐路径（碰一下就封）和错误状态码累计（短时间刷 401 / 404 才封）。
 
 ```typescript
-import { createAbuse } from '@aomex/abuse';
+import { Abuse } from '@aomex/abuse';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 import { routers, WebApp } from '@aomex/web';
 
-const abuse = createAbuse({ // [!code focus:18]
+const abuse = new Abuse({ // [!code focus:18]
   store: new CacheMemoryAdapter(),
   strategies: [
     {
@@ -108,7 +108,7 @@ glob 只看 pathname，query 不影响；要连 query 一起判用正则。`path
 响应本身可能是成功（如 logout 无论 token 在不在都 204），但仍想按 IP 记「可疑试探」时，用 `ip-abuse` + 路由里调用。`reason` 用字符串即可；须与策略里声明的一致，未知 reason 运行时抛错。同一 reason 只能配一条。
 
 ```typescript
-const abuse = createAbuse({
+const abuse = new Abuse({
   store,
   strategies: [
     {
@@ -149,7 +149,7 @@ await abuse.ipAbuse(ctx.request.ip, IpAbuseReason.LogoutMiss);
 账号级滥用（刷优惠、撞库后的用户维度等）用 `user-abuse`。包内**不写用户库**——满额只调 `onBanUser`，你在回调里改库、踢 session。配置了任一 `user-abuse` 时 **`onBanUser` 必填**，创建阶段就会检查。`reason` 同样可以是字符串，也可以是 enum。
 
 ```typescript
-const abuse = createAbuse({
+const abuse = new Abuse({
   store,
   strategies: [
     {
@@ -182,7 +182,7 @@ await abuse.userAbuse(userId, 'order-probe');
 被封时默认抛 **403**；要对齐限速语义改成 429，传 `blockedError`。
 
 ```typescript
-const abuse = createAbuse({
+const abuse = new Abuse({
   store,
   strategies: [/* ... */],
   onBlockIP: async (ip, reason, detail) => {

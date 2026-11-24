@@ -6,7 +6,7 @@ outline: deep
 
 Типичная разведка realtime-канала — перебор «событий, которых вообще не должно быть». `.socket()` из `@aomex/abuse` делает две вещи: проверяет, не забанен ли уже IP; по стратегии `socket-events` считает удары по приманкам и при лимите банит IP.
 
-Состояние бана с HTTP-стороной **общее** (тот же экземпляр `createAbuse`, тот же `store`): IP, пойманный HTTP-honeypot, не пройдёт и WebSocket. IP на handshake зависит от `proxyIP` Web-приложения — ошибка настройки значит бан не тех людей.
+Состояние бана с HTTP-стороной **общее** (тот же экземпляр `Abuse`, тот же `store`): IP, пойманный HTTP-honeypot, не пройдёт и WebSocket. IP на handshake зависит от `proxyIP` Web-приложения — ошибка настройки значит бан не тех людей.
 
 ```bash
 pnpm add @aomex/abuse
@@ -15,7 +15,7 @@ pnpm add @aomex/abuse
 
 ## Сначала повесьте honeypot имён событий
 
-`createAbuse` возвращает сервис, а не middleware, который сразу кладут в mount. На WebSocket — **`abuse.socket()`**, перед `channels()`. Если в HTTP-приложении уже есть `createAbuse`, **переиспользуйте тот же объект**, второй new не нужен. Локально — memory; на нескольких репликах — Redis-адаптер.
+`new Abuse(...)` возвращает сервис, а не middleware, который сразу кладут в mount. На WebSocket — **`abuse.socket()`**, перед `channels()`. Если в HTTP-приложении уже есть экземпляр, **переиспользуйте его**, второй new не нужен. Локально — memory; на нескольких репликах — Redis-адаптер.
 
 ::: warning
 Перед вызовом уже должен быть `import '@aomex/websocket'` (регистрация `middleware.socket`).
@@ -24,12 +24,12 @@ pnpm add @aomex/abuse
 Приманки пишите в `events` стратегии `socket-events`: строки с `*` или регулярки (полное совпадение с `ctx.event`). Попадание считает по IP; при лимите — бан. `events` не может быть пустым — проверка уже при create.
 
 ```typescript
-import { createAbuse } from '@aomex/abuse';
+import { Abuse } from '@aomex/abuse';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 import { WebsocketApp, channels } from '@aomex/websocket';
 import { WsTransport } from '@aomex/websocket-ws-transport';
 
-const abuse = createAbuse({
+const abuse = new Abuse({
   store: new CacheMemoryAdapter(),
   strategies: [
     { // [!code focus:7]
@@ -71,7 +71,7 @@ mount: [
 
 ## Репорт из Channel
 
-Если стратегии `ip-abuse` / `user-abuse` уже заданы в `createAbuse`, из action Channel можно звать тот же API (например, поймали спамера). `ctx.client.request` есть с handshake — берите IP напрямую:
+Если стратегии `ip-abuse` / `user-abuse` уже заданы при создании `Abuse`, из action Channel можно звать тот же API (например, поймали спамера). `ctx.client.request` есть с handshake — берите IP напрямую:
 
 ```typescript
 channel.on('chat.send', {

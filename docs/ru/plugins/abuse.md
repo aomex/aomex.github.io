@@ -15,16 +15,16 @@ pnpm add @aomex/abuse
 
 ## Создать и повесить `.web()`
 
-`createAbuse` возвращает **сервис** (API вроде `ipAbuse` / `blockIP`), а не middleware, который сразу кладут в `mount`. На HTTP используйте `.web()` в `WebApp.mount`. В бизнес-коде вызывайте API того же объекта `abuse` — на **`ctx` он не появляется**.
+`new Abuse(...)` возвращает **сервис** (API вроде `ipAbuse` / `blockIP`), а не middleware, который сразу кладут в `mount`. На HTTP используйте `.web()` в `WebApp.mount`. В бизнес-коде вызывайте API того же экземпляра `abuse` — на **`ctx` он не появляется**.
 
 Ниже сначала две частые стратегии: honeypot-пути (один удар → блок) и накопление кодов ошибок (короткий всплеск 401 / 404 → блок).
 
 ```typescript
-import { createAbuse } from '@aomex/abuse';
+import { Abuse } from '@aomex/abuse';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 import { routers, WebApp } from '@aomex/web';
 
-const abuse = createAbuse({ // [!code focus:18]
+const abuse = new Abuse({ // [!code focus:18]
   store: new CacheMemoryAdapter(),
   strategies: [
     {
@@ -108,7 +108,7 @@ Glob смотрит только pathname — query не влияет; query в�
 Ответ сам по себе может быть успехом (например logout всегда 204, есть token или нет), но по IP всё равно нужно считать «подозрительные попытки». Тогда `ip-abuse` + вызов из маршрута. `reason` — строка; должна совпадать с объявлением в стратегии; неизвестный reason бросает в рантайме. Один reason — одна стратегия.
 
 ```typescript
-const abuse = createAbuse({
+const abuse = new Abuse({
   store,
   strategies: [
     {
@@ -149,7 +149,7 @@ await abuse.ipAbuse(ctx.request.ip, IpAbuseReason.LogoutMiss);
 Злоупотребления на уровне аккаунта (фарм купонов, пользовательское измерение после брутфорса) — `user-abuse`. Пакет **не пишет в вашу пользовательскую БД**: на лимите только вызывает `onBanUser`; в колбэке вы обновляете БД и сбрасываете session. Если есть хоть одна стратегия `user-abuse`, **`onBanUser` обязателен** и проверяется при создании. `reason` — строка или enum.
 
 ```typescript
-const abuse = createAbuse({
+const abuse = new Abuse({
   store,
   strategies: [
     {
@@ -182,7 +182,7 @@ await abuse.userAbuse(userId, 'order-probe');
 При блоке по умолчанию **403**; чтобы выровнять семантику с rate-limit (например 429), передайте `blockedError`.
 
 ```typescript
-const abuse = createAbuse({
+const abuse = new Abuse({
   store,
   strategies: [/* ... */],
   onBlockIP: async (ip, reason, detail) => {

@@ -15,16 +15,16 @@ pnpm add @aomex/abuse
 
 ## Create and mount `.web()`
 
-`createAbuse` returns a **service** (APIs like `ipAbuse` / `blockIP`), not middleware you drop straight into `mount`. On HTTP use `.web()` on `WebApp.mount`. Keep calling APIs on that same `abuse` object—it is **not** hung on `ctx`.
+`new Abuse(...)` gives you a **service** (APIs like `ipAbuse` / `blockIP`), not middleware you drop straight into `mount`. On HTTP use `.web()` on `WebApp.mount`. Keep calling APIs on that same `abuse` instance—it is **not** hung on `ctx`.
 
 The config below mounts two common strategies first: honeypot paths (one hit → block) and error-status tallies (burst 401 / 404 before block).
 
 ```typescript
-import { createAbuse } from '@aomex/abuse';
+import { Abuse } from '@aomex/abuse';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 import { routers, WebApp } from '@aomex/web';
 
-const abuse = createAbuse({ // [!code focus:18]
+const abuse = new Abuse({ // [!code focus:18]
   store: new CacheMemoryAdapter(),
   strategies: [
     {
@@ -108,7 +108,7 @@ Good for API scanners. If you also want to police 401 on login, hang a separate 
 Sometimes the response itself is success (e.g. logout always returns 204 whether the token exists), but you still want to count “suspicious probes” per IP. Use `ip-abuse` and call it from the route. `reason` is a string and must match a strategy declaration; unknown reasons throw at runtime. One reason → one strategy only.
 
 ```typescript
-const abuse = createAbuse({
+const abuse = new Abuse({
   store,
   strategies: [
     {
@@ -149,7 +149,7 @@ await abuse.ipAbuse(ctx.request.ip, IpAbuseReason.LogoutMiss);
 Account-level abuse (coupon farming, user-scoped stuffing after credential hits) uses `user-abuse`. The package **does not touch your user store**—at the limit it only calls `onBanUser`; you update the DB and kick sessions in the callback. If any `user-abuse` strategy is configured, **`onBanUser` is required** and checked at creation. `reason` can be a string or an enum.
 
 ```typescript
-const abuse = createAbuse({
+const abuse = new Abuse({
   store,
   strategies: [
     {
@@ -182,7 +182,7 @@ Probe paths should not hit block logic: pass `bypass` to `.web()`. Ops can tempo
 Blocked requests default to **403**; pass `blockedError` to align with rate-limit semantics (e.g. 429).
 
 ```typescript
-const abuse = createAbuse({
+const abuse = new Abuse({
   store,
   strategies: [/* ... */],
   onBlockIP: async (ip, reason, detail) => {

@@ -15,16 +15,16 @@ pnpm add @aomex/abuse
 
 ## 作成して `.web()` を載せる
 
-`createAbuse` が返すのは**サービス**（`ipAbuse` / `blockIP` などの API がある）。mount にそのまま入れられるミドルウェアではない。HTTP 側は `.web()` を `WebApp.mount` に載せる。業務コードでは同じ `abuse` オブジェクトの API を呼び続ける——**`ctx` には載らない**。
+`new Abuse(...)` が返すのは**サービス**（`ipAbuse` / `blockIP` などの API がある）。mount にそのまま入れられるミドルウェアではない。HTTP 側は `.web()` を `WebApp.mount` に載せる。業務コードでは同じ `abuse` インスタンスの API を呼び続ける——**`ctx` には載らない**。
 
 次の設定はよく使う 2 戦略を先に載せる：ハニーポットパス（触ったらすぐ封鎖）とエラー状態コード累計（短時間で 401 / 404 が溜まってから封鎖）。
 
 ```typescript
-import { createAbuse } from '@aomex/abuse';
+import { Abuse } from '@aomex/abuse';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 import { routers, WebApp } from '@aomex/web';
 
-const abuse = createAbuse({ // [!code focus:18]
+const abuse = new Abuse({ // [!code focus:18]
   store: new CacheMemoryAdapter(),
   strategies: [
     {
@@ -108,7 +108,7 @@ API 走査を止めるのに向く。ログイン上の 401 も厳しくした�
 応答自体は成功（例：logout は token の有無に関わらず 204）でも、IP 単位で「怪しい試行」を数えたいときは `ip-abuse` + ルート内呼び出し。`reason` は文字列でよい。戦略で宣言した値と一致させる。未知の reason は実行時にエラー。同じ reason は 1 戦略だけ。
 
 ```typescript
-const abuse = createAbuse({
+const abuse = new Abuse({
   store,
   strategies: [
     {
@@ -149,7 +149,7 @@ await abuse.ipAbuse(ctx.request.ip, IpAbuseReason.LogoutMiss);
 アカウント単位の不正利用（クーポン連打、資格情報当たり後のユーザー次元など）は `user-abuse`。パッケージは**ユーザー庫を触らない**——上限では `onBanUser` だけ呼び、あなたがコールバックで DB 更新や session キックをする。どれか 1 つでも `user-abuse` があれば **`onBanUser` は必須**。作成時に検査する。`reason` も文字列または enum。
 
 ```typescript
-const abuse = createAbuse({
+const abuse = new Abuse({
   store,
   strategies: [
     {
@@ -182,7 +182,7 @@ enum の書き方は IP と同じ：戦略は `UserAbuseReason.OrderProbe`、通
 封鎖時の既定は **403**。制限と同じく 429 に揃えたいなら `blockedError` を渡す。
 
 ```typescript
-const abuse = createAbuse({
+const abuse = new Abuse({
   store,
   strategies: [/* ... */],
   onBlockIP: async (ip, reason, detail) => {
