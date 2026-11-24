@@ -4,7 +4,7 @@ outline: deep
 
 # クロスオリジン CORS
 
-ブラウザ上のフロントから API を正当に呼べるようにする。開発ではポートが分かれてプリフライトが要ることが多く、本番では許可する origin を絞り、Cookie が要るときは credentials も設定する。
+ブラウザ上のフロントから API を合法に呼べるようにする。開発では前後端が別ポートでプリフライトが要る。本番では「どの origin を許すか」を締め、Cookie が要るときは credentials も付ける。
 
 ```bash
 pnpm add @aomex/cors
@@ -12,7 +12,7 @@ pnpm add @aomex/cors
 
 ## routers の前に載せる
 
-`cors()` はミドルウェア段階で Access-Control-* 応答ヘッダーを書き、ブラウザがクロスオリジンで本文を読めるようにする。必ず `routers` の**前**に置く。全応答（4xx/5xx 含む）にヘッダーが付く。後ろだとプリフライトは通っても業務エラー時にフロントがエラー本文を読めない。
+`cors()` はミドルウェア段階で Access-Control-* 応答ヘッダーを書き、ブラウザがクロスオリジンで応答本体を読めるようにする。必ず `routers` の**前**に置く。サイト全体の応答（4xx/5xx 含む）にヘッダーが付く。後ろだとプリフライトは通っても、業務エラー時にフロントがエラー本体を読めない。
 
 ```typescript
 import { cors } from '@aomex/cors';
@@ -21,7 +21,7 @@ import { routers, WebApp } from '@aomex/web';
 const app = new WebApp({
   services,
   logger: services.logger,
-  language: { mode: 'fixed', language: 'ja-JP' },
+  language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:4]
     cors(), // [!code highlight]
@@ -31,32 +31,22 @@ const app = new WebApp({
 ```
 
 ::: warning
-CORS を routers の**後**に置くと、404 や検証 400 でヘッダーが欠けることがある。ブラウザの「CORS エラー」が本当の原因を隠す。
+CORS を routers の**後ろ**に置くと、404 や検証 400 にヘッダーが無くなり、ブラウザが「クロスオリジン」と報告して本当の原因を隠す。
 :::
 
-ローカルでポートが分かれ、**かつ Cookie を送らない**ときは、無引数 cors() がリクエスト Origin を反射し、だいたい足りる。クロスオリジンで Cookie を送る（[Session](/ja/plugins/auth-session-strategy)）なら、次節のとおり origin を明示する。
+ローカルで前後端が別ポートで、**Cookie を付けない**ときは、無引数の `cors()` がリクエストの Origin を反射するのでだいたい足りる。クロスオリジンで Cookie を付ける（[Session](/ja/plugins/auth-session-strategy)）なら、次節どおり origin を明示する。
 
-cors() は通常の WebMiddleware で、ctx に新しいフィールドは付けない。業務 action はそのまま。成功時は Access-Control-Allow-Origin が見える。Cookie 付きでは Access-Control-Allow-Credentials: true も必要で、**origin: '*' は使えない**。
+cors() は通常の WebMiddleware で、ctx に新しいフィールドは載せない。業務 action はいつもどおり書けばよく、クロスオリジンは応答ヘッダーで解く。ブラウザで成功時に Access-Control-Allow-Origin が見える。Cookie 付きなら Access-Control-Allow-Credentials: true も要り、かつ **origin: '\*' は使えない**。
 
-## Origin と資格情報を絞る
-
-| オプション | いつ使うか | デフォルト |
-| --- | --- | --- |
-| `origin` | 本番でフロントドメイン固定、またはホワイトリスト / 関数 | 資格情報オフ時はリクエスト `Origin` を反射。**オン時は必須** |
-| `credentials` | クロスオリジンで Cookie / クライアント証明書など | `false` |
-| `allowHeaders` | `Authorization`、`x-csrf-token` など | — |
-| `exposeHeaders` | フロントが `X-Request-Id` などを読む | — |
-| `maxAge` | OPTIONS の繰り返しを減らす。デバッグは `-1` でキャッシュなし | `3600` |
-| `allowMethods` | GET/POST だけに絞る | よく使う動詞一式 |
-| `secureContext` / `privateNetworkAccess` | 隔離ページ、公開サイトから内網 API（Chrome PNA） | `false` |
-
-### Cookie ログイン：origin の明示が必須
+## Cookie ログイン：origin の明示が必須
 
 `credentials: true`（または関数が `true` を返す）とき：
 
-- **必須**：`origin` を明示（具体ドメイン、ホワイトリスト配列、具体オリジンを返す関数）
-- **禁止**：無引数 cors() のデフォルト反射——漏れると作成時またはリクエスト時に例外
-- **禁止**：`origin: '*'`（ブラウザもこの組み合わせを認めない）
+- **必須**で `origin` を明示する（具体ドメイン、ホワイトリスト配列、または具体オリジンを返す関数）
+- 無引数 cors() のデフォルト反射に**頼らない**——漏れると作成時またはリクエスト時にすぐ例外
+- `origin: '*'` は**禁止**（ブラウザもこの組み合わせを認めない）
+
+フロントが `Authorization` や `x-csrf-token` も付けるなら `allowHeaders` で通す。フロントのスクリプトに `X-Request-Id` などカスタムヘッダーを読ませるなら `exposeHeaders`。
 
 ```typescript
 cors({
@@ -68,12 +58,14 @@ cors({
 ```
 
 ::: warning
-credentials を付けて origin を書かない、または `*` にすると、起動できないかリクエストで例外になる。「任意 Origin 反射 + Cookie」の危険なデフォルトを意図的に止めている。
+credentials をオンにしたのに origin を書かない、または `*` にすると、アプリが起動しないかリクエストで例外になる——「任意 Origin の反射 + Cookie」という危険なデフォルトを意図的に止めている。
 :::
 
-Session では [CSRF](/ja/plugins/csrf) も載せ、フロントの `fetch` は `credentials: 'include'`。一連の流れは [Session ストラテジー](/ja/plugins/auth-session-strategy)。
+Session ならさらに [CSRF](/ja/plugins/csrf) を載せ、フロントの `fetch` は `credentials: 'include'`。一連の流れは [Session ストラテジー](/ja/plugins/auth-session-strategy)。
 
-### 複数フロントのホワイトリスト
+## 複数フロントのホワイトリスト
+
+App と管理画面でドメインが分かれるときは、`origin` に配列を渡せる。ヒットしたときだけ書き戻し、未ヒットは CORS を有効にしないのと同じ。
 
 ```typescript
 const allowlist = [
@@ -88,7 +80,7 @@ cors({
 });
 ```
 
-関数でリクエストごとに具体 origin を返してもよい（ホワイトリスト命中時のみ。未命中は `undefined` で CORS 無効）：
+関数でリクエストごとに具体 origin を返してもよい（ホワイトリスト命中時だけ書き戻し。未ヒットは `undefined` で CORS 無効）：
 
 ```typescript
 cors({
@@ -103,13 +95,15 @@ cors({
 });
 ```
 
+プリフライトのキャッシュはデフォルト約 1 時間（`maxAge: 3600`）。ローカルでデバッグするときは `-1` にして毎回 OPTIONS を打ち直せる。GET/POST だけ開放するときは `allowMethods` で締める。隔離ページ / 公開ページからイントラ API へ（Chrome PNA）が要るときだけ `secureContext` / `privateNetworkAccess`。
+
 | 環境 | 推奨 |
 | --- | --- |
 | ローカル（Cookie なし） | 無引数 `cors()` |
 | ローカル（Session） | `origin: 'http://localhost:5173'` + `credentials: true` |
-| 本番 | 明示ドメインまたはホワイトリスト。資格情報オン時はデフォルト反射を使わない |
+| 本番 | ドメイン明示またはホワイトリスト。資格情報オンならデフォルト反射は絶対使わない |
 
-Web API だけ直し、ドキュメントサイト / Swagger / 管理画面の origin を忘れると、それらのドメインでプリフライトが失敗する。
+Web API だけ直し、ドキュメントサイト / Swagger / 管理画面の origin を忘れると、それらのドメインでプリフライトが落ちる。
 
 ## 次のステップ
 

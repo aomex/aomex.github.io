@@ -18,7 +18,7 @@ mount 里挂 redocUI，团队打开 /redoc（默认）即可读同一份 OpenAPI
 
 ```typescript
 import { redocUI } from '@aomex/redoc-ui';
-import { generateOpenapi } from '@aomex/openapi';
+import { generateOpenapi } from '@aomex/openapi-generator';
 import { app } from './app.js';
 
 mount: [ // [!code focus:13]

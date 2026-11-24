@@ -66,17 +66,11 @@ defineMongooseModel 返回標準 Mongoose Model，並帶上**輸入/輸出**相�
 
 ## 模型欄位與對外 DTO
 
-| 欄位 / 選項 | 什麼時候用 |
-| --- | --- |
-| `schemas` | 欄位 → Validator，或巢狀物件 |
-| `indexes` | `{ fields, ...IndexOptions }[]` |
-| `timestamps` / `versionKey` | 與 Mongoose SchemaOptions 一致 |
-| 其它 SchemaOptions | 透傳給 Mongoose |
-| 路由 `response({ content })` | 對外 DTO；僅 DB 欄位不要預設進 API |
+`schemas` 裡寫欄位 → Validator（巢狀裸物件會自動收成物件校驗）。`indexes`、`timestamps`、`versionKey` 以及其它 SchemaOptions 透傳給 Mongoose——唯一複合索引、pre hook 等校驗器蓋不住的，仍在模型層配。
 
-和 [Prisma](/zh-TW/plugins/prisma) 場景不同：這裡是 Mongoose + Mongo，不是 definePrismaSchema。
+對外別把 Mongoose 文件原樣 `ctx.send`：敏感或僅 DB 欄位會洩露。路由上用 `response({ content })` 或顯式 pick 收成 DTO。
 
-只定義模型、路由仍手寫另一套 shape 時，改欄位仍要改兩處，違背「共用 rule」的初衷。別把 Mongoose 文件原樣 ctx.send——敏感或僅 DB 欄位會洩露；用 response 或顯式 pick。校驗器蓋不住唯一複合索引、pre hook 等，仍在模型層配置。
+和 [Prisma](/zh-TW/plugins/prisma) 場景不同：這裡是 Mongoose + Mongo，不是 definePrismaSchema。只定義模型、路由仍手寫另一套 shape 時，改欄位仍要改兩處，違背「共用 rule」的初衷。
 
 ## 相關
 

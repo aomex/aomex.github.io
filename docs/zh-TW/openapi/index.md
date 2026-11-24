@@ -4,12 +4,12 @@ outline: deep
 
 # 生成OpenAPI
 
-在路由上**宣告契約**，再掃成 OpenAPI 3.0：記憶體裡給指令碼 / Swagger 用，或經 Console **落盤**成檔案給 CI、SDK。生成鏈路在 `@aomex/openapi`；Swagger / Redoc 只是讀這份 JSON 的方式。
+在路由上**宣告契約**，再掃成 OpenAPI 3.0：記憶體裡給指令碼 / Swagger 用，或經 Console **落盤**成檔案給 CI、SDK。生成鏈路在 `@aomex/openapi-generator`；Swagger / Redoc 只是讀這份 JSON 的方式。
 
 沒掛 query / body / response 的路由，文件裡對應段也會空——執行時照樣能跑，只是契約不完整。send / throw 的型別收窄見 [約束響應](/zh-TW/web/response)。
 
 ```bash
-pnpm add @aomex/openapi
+pnpm add @aomex/openapi-generator
 ```
 
 **傳入與線上同一份 `WebApp` 例項**（`app`），生成器會讀它的全域性 `mount` 和 `envelope`，security、錯誤體、套殼才不容易和真環境漂開。
@@ -95,7 +95,7 @@ app.listen(3000);
 
 ```typescript
 import { writeFile } from 'node:fs/promises';
-import { generateOpenapi } from '@aomex/openapi';
+import { generateOpenapi } from '@aomex/openapi-generator';
 import { app } from './app.js';
 
 const document = await generateOpenapi({ // [!code focus:11]
@@ -115,7 +115,7 @@ await writeFile('openapi.json', JSON.stringify(document, null, 2));
 
 - 路由上掛 body / query / params 後，ctx.body、ctx.query 等在 action 裡已是收窄後的型別——和文件 schema 同源。
 - 掛 `response({ statusCode, content })` 後，`ctx.send(200, …)` 的第二個引數要對上 content；聲明瞭 200 卻 send(201) 通常會型別報錯。
-- 只用手寫 `openapi.onMethod` 補某條響應時，**一般只影響生成的 JSON**，不會自動收窄 ctx.send——那種場景要自己盯型別。
+- 只用手寫 `openapi.onMethod` 補某條響應時，**一般隻影響生成的 JSON**，不會自動收窄 ctx.send——那種場景要自己盯型別。
 
 `response()` 常用欄位：
 
@@ -203,7 +203,7 @@ router.get('/openapi.json', {
 
 ```typescript
 // src/cli.ts
-import { openapi } from '@aomex/openapi';
+import { openapi } from '@aomex/openapi-generator';
 import { commanders, ConsoleApp } from '@aomex/console';
 import { app } from './app.js';
 import { services } from './services/index.js';
@@ -270,7 +270,7 @@ openapi({
 
 落盤和執行時動態吐 `/openapi.json` 不是一回事：高頻線上掃描費 CPU，生產文件站多數用落盤 + 靜態或 UI 外掛讀檔案。
 
-能掛在路由上的 response 儘量用 `response()` 維護，別只靠 fix 手改每一條。忘記 `docs.summary` / tags 時生成仍能用，對接方翻文件會痛苦——分組與文案分別見 [Tags](/zh-TW/openapi/tags) · [Markdown](/zh-TW/openapi/markdown)。提供 JSON 的那條路由通常設 `docs.showInOpenapi: false`，避免遞迴描述自己。
+能掛在路由上的 response 儘量用 `response()` 維護，別隻靠 fix 手改每一條。忘記 `docs.summary` / tags 時生成仍能用，對接方翻文件會痛苦——分組與文案分別見 [Tags](/zh-TW/openapi/tags) · [Markdown](/zh-TW/openapi/markdown)。提供 JSON 的那條路由通常設 `docs.showInOpenapi: false`，避免遞迴描述自己。
 
 ## 相關
 

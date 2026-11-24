@@ -4,7 +4,7 @@ outline: deep
 
 # ログ
 
-**LoggerService** を作り、`createTransports` で出力先を宣言。`combineServices` に登録し **eager でウォームアップ**。Web / Console が同じ `services.logger` を共有し、WebApp 必須の logger を満たす。
+**LoggerService** を一つ作り、createTransports でどこへ出すかを宣言する。combineServices に登録し **eager で事前ロード**する。Web / Console は同じ services.logger を共有し、WebApp 必須の logger も満たす。
 
 ```bash
 pnpm add @aomex/logger
@@ -41,7 +41,8 @@ export const services = await combineServices(
 await services.logger.info('服务已就绪');
 await services.logger.error(err, '结账失败');
 ```
-WebApp は services に加え `logger: services.logger` を別途渡す（同一参照でよい）：
+
+WebApp は services のほかに、別途 `logger: services.logger` も渡す（同じ参照でよい）：
 
 ```typescript
 new WebApp({
@@ -51,18 +52,19 @@ new WebApp({
   proxyIP: { mode: 'detect' },
 });
 ```
+
 ## レベルとシグネチャ
 
-各ログ行に **level**：うるささは trace から fatal へ増加。トランスポートの level が「どこまで通すか」を決める。署名では error / fatal の第一引数は `Error`、他は多く `(message, context?)`。
+各ログに **level** が付く。うるささは trace から fatal へ増える。出口表の level が「どれだけうるさいものまでこの通路に入れるか」を決める。シグネチャ上、error / fatal の第 1 引数は `Error`。ほかのレベルはだいたい `(message, context?)`。
 
-- trace / debug / info / warn：`(message, context?)`
-- error / fatal：`(err, message, context?)`
-- 各出口の level は単一レベルか `{ min, max }` 範囲
+- trace / debug / info / warn：(message, context?)
+- error / fatal：(err, message, context?)
+- 各出口の level は単一レベル、または { min, max } 区間
 
-うるさい順：trace → debug → info → warn → error → fatal。
+レベルはうるさい方から静かへ：trace → debug → info → warn → error → fatal。
 
 ::: warning
-本番で debug / trace を長期 ON にするとホットパスもディスクも辛い。業務失敗は error。fatal はプロセス不健全用。全部 fatal にしない。
+本番で長く debug / trace をオンにするとホットパスもディスクも持たない。業務失敗は error。fatal はプロセスが不健康なとき。すべての失敗を fatal にしない。
 :::
 
 ```typescript
@@ -70,25 +72,26 @@ await services.logger.info('服务已就绪');
 await services.logger.error(err, '结账失败');
 await services.logger.fatal(err, '数据库不可用，准备退出');
 ```
-## トランスポート一覧
 
-| トランスポート | パッケージ | いつ使うか |
+## 先に出口を選ぶ
+
+| 出口 | パッケージ | いつ使う |
 | --- | --- | --- |
 | [ConsoleTransport](#consoletransport) | `@aomex/logger` | ローカル開発、コンテナ stdout |
-| [FileTransport](#filetransport) | `@aomex/logger` | ローカルファイル、日付・レベル分割 |
-| [StreamTransport](#streamtransport) | `@aomex/logger` | 任意 Writable（テスト、パイプ） |
-| [WebhookTransport](#webhooktransport) | `@aomex/logger` | カスタム HTTP フックへ POST |
+| [FileTransport](#filetransport) | `@aomex/logger` | ディスク落とし、日 / レベルで分割 |
+| [StreamTransport](#streamtransport) | `@aomex/logger` | 任意の Writable（テスト、パイプ） |
+| [WebhookTransport](#webhooktransport) | `@aomex/logger` | カスタム HTTP フックへ |
 | [CustomTransport](#customtransport) | `@aomex/logger` | 自前キュー / DB / ベンダー SDK |
 | [SentryTransport](#sentrytransport) | `@aomex/logger-sentry` | error を Sentry へ |
 | [TelegramTransport](#telegramtransport) | `@aomex/logger-telegram` | fatal で人を起こす |
 
-よくある本番組み合わせ：コンソール info + ファイル warn + Sentry error + Telegram fatal。各出口に独自 level。1チャネルに全ノイズを載せない。
+本番のよくある組み合わせ：コンソール info + ファイル warn + Sentry error + Telegram fatal。出口ごとに level を自分で設定する。一つの通路にすべてのノイズを載せない。以下、出口ごとに配り方を述べる。
 
 ---
 
 ### ConsoleTransport
 
-ターミナルへ。TTY では text がデフォルト着色。収集パイプでは json に。
+端末へ出す。TTY では text がデフォルトで色付き。収集パイプで NDJSON が要るときは `format: 'json'` にし、色を切る。
 
 ```typescript
 { transport: new ConsoleTransport(), level: 'debug' },
@@ -100,17 +103,12 @@ new ConsoleTransport({
   colorize: false,
 });
 ```
-| オプション | いつ使うか | デフォルト |
-| --- | --- | --- |
-| `format` | 収集が NDJSON なら `'json'` | `'text'` |
-| `colorize` | 着色の強制 ON/OFF | text かつ TTY で ON |
-| `colors` | レベル別色 | 内蔵 |
-| `output` | 全レベルを同一ストリームへ | — |
-| `stderrLevels` | `output` 未設定時に stderr へ行くレベル | `error` / `fatal` |
+
+`output` 未設定時、error / fatal はデフォルト stderr、ほかは stdout。全部を同じストリームに入れるときだけ `output` を設定。`colors` でレベルの配色を変えられる。
 
 ### FileTransport
 
-ローカルファイルへ追記。ディレクトリが無ければ自動作成。
+ローカルファイルへ追記。ディレクトリが無ければ自動作成。固定パスで足りるなら一行。日 / レベルで分割するなら `{year}` / `{month}` / `{day}` / `{level}` プレースホルダ（または `(log) => path`）。
 
 ```typescript
 {
@@ -121,19 +119,16 @@ new ConsoleTransport({
 
 ```typescript
 new FileTransport({
-  file: './logs/{year}-{month}-{day}/{level}.log',
+  file: './logs/{year}-{month}-{day}/{level}.log', // [!code highlight]
   format: 'json',
 });
 ```
-| オプション | いつ使うか | デフォルト |
-| --- | --- | --- |
-| `file` | 固定パス、または `{year}`/`{level}` プレースホルダ；`(log) => path` も可 | 日付+レベル分割 |
-| `format` | Fluent Bit など向けに `'json'` | `'text'` |
-| `fileMode` / `dirMode` | 権限を絞るとき | システムデフォルト |
+
+Fluent Bit などへ転送するときは `format: 'json'`。権限を締めるなら `fileMode` / `dirMode`。
 
 ### StreamTransport
 
-任意 Writable へ（単体テストの偽ストリーム、パイプ）。
+任意の Writable へ書く（単体テストの偽ストリーム、プロセスパイプ）：
 
 ```typescript
 new StreamTransport({
@@ -141,14 +136,12 @@ new StreamTransport({
   format: 'json',
 });
 ```
-| オプション | いつ使うか |
-| --- | --- |
-| `stream` | 必須、宛先 Writable |
-| `format` | `'text'` / `'json'`、デフォルト text |
+
+`stream` は必須。`format` デフォルトは text。
 
 ### WebhookTransport
 
-HTTP でアラート / 自前収集エンドポイントへ。
+HTTP でアラート / 自前収集エンドポイントへ送る。遅いフックは `timeoutMs` を上げる（デフォルト約 `30000`）。認証は `headers`。
 
 ```typescript
 new WebhookTransport({
@@ -157,17 +150,12 @@ new WebhookTransport({
   format: 'json',
 });
 ```
-| オプション | いつ使うか | デフォルト |
-| --- | --- | --- |
-| `url` | 必須、フック URL | — |
-| `method` | POST 以外 | `POST` |
-| `headers` | 認証、カスタムヘッダ | — |
-| `format` | `'json'` / `'text'`、または body 組み立て関数 | `'json'` |
-| `timeoutMs` | 遅いフック | `30000` |
+
+`format` は関数でもよく、自分で body を組み立てる。method デフォルトは POST。
 
 ### CustomTransport
 
-独自消費ロジック。`this` 上で `formatLog` 可。
+自前の消費ロジック。this 上で formatLog を呼べる。
 
 ```typescript
 new CustomTransport({
@@ -176,7 +164,8 @@ new CustomTransport({
   },
 });
 ```
-1件の失敗で他出口を止めないのが普通。より細かく制御するなら Transport を継承。
+
+単一条の失敗は、だいたいほかの出口を塞がない。より細かい制御が要るときは Transport を継承する。
 
 ### SentryTransport
 
@@ -194,12 +183,8 @@ import { SentryTransport } from '@aomex/logger-sentry';
   level: 'error', // [!code highlight]
 },
 ```
-| オプション | いつ使うか | デフォルト |
-| --- | --- | --- |
-| `dsn` | 必須。構築時に `Sentry.init` | — |
-| `flushTimeout` | 停止前の送信待ち | `2000` |
 
-DSN は環境変数へ。リポジトリに書かない。level は少なくとも error。info を Sentry に流し込まない。
+DSN は環境変数。リポジトリに書かない。level は少なくとも error。info を Sentry に流さない。シャットダウン前に報告待ちなら `flushTimeout`（デフォルト約 `2000`）。
 
 ### TelegramTransport
 
@@ -218,16 +203,12 @@ import { TelegramTransport } from '@aomex/logger-telegram';
   level: 'fatal', // [!code highlight]
 },
 ```
-| オプション | いつ使うか | デフォルト |
-| --- | --- | --- |
-| `botToken` / `chatId` | 必須。BotFather / グループ id | — |
-| `timeout` | 自動リトライ込みの総タイムアウト | `120000` |
-| `format` | メッセージ本文カスタム | 内蔵 |
-| `dedupe` | 間隔内で同一 fingerprint をマージ。`false` で OFF | ON（約30s） |
 
-「プロセスが死にそうなとき」向け。warn を大量に結びつけない。
+「プロセスが落ちそうなとき人を起こす」向け。大量の warn を結ばない。間隔内の同じ指紋はまとめる（`dedupe`、約 30s。`false` でオフ）。`timeout` は自動リトライ込みでデフォルト約 `120000`。
 
-## 複数トランスポートの組み合わせ
+## 複数出口の組み合わせ
+
+上を一つの Service に組み、レベルで振り分ける：
 
 ```typescript
 import { BaseLoggerService, ConsoleTransport, FileTransport } from '@aomex/logger';
@@ -257,7 +238,8 @@ class LoggerService extends BaseLoggerService {
   }
 }
 ```
-ファイルだけにして Fluent Bit などに任せる——アプリ側を薄くできる。
+
+ファイルだけにして Fluent Bit などに転送を任せることもできる——アプリ側はより細い。
 
 ## リクエスト単位のコンテキスト：withBindings
 
@@ -288,11 +270,13 @@ mount: [
   routers('./src/routers'),
 ],
 ```
-認証後に userId を足す（外側とマージ、同名キーは内側が勝つ）：
+
+認証後に userId を足す（外層とマージ。同名キーは内層が上書き）：
 
 ```typescript
 await ctx.logger.withBindings({ userId: ctx.auth.bearer.data.id }, next);
 ```
+
 Console / Cron でも `services.logger.withBindings` は同様。停止やテスト終了前に `await services.logger.flush()` 可。
 
 ::: warning
@@ -303,4 +287,4 @@ Console / Cron でも `services.logger.withBindings` は同様。停止やテス
 
 - [サービス層](/ja/core/service)
 - [ミドルウェア](/ja/core/middleware)
-- [アクセスログ](/ja/plugins/http-access-log)（HTTP 1行レイテンシ。レベル別出口と補完関係）
+- [アクセスログ](/ja/plugins/http-access-log)（HTTP 一行の所要時間。レベル別出口と補完）

@@ -4,7 +4,7 @@ outline: deep
 
 # 整形 JSON
 
-開発時にブラウザで**インデント付き JSON** を見て、1 行の長い文字列からフィールドを探す手間を減らす。本番はデフォルトオフ。さもないとレスポンスが明らかに肥大化（モバイルは特に損）。公開 API を query で body を膨らませるべきではない。
+開発時にブラウザで**インデント付き JSON** を見て、1 行の長い文字列からフィールドを探す手間を減らす。本番はデフォルトオフ——さもないとレスポンスが明らかに肥大化（モバイルは特に損）。公開 API を query で body を膨らませるべきではない。
 
 ```bash
 pnpm add @aomex/pretty-json
@@ -12,7 +12,7 @@ pnpm add @aomex/pretty-json
 
 ## 開発環境でサイト全体マウント
 
-`prettyJson()` は `await next()` の**後**で JSON レスポンスをインデント付きテキストにする。`WebApp.mount` に載せる。本番は `enable: false` か `?pretty` のみ。
+`prettyJson()` は `await next()` の**後**で JSON レスポンスをインデント付きテキストにする。`WebApp.mount` に載せるだけでよい。ローカルは環境でオン；本番は `enable: false`。
 
 ```typescript
 import { prettyJson } from '@aomex/pretty-json';
@@ -33,33 +33,22 @@ const app = new WebApp({
 });
 ```
 
-通常の WebMiddleware。ctx に追加フィールドなし。Content-Type が JSON のとき body は JSON.stringify(..., null, spaces) の読みやすい形。オブジェクトモードの Readable はストリーム stringify。
+通常の WebMiddleware。ctx に追加フィールドなし。効果は Content-Type が JSON のまま、body が `JSON.stringify(..., null, spaces)` の読みやすいテキストになること。オブジェクトモードの Readable はストリーム stringify を通る。チームが 4 スペースなら `spaces: 4`（デフォルト `2`）。
 
-## enable と query スイッチ
+## 本番オンデマンド：?pretty だけ認める
 
-| オプション | いつ使う | デフォルト |
-| --- | --- | --- |
-| `enable` | 本番は必ず `false`；社内デバッグツールだけ別途オン可 | `true` |
-| `query` | サイト全体を整形せず `?pretty` のときだけ | — |
-| `spaces` | 2 または 4 スペースの好み | `2` |
-
-```typescript
-prettyJson({ spaces: 4 });
-```
-
-### 社内のみ / オンデマンド
+サイト全体の整形を本番に入れられないときは `enable` を切り、query スイッチだけ残す：`/internal/debug/state?pretty` のときだけインデント。公開ルートをこれで膨らませない。
 
 ```typescript
 prettyJson({
   enable: false,
   query: 'pretty', // [!code highlight]
 });
-// GET /internal/debug/state?pretty
 ```
 
 | 環境 | 推奨 |
 | --- | --- |
-| ローカル | `enable: true` か `?pretty` のみ |
+| ローカル | `enable: true`、または `?pretty` のみ |
 | 本番 | `enable: false`；公開ルートを query で膨らませない |
 
 大きな一覧を全件 pretty にするとコンパクト JSON の数倍になり、Postman も重くなる。[Compress](/ja/plugins/compress) と重ねても少し押せるが、根本は pretty で body が長くなること。

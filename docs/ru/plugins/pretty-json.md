@@ -4,15 +4,15 @@ outline: deep
 
 # Красивый JSON
 
-В разработке отдавайте в браузере **с отступами JSON**, а не одну длинную строку. В проде по умолчанию выключайте — объём ответа растёт (особенно на мобильных), публичному API не стоит раздувать body через query.
+В разработке смотрите в браузере **JSON с отступами**, чтобы не искать поля в одной длинной строке. В проде по умолчанию выключено — иначе тело ответа заметно раздувается (особенно на мобильных), и публичный API не должен раздувать body через query.
 
 ```bash
 pnpm add @aomex/pretty-json
 ```
 
-## Монтирование в разработке
+## Монтирование на весь сайт в разработке
 
-`prettyJson()` **после** `await next()` переформатирует JSON-ответы в текст с отступами — в `WebApp.mount`. В проде `enable: false` или только `?pretty`.
+`prettyJson()` **после** `await next()` превращает JSON-ответ в текст с отступами; достаточно повесить в `WebApp.mount`. Локально включайте по среде; в проде — `enable: false`.
 
 ```typescript
 import { prettyJson } from '@aomex/pretty-json';
@@ -33,39 +33,28 @@ const app = new WebApp({
 });
 ```
 
-Обычный `WebMiddleware`; лишних полей на `ctx` нет. При JSON Content-Type тело становится читаемым `JSON.stringify(..., null, spaces)`; для object-mode потоков — потоковый stringify.
+Обычный WebMiddleware; у ctx нет лишних полей. Пока Content-Type остаётся JSON, body становится читаемым текстом `JSON.stringify(..., null, spaces)`; объектные readable stream идут через потоковый stringify. Если команда привыкла к 4 пробелам — `spaces: 4` (по умолчанию `2`).
 
-## Переключатели `enable` и `query`
+## В проде по запросу: только ?pretty
 
-| Опция | Когда использовать | По умолчанию |
-| --- | --- | --- |
-| `enable` | В проде обязательно `false`; внутренние утилиты можно включить | `true` |
-| `query` | Без глобального pretty; только при `?pretty` | — |
-| `spaces` | 2 или 4 пробела по привычке команды | `2` |
-
-```typescript
-prettyJson({ spaces: 4 });
-```
-
-### Только внутренняя сеть / по запросу
+Если полноценную «красоту» в прод нельзя, выключите `enable` и оставьте только query-переключатель: отступы появятся на `/internal/debug/state?pretty`. Публичные маршруты этим раздувать ответ не стоит.
 
 ```typescript
 prettyJson({
   enable: false,
   query: 'pretty', // [!code highlight]
 });
-// GET /internal/debug/state?pretty
 ```
 
 | Среда | Рекомендация |
 | --- | --- |
 | Локально | `enable: true` или только `?pretty` |
-| Прод | `enable: false`; не дайте публичным маршрутам раздувать ответ через query |
+| Прод | `enable: false`; не давайте публичным маршрутам раздувать ответ через query |
 
-Pretty для больших списков может быть в разы больше компактного JSON — Postman тоже «тяжелеет». С [Compress](/ru/plugins/compress) часть байт вернётся, но корень проблемы — удлинённое тело.
+Полный pretty на больших списках может быть в разы больше компактного JSON — Postman тоже подвиснет. Совместно с [Compress](/ru/plugins/compress) объём чуть сожмётся, но корень — pretty удлинил body.
 
 ## Дальше
 
-- Форма JSON-ответа: [Ограничения response](/ru/web/response)
-- Сжать payload: [Compress](/ru/plugins/compress)
-- UI API в разработке: [Swagger UI](/ru/openapi/swagger-ui)
+- Форма JSON-ответа: [Ограничение ответа](/ru/web/response)
+- Сжатие объёма: [Compress](/ru/plugins/compress)
+- UI документации в разработке: [Swagger UI](/ru/openapi/swagger-ui)

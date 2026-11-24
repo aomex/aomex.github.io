@@ -4,12 +4,12 @@ outline: deep
 
 # Генерация OpenAPI
 
-На маршрутах **объяви контракт**, затем собери OpenAPI 3.0: в памяти — для скриптов и Swagger, или через Console **запиши в файл** для CI и SDK. Генерация в `@aomex/openapi`; Swagger / Redoc — только способ прочитать этот JSON.
+На маршрутах **объяви контракт**, затем собери OpenAPI 3.0: в памяти — для скриптов и Swagger, или через Console **запиши в файл** для CI и SDK. Генерация в `@aomex/openapi-generator`; Swagger / Redoc — только способ прочитать этот JSON.
 
 Маршруты без `query` / `body` / `response` дадут пустые соответствующие разделы в документе — рантайм работает, контракт неполный. Сужение типов для `send` / `throw` — [ограничение ответов](/ru/web/response).
 
 ```bash
-pnpm add @aomex/openapi
+pnpm add @aomex/openapi-generator
 ```
 
 **Передай тот же экземпляр `WebApp`, что и в проде** (`app`): генератор читает его глобальный `mount` и `envelope`, тогда security, тела ошибок и обёртка с меньшей вероятностью разойдутся с боевой средой.
@@ -95,7 +95,7 @@ app.listen(3000);
 
 ```typescript
 import { writeFile } from 'node:fs/promises';
-import { generateOpenapi } from '@aomex/openapi';
+import { generateOpenapi } from '@aomex/openapi-generator';
 import { app } from './app.js';
 
 const document = await generateOpenapi({ // [!code focus:11]
@@ -203,7 +203,7 @@ router.get('/openapi.json', {
 
 ```typescript
 // src/cli.ts
-import { openapi } from '@aomex/openapi';
+import { openapi } from '@aomex/openapi-generator';
 import { commanders, ConsoleApp } from '@aomex/console';
 import { app } from './app.js';
 import { services } from './services/index.js';

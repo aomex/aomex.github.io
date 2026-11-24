@@ -63,7 +63,7 @@ For cross-domain endpoints (both order and export), list multiple names in the s
 `tags: ['User']` on routes only contributes the **name**. To add an intro blurb at the top of a group in the docs (Markdown supported), declare matching entries under `docs.tags` in `generateOpenapi`:
 
 ```typescript
-import { generateOpenapi } from '@aomex/openapi';
+import { generateOpenapi } from '@aomex/openapi-generator';
 import { app } from './app.js';
 
 await generateOpenapi({

@@ -4,12 +4,12 @@ outline: deep
 
 # OpenAPI を生成
 
-ルートで**契約を宣言**し、走査して OpenAPI 3.0 にする。メモリ上でスクリプトや Swagger 用に使うか、Console 経由で**ファイルに落とし** CI や SDK 向けにする。生成パイプラインは `@aomex/openapi`。Swagger / Redoc はその JSON の読み方のひとつに過ぎない。
+ルートで**契約を宣言**し、走査して OpenAPI 3.0 にする。メモリ上でスクリプトや Swagger 用に使うか、Console 経由で**ファイルに落とし** CI や SDK 向けにする。生成パイプラインは `@aomex/openapi-generator`。Swagger / Redoc はその JSON の読み方のひとつに過ぎない。
 
 `query` / `body` / `response` を載せないルートは、ドキュメント上の対応セクションも空になる。実行時は動くが、契約は欠ける。send / throw の型狭めは [制約付きレスポンス](/ja/web/response) を参照。
 
 ```bash
-pnpm add @aomex/openapi
+pnpm add @aomex/openapi-generator
 ```
 
 **本番と同じ `WebApp` インスタンス**（`app`）を渡す。生成器はグローバル `mount` と `envelope` を読み、security・エラー体・エンベロープが実環境からずれにくくなる。
@@ -95,7 +95,7 @@ app.listen(3000);
 
 ```typescript
 import { writeFile } from 'node:fs/promises';
-import { generateOpenapi } from '@aomex/openapi';
+import { generateOpenapi } from '@aomex/openapi-generator';
 import { app } from './app.js';
 
 const document = await generateOpenapi({ // [!code focus:11]
@@ -203,7 +203,7 @@ HTTP プロセスを変えず、契約を**ファイルに書きたい**とき�
 
 ```typescript
 // src/cli.ts
-import { openapi } from '@aomex/openapi';
+import { openapi } from '@aomex/openapi-generator';
 import { commanders, ConsoleApp } from '@aomex/console';
 import { app } from './app.js';
 import { services } from './services/index.js';

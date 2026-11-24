@@ -4,46 +4,61 @@ outline: deep
 
 # 非同期リンクトレース
 
-アクセスログは「この 1 リクエストが 800ms」としか言わない。**どの await が時間を食ったか**を当該リクエスト内で木構造にまとめる——遅い API の切り分け、Service 内の一連の IO 分解向き。日常の CRUD にデフォルト依存は不要。標準の分散トレースなら OpenTelemetry を検討。本パッケージはより軽量でアプリ内障害切り分け向き。
-
-## リクエスト全体の traceMiddleware
-
-インストール（必要なとき）：
+アクセスログは「このリクエストが 800ms」としか教えてくれない。**どの await が時間を食ったか**を、このリクエスト内で木にまとめる——遅い API の切り分けや、Service 内の一連の IO の分解に向く。日常の CRUD でデフォルト依存する必要はない。標準の分散トレースなら OpenTelemetry。本パッケージはより軽く、アプリ内の障害切り分け向け。
 
 ```bash
 pnpm add @aomex/async-trace
 ```
 
-リクエスト全体をミドルウェアで包む：
+## リクエスト全体を包む
+
+`traceMiddleware` を `WebApp.mount`（または特定の Router グループ）に載せる。リクエストごとに根ノードを開き、第 2 引数はリクエスト終了後のコールバック。「遅いリクエストだけ」ログに載せるときに向く。
 
 ```typescript
 import { asyncTrace, traceMiddleware } from '@aomex/async-trace';
+import { routers, WebApp } from '@aomex/web';
 
-mount: [
-  traceMiddleware('request', (record) => { // [!code highlight]
-    if (record.duration > 500) {
-      void asyncTrace.toStack([record]);
-    }
-  }),
-  routers('./src/routers'),
-],
+const app = new WebApp({
+  services,
+  logger: services.logger,
+  language: { mode: 'fixed', language: 'zh-CN' },
+  proxyIP: { mode: 'detect' },
+  mount: [ // [!code focus:8]
+    traceMiddleware('request', (record) => {
+      if (record.duration > 500) {
+        void asyncTrace.toStack([record]);
+      }
+    }),
+    routers('./src/routers'),
+  ],
+});
 ```
 
-traceMiddleware を載せず ctx.asyncTrace を期待すると、型も実行時もルート記録がない。ミドルウェアを載せるか、局所の traceBlock だけ使う。
+載せたあと、Web コンテキストは **AsyncTraceMiddlewareProps** をマージする。リクエスト内では `ctx.asyncTrace.record` が使える（具体フィールドは型ヒントに従う）。載せずに `ctx.asyncTrace` を期待しても、型にも実行時にも根レコードは出ない。ミドルウェアを載せるか、局所の `traceBlock` だけ使う。
 
-Service 内の局所分解：
+`traceMiddleware` は **mixin** ミドルウェアで、`middleware.web` 専用ファクトリではないが、Web mount にそのまま入れられる。Console / command mount にも載せられる。特定グループの API だけ遅く、サイト全体のオーバーヘッドを避けたいときは、その Router の mount に載せればよい。
+
+::: warning
+本番で全量スタックを出し、しきい値なしだと実行時コストがある。callback で duration やサンプリングに合わせてログシステムへつなぐ。
+:::
+
+## Service でホットスポットを分ける
+
+リクエスト全体では総所要時間しか見えない。「どの DB 照会が遅いか」を分けるには、Service で `traceBlock` に一段の await を包む。入れ子になると `toStack` はインデント構造で出る。
 
 ```typescript
 import { traceBlock } from '@aomex/async-trace';
 
-const data = await traceBlock('loadUser', async () => { // [!code highlight]
-  const profile = await db.profile.find();
-  const prefs = await db.prefs.find();
-  return { profile, prefs };
-});
+async loadUser(id: number) {
+  return traceBlock('loadUser', async () => { // [!code focus:5]
+    const profile = await db.profile.find(id);
+    const prefs = await db.prefs.find(id);
+    return { profile, prefs };
+  });
+}
 ```
 
-メソッド単位はデコレータ（クラスメソッドに複数 await があると手書き traceBlock よりきれい）：
+クラスメソッドに複数 await があるときは、手書き `traceBlock` よりデコレータの方がきれい。label 未指定時のデフォルトはだいたい `ClassName.methodName` で、スタックが見やすい：
 
 ```typescript
 import { traceMethod } from '@aomex/async-trace';
@@ -56,28 +71,11 @@ class UserService {
 }
 ```
 
-label 未指定時は ClassName.methodName に近い既定。スタックを見るとき分かりやすい。
+`asyncTrace.run(label, callback)` は、すでに開いている木の中に子ノードを足す。レコードにはだいたい label、duration、parent / children、error などがある——障害切り分けでは duration と label を見れば足りることが多い。
 
-traceMiddleware 後、Web コンテキストに **AsyncTraceMiddlewareProps** がマージされる。リクエスト内で **ctx.asyncTrace.record** が使える（詳細は型ヒント参照）。traceMiddleware は **mixin** ミドルウェアで `middleware.web` 専用ファクトリではないが Web mount にそのまま入れられる。Console / command の mount にも載せられる。`asyncTrace.run(label, callback)` は既存の木の子ノードを開く。ネスト後 toStack はインデント構造。記録には label、duration、parent / children、error など——障害時は duration と label を見れば足りることが多い。
-
-## マウント階層とコールバック
-
-| シナリオ | 使い方 |
-| --- | --- |
-| サイト全体 HTTP | `WebApp.mount: [traceMiddleware('http')]` |
-| API グループ | `Router.mount: [traceMiddleware('api-v1')]` |
-| コンソールタスク | `ConsoleApp` / command の `mount` にも可 |
-| ホットスポットメソッド | `@traceMethod()` または `traceBlock` |
-| 遅いリクエストをログへ | `traceMiddleware` 第 2 引数 `callback`。本番ホットパスで全スタックを無条件 console.log しない |
-
-::: warning
-本番で全スタックを閾値なし出力するとランタイムコストが出る。callback で duration やサンプリングでログ基盤へ。
-
-:::
-
-[@aomex/http-access-log](/ja/plugins/http-access-log) と補完：アクセスログは総時間、リンクトレースは子ステップ。本パッケージは OpenTelemetry 等の分散 trace の代替ではない。サービス横断は標準方式を使う。
+[@aomex/access-log](/ja/plugins/http-access-log) と補完関係：アクセスログは総所要時間、リンクトレースは子ステップを分ける。本パッケージは OpenTelemetry などの分散 trace の代わりにはならない。サービス横断は標準方式が必要。
 
 ## 関連
 
 - ミドルウェア順：[Web アプリ](/ja/web/)、[カスタムミドルウェア](/ja/advanced/middleware)
-- requestId 付きログ：[ログ · withBindings](/ja/core/logger#リクエスト単位コンテキストwithbindings)
+- ログに requestId を載せる：[ログ · withBindings](/ja/core/logger#リクエスト単位のコンテキストwithbindings)

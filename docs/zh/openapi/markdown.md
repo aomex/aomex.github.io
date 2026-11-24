@@ -13,7 +13,7 @@ OpenAPI 里不少 **description** 字段按 **CommonMark** 渲染（Swagger UI /
 整站说明放 `docs.info.description`；分组说明放 `docs.tags[].description`（与路由上的 tag 名对应，见 [Tags 分组](/zh/openapi/tags)）。
 
 ```typescript
-import { generateOpenapi } from '@aomex/openapi';
+import { generateOpenapi } from '@aomex/openapi-generator';
 import { app } from './app.js';
 
 await generateOpenapi({

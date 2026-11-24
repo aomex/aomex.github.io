@@ -63,7 +63,7 @@ router.get('/export', {
 `tags: ['User']` на маршруте задаёт только **имя**. Чтобы в шапке документации добавить к группе вводный текст (поддерживается Markdown), объявите элемент с тем же именем в `docs.tags` у `generateOpenapi`:
 
 ```typescript
-import { generateOpenapi } from '@aomex/openapi';
+import { generateOpenapi } from '@aomex/openapi-generator';
 import { app } from './app.js';
 
 await generateOpenapi({

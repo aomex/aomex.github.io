@@ -16,7 +16,7 @@ pnpm add @aomex/response-time
 
 ```typescript
 import { responseTime } from '@aomex/response-time';
-import { httpAccessLog } from '@aomex/http-access-log';
+import { httpAccessLog } from '@aomex/access-log';
 import { routers, WebApp } from '@aomex/web';
 
 const app = new WebApp({

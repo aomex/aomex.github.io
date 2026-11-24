@@ -188,7 +188,7 @@ onProfile: async ({ token, oidc, ctx }) => {
 
 ## 刷新与吊销
 
-登录后业务自己存 `refresh_token`；过期前在 Service 里对 `this.oauth` 调 `refresh`。可选 `scope`（只能缩小，不能扩大）。退出或废票时调 `revoke`（需配置 `revocationEndpoint`；OIDC 未手写时会尝试 discovery 的 `revocation_endpoint`）。
+登录后业务自己存 `refresh_token`；过期前在 Service 里对 `this.oauth` 调 `refresh`。可选 `scope`（只能缩小，不能扩大）。退出或废票时调 `revoke`（需配置 `revocationEndpoint`；OIDC 未手写时会尝试 discovery 的 `revocation_endpoint`；纯 OAuth2 常需手写该 URL）。
 
 ```typescript
 const tokens = await this.oauth.refresh(storedRefreshToken);
@@ -197,17 +197,7 @@ await this.oauth.revoke(tokens.access_token, {
 });
 ```
 
-## 常改选项
-
-| 选项 | 干什么 |
-| --- | --- |
-| `redirectUri` | 固定字符串，或 `(ctx) => string` 按请求拼（多域名） |
-| `clientSecret` | 字符串，或 `() => string \| Promise<string>`（如 Apple 动态 JWT） |
-| `pkce` | 默认 `true`（S256）；极少数旧端点可关 |
-| `tokenAuth` | 换票时凭证放哪：`body`（默认）或 `basic` |
-| `stateTtl` | state 缓存多久，默认 `'10 minutes'` |
-| `authorizationParams` | 额外塞进授权 URL 的 query（不覆盖必要字段） |
-| `revocationEndpoint` | 吊销 URL；纯 OAuth2 常需手写 |
+构造时还会常动这几项：`redirectUri` 可写固定字符串，或 `(ctx) => string` 按请求 origin 拼（多域名）；`clientSecret` 也可是 `() => string | Promise<string>`（如 Apple 动态 JWT）；`pkce` 默认 `true`（S256），极少数旧端点才关；换票凭证默认放 body，Spotify 等要用 `tokenAuth: 'basic'`；`stateTtl` 默认 `'10 minutes'`；额外授权 query 用 `authorizationParams`（不覆盖必要字段）。
 
 ::: warning
 `callback` 只接受授权码流（`code` + `state`）。回调里若带隐式 / 混合流的 `id_token` 或 `token` query，会清掉 state 并抛错。用户取消授权时授权服务器常带 `error`（如 `access_denied`），校验并消费 state 后抛错——路由里自行决定提示文案。Apple 等厂商可能是 **POST form_post**，以对应预设 README 为准。

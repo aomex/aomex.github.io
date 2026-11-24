@@ -2,9 +2,9 @@
 outline: deep
 ---
 
-# Server-sent events (SSE)
+# Server-Sent Events (SSE)
 
-Build a GET endpoint that **pushes continuously** while the browser listens with `EventSource`: call `ctx.sse()` in the action and emit via `stream` or `send`. Good for notifications, progress, ticker refresh—use WebSocket when you need messy bidirectional frames.
+Build a GET endpoint where the server keeps pushing and the browser listens with EventSource: call `ctx.sse()` in the action, then push events with `stream` or `send`. Fits notifications, progress bars, and live quotes; for messy bidirectional frames, consider WebSocket.
 
 ```typescript
 import { Router } from '@aomex/web';
@@ -26,13 +26,13 @@ router.get('/events', { // [!code focus:13]
 });
 ```
 
-Prefer `stream`: when the client disconnects `signal` aborts and the iterator cleans up—less manual `close` / timer clearing.
+Prefer `stream`: when the client disconnects, `signal` aborts; when the iteration ends, cleanup runs automatically—fewer manual closes and timer teardowns.
 
-`ctx.sse()` equals `ctx.response.sse()`; call **before** response headers are sent or it throws. SSE owns the response—do not `ctx.send` JSON on the same route after opening. Opens as 200 with `Content-Type: text/event-stream`. Object `data` in `emit` / `send` is JSON-serialized; `lastEventId` comes from the request header—often `undefined` on first connect.
+`ctx.sse()` and `ctx.response.sse()` are equivalent; call them **before response headers are written**, or they throw. SSE owns the whole response—do not `ctx.send` JSON at the end of the same route. After open, status is 200 and Content-Type is `text/event-stream`. Object `data` on emit / send is JSON-serialized; `lastEventId` comes from the request header and is usually `undefined` on the first connection.
 
 ## heartbeat and retry
 
-Long browser connections get killed as idle by proxies. **heartbeat** sends comment lines periodically; **retry** tells the client how long to wait before reconnecting (set when opening the stream). Disable heartbeat for short local tests; production through Nginx/CDN should tune both.
+Long browser connections are often treated as idle by reverse proxies and cut. `heartbeat` periodically pushes comment lines to keep alive (often about 15s; local short tests can use `heartbeat: false`). `retry` suggests how many milliseconds the client should wait before reconnecting (notification streams often use `3000`). Production streams through Nginx or a CDN need both checked.
 
 ```typescript
 const sse = ctx.sse({
@@ -41,21 +41,9 @@ const sse = ctx.sse({
 });
 ```
 
-| Option | Default / habit | When to use |
-| --- | --- | --- |
-| `heartbeat` | often ~15s | Keep-alive through Nginx/CDN; local short test `heartbeat: false` |
-| `retry` | unset | Browser reconnect delay in ms (notifications often `3000`) |
-
 ## Per-event fields
 
-Each `send` / `emit` may set `event` name, `id`, optional per-event `retry`, and `data`. Object `data` auto JSON-serializes; stable **id** lets reconnect send `Last-Event-ID` for resume.
-
-| Field | When to use |
-| --- | --- |
-| `data` | Payload; objects → JSON |
-| `event` | Multiple event types (`job` / `progress` / `ready`); frontend listens by name |
-| `id` | Resume after disconnect; reconnect carries `Last-Event-ID` |
-| `retry` | Per-event reconnect interval override |
+Each `send` / `emit` can carry an event name, id, optional per-event retry, and a data payload. Object data is JSON-serialized automatically; with an **id**, the browser reconnects with `Last-Event-ID` so you can resume. When several event types coexist (`job` / `progress` / `ready`), the frontend listens by `event` name.
 
 ```typescript
 sse.send({ data: { hello: 'world' } });
@@ -70,38 +58,30 @@ sse.send({
 
 ## stream, resume, and cleanup
 
-`stream` wraps “read upstream, emit along the way”: client disconnect aborts **signal** and ends the iterator—no hand-rolled timers/`close`. Use `lastEventId` to continue after an id; release subscriptions in `onClose`.
+`stream` wraps “read upstream while emitting” into one lifecycle: client disconnect aborts **signal** (pass it to Redis subscriptions or queue watchers); when iteration ends, cleanup runs so you skip hand-written timers and close. `lastEventId` comes from the request header—use it to resume after a given event; release subscriptions and record audits in `onClose`; you can also `close()` when a job finishes (`stream` calls it automatically when done).
 
 ```typescript
-await sse.stream(async (emit, signal) => {
-  // emit same as sse.send; signal aborts on disconnect
+await sse.stream(async (emit, signal) => { // [!code focus:8]
+  const after = sse.lastEventId;
+  sse.onClose(() => {
+    subscription.unsubscribe();
+  });
+  for await (const item of watchEvents({ after, signal })) {
+    emit({ id: String(item.id), event: 'item', data: item });
+  }
 });
 ```
 
-| Member | Typical use |
-| --- | --- |
-| `lastEventId` | Push events after this id |
-| `signal` | Pass to Redis subscribe, queue watch—stop upstream when client leaves |
-| `onClose(fn)` | Unsubscribe, audit log |
-| `close()` | End job and close stream; `stream` end calls it automatically |
 
-```typescript
-const after = sse.lastEventId; // [!code highlight]
-sse.onClose(() => {
-  subscription.unsubscribe();
-});
-sse.close();
-```
-
-`send` is ignored when the connection is closed or not writable—do not assume delivery. Set stable event ids for resume—or `lastEventId` mismatches and reconnect replays from the start.
+When the connection is closed or not writable, `send` silently ignores—do not treat that as “definitely delivered”. For resume-after-disconnect, give events stable ids; otherwise `lastEventId` will not match and reconnects start from scratch.
 
 ::: warning
-Through Nginx etc., besides framework `X-Accel-Buffering: no`, tune heartbeat and proxy buffering/timeouts or idle connections get cut.
+Long connections through Nginx and similar proxies need heartbeat and proxy buffer timeouts aligned—beyond the framework’s `X-Accel-Buffering: no`—or idle cuts are common.
 :::
 
-## With `response()` and OpenAPI
+## With response() and OpenAPI
 
-OpenAPI needs this GET exit as `text/event-stream`—mount `response({ contentType: 'text/event-stream', ... })`. That serves docs and types only—it does **not** replace `ctx.sse()` frames.
+OpenAPI needs to know this GET exit is `text/event-stream`, so mount `response({ contentType: 'text/event-stream', ... })`. That only serves docs and types—it **does not replace** writing frames with `ctx.sse()` in the action.
 
 ```typescript
 import { rule } from '@aomex/common';
@@ -115,12 +95,12 @@ response({
 });
 ```
 
-Compression middleware usually skips `text/event-stream`—see [Compress](/en/plugins/compress).
+This only helps docs and type hints—it **cannot replace** the frame protocol of `ctx.sse()`. Compression middleware usually skips `text/event-stream`; see [Compress](/en/plugins/compress).
 
-`EventSource` is GET-only; cross-origin with cookies needs [CORS](/en/plugins/cors).
+EventSource is GET-only; cross-site cookies need [CORS](/en/plugins/cors) configured.
 
 ## Next steps
 
-- [Response constraints](/en/web/response) (stream `contentType`)
-- [Web I/O overview](/en/web/) (mount with other middleware)
-- [Compress](/en/plugins/compress) (do not break event streams)
+- [Constrain response](/en/web/response) (declare `contentType` for streaming exits)
+- [I/O overview](/en/web/) (mount with other Web middleware)
+- [Compress](/en/plugins/compress) (do not crush the event stream)

@@ -4,18 +4,18 @@ outline: deep
 
 # Стратегия Session
 
-Состояние входа браузера хранится в **HttpOnly Cookie**: в Cookie только непрозрачный `sessionId`, данные пользователя — в адаптере `@aomex/cache` (memory / Redis). Для SPA на другом origin нужны и [CORS](/ru/plugins/cors) (передача Cookie), и [CSRF](/ru/plugins/csrf) (защита от кросс-сайтовой записи) — без любого из них сессия либо не доезжает, либо её легко злоупотребить с чужой страницы.
+Состояние входа в браузере лежит в **HttpOnly Cookie**: в Cookie только непрозрачный `sessionId`, данные пользователя — в адаптере `@aomex/cache` (memory / Redis). Для кросс-доменного SPA нужны и [CORS](/ru/plugins/cors) (с Cookie), и [CSRF](/ru/plugins/csrf) (против кросс-сайтовой записи) — без куска либо сессия не доедет, либо чужой сайт сможет ею злоупотребить.
 
-Подходит для «тот же origin или доверенный фронт + отзыв сессии на сервере в любой момент». Для чистых мобильных клиентов и machine-to-machine чаще [Bearer](/ru/plugins/auth-bearer-strategy) или [JWT](/ru/plugins/auth-jwt-strategy).
+Подходит для «свой или доверенный фронт + сессию можно гасить на сервере в любой момент»; чисто мобильные / машинные вызовы чаще идут через [Bearer](/ru/plugins/auth-bearer-strategy) или [JWT](/ru/plugins/auth-jwt-strategy).
 
 ## Установка
 
-Стратегия Session входит в `@aomex/auth`; для хранения сессий нужен `@aomex/cache` (и Redis-адаптер в проде). Для Cookie через CORS добавьте CORS / CSRF.
+Стратегия Session идёт с основным `@aomex/auth`; для хранения сессии ещё `@aomex/cache` (и Redis-адаптер в проде). Для кросс-доменных Cookie — CORS / CSRF.
 
 ```bash
 pnpm add @aomex/auth @aomex/cache
-# Cookie через cross-origin: pnpm add @aomex/cors @aomex/csrf
-# Общая сессия на нескольких инстансах: pnpm add @aomex/cache-redis-adapter
+# кросс-доменный Cookie: pnpm add @aomex/cors @aomex/csrf
+# общая сессия на нескольких инстансах: pnpm add @aomex/cache-redis-adapter
 ```
 
 ```typescript
@@ -24,13 +24,13 @@ import { AuthSessionStrategy } from '@aomex/auth/session';
 
 ## Сначала CORS и CSRF
 
-Когда фронт на другом origin шлёт Cookie, браузер требует:
+Кросс-доменный фронт с Cookie требует от браузера:
 
 1. Запрос с `credentials: 'include'` (или XHR `withCredentials`)
-2. Ответ с `Access-Control-Allow-Credentials: true` и **конкретным** `Access-Control-Allow-Origin` (не `*`)
-3. CSRF-заголовок на записях — иначе чужая страница может «одолжить» ваш Cookie для POST
+2. В ответе `Access-Control-Allow-Credentials: true` и `Access-Control-Allow-Origin` — **конкретный домен** (не `*`)
+3. Запросы записи с CSRF-заголовком, иначе чужая страница «одолжит» ваш Cookie для POST
 
-При `credentials: true` **нужно явно задать `origin`** — нельзя полагаться на отражение у «голого» `cors()`: исключение уже при старте. CSRF — double-submit Cookie: читаемый Cookie `csrfToken` должен совпадать с заголовком `x-csrf-token`.
+При `credentials: true` **обязателен явный `origin`**, нельзя полагаться на дефолтное отражение безаргументного cors() — упадёт уже на старте. CSRF — double-submit Cookie: читаемый Cookie `csrfToken` совпадает с заголовком `x-csrf-token`.
 
 ```typescript
 import { cors } from '@aomex/cors';
@@ -40,7 +40,7 @@ import { routers, WebApp } from '@aomex/web';
 const app = new WebApp({
   services,
   logger: services.logger,
-  language: { mode: 'fixed', language: 'ru-RU' },
+  language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:8]
     cors({
@@ -55,12 +55,12 @@ const app = new WebApp({
 ```
 
 ::: tip
-Локально при разных портах укажите origin `http://localhost:5173` (или URL фронта), не `*`. При том же origin cors() можно опустить, CSRF лучше оставить.
+Локально на разных портах поставьте origin `http://localhost:5173` (или адрес вашего фронта), не `*`. Same-origin деплой (фронт и API один origin) может обойтись без cors(), но CSRF лучше оставить.
 :::
 
-Порядок: cors → csrf → routers. Оба **до** routers, иначе ошибки останутся без CORS / только что выданного CSRF Cookie.
+Порядок: cors → csrf → routers. Оба **перед** routers, иначе ошибочные ответы не получат CORS / свежий CSRF Cookie.
 
-Пример мутирующего запроса с фронта:
+Типичный запрос изменения данных с фронта:
 
 ```typescript
 const csrfToken = document.cookie
@@ -79,11 +79,11 @@ await fetch('https://api.example.com/api/posts', {
 });
 ```
 
-Безопасные методы вроде GET по умолчанию CSRF не проверяют; первый визит выдаёт Cookie `csrfToken` (`HttpOnly=false`, JS может прочитать). Подробности: [CSRF](/ru/plugins/csrf).
+Безопасные методы вроде GET по умолчанию CSRF не проверяют; при первом визите выдаётся Cookie `csrfToken` (`HttpOnly=false`, JS может читать). Детали: [CSRF](/ru/plugins/csrf).
 
 ## store, cookie и onLoaded
 
-`cookie.maxAge` (секунды) обязателен и одновременно TTL кэша. `onLoaded` превращает Stored из cache в бизнес-идентичность; для отозванного пользователя верните `false` → **401**.
+`cookie.maxAge` (секунды) обязателен и одновременно TTL кеша. `onLoaded` превращает Stored из cache в бизнес-личность; уже вышедший пользователь — `false` → **401**.
 
 ```typescript
 import { Auth } from '@aomex/auth';
@@ -98,7 +98,7 @@ const auth = new Auth({
       store: new CacheMemoryAdapter(), // [!code highlight]
       cookie: {
         maxAge: 7 * 24 * 3600,
-        // Для cross-site фронта в проде часто: sameSite: 'none', secure: true
+        // кросс-сайт фронт в проде часто: sameSite: 'none', secure: true
       },
       onLoaded: async (data: { userId: number }) => {
         const user = await findActiveUser(data.userId);
@@ -112,21 +112,13 @@ const auth = new Auth({
 });
 ```
 
-В проде и на нескольких инстансах — Redis и т.п.; см. [кэш](/ru/core/cache). Имя Cookie по умолчанию `sessionId`; у `setCookie` по умолчанию `httpOnly: true`, `sameSite: Strict` (для cross-site — `'none'` и `secure`).
+В проде или на нескольких инстансах — внешний адаптер вроде Redis, см. [Кеш](/ru/core/cache). Имя Cookie по умолчанию `sessionId`; у `setCookie` по умолчанию `httpOnly: true`, `sameSite: Strict` (кросс-сайт фронту нужен `'none'` и `secure`). `cookie.name` / `path` / `domain` выровняйте с доменом фронта.
 
-| Опция | Когда |
-| --- | --- |
-| `store` | Где лежат сессии; локально memory, на репликах Redis |
-| `cookie.maxAge` | Срок сессии в секундах; **обязателен** |
-| `cookie.name` / `path` / `domain` / `sameSite` / `secure` | Под домен фронта и cross-site |
-| `sliding` | Продлевать TTL + Cookie при каждой успешной auth |
-| `generateCacheKey` | Свой префикс ключа; по умолчанию `auth:session:${sessionId}` |
-| `onLoaded` | Stored → идентичность; БД / отзыв |
-| `onAuthorize` | Только если нужен `authorize(роль)` |
+Чтобы активных пользователей реже выкидывало — `sliding`: при каждой успешной аутентификации продлевается TTL + Cookie. Свой префикс ключа кеша — `generateCacheKey` (по умолчанию `auth:session:${sessionId}`). `onAuthorize` пишите, когда нужен `authorize(роль)`.
 
-## Вход, проверка, выход
+## Логин, аутентификация, выход
 
-На маршрут логина **не** вешайте `authenticate`. `strategy.login(ctx, stored)` пишет кэш и ставит Cookie (новый `sessionId`; если в запросе был старый Cookie, после успешной записи старая сессия удаляется). Защищённые API — `authenticate('session')`, чтение — `ctx.auth.session`.
+На маршрут логина **не** вешайте `authenticate`. `strategy.login(ctx, stored)` пишет кеш и ставит Cookie (новый `sessionId`; если в запросе уже был старый Cookie, после успешной записи старая сессия удаляется). На приватные интерфейсы — `authenticate('session')`, читайте `ctx.auth.session`.
 
 ```typescript
 const session = auth.strategy('session');
@@ -165,33 +157,33 @@ privateRouter.get('/me', {
 });
 ```
 
-После успешной auth:
+После успеха:
 
 ```typescript
 ctx.auth.session // { sessionId: string; data: Loaded }
 ```
 
-`data` — результат `onLoaded`. `logout` удаляет кэш и Cookie; `touch` только продлевает TTL. После повышения прав или чувствительного действия вызовите `regenerateSessionId(ctx)` (можно передать новый Stored).
+`data` — возврат `onLoaded`. `logout` чистит кеш и Cookie; `touch` только продлевает, не меняя содержимое. После повышения прав или чувствительной операции смените id через `regenerateSessionId(ctx)` (можно сразу передать новый Stored).
 
 ::: warning
-На cross-origin фронт обязан слать `credentials: 'include'`, иначе браузер не приложит Cookie `sessionId` — «логин прошёл, сразу 401».
+При кросс-домене фронт обязан `credentials: 'include'`, иначе браузер не приложит Cookie `sessionId` — выглядит как «логин успешен, сразу 401».
 :::
 
-## Session vs Bearer / JWT
+## Выбор между Bearer / JWT
 
 | | Session | Bearer / JWT |
 | --- | --- | --- |
-| Где credential | HttpOnly Cookie | Заголовок / local storage |
-| Cross-origin | CORS credentials + часто CSRF | Обычно только `Authorization` |
-| Отзыв | Удалить запись в кэше | Bearer — удалить сессию; JWT — короткий TTL / denylist |
-| Типичный клиент | Браузерный SPA / админка | App, open platform, service-to-service |
+| Где учётные данные | HttpOnly Cookie | заголовок / локальное хранилище |
+| Кросс-домен | CORS credentials + часто CSRF | обычно только `Authorization` |
+| Отзыв | удалить кеш | Bearer — удалить сессию; JWT — короткий TTL / чёрный список |
+| Типичный клиент | браузерный SPA / админка | App, открытая платформа, сервис–сервис |
 
-Админка на том же origin — скорее Session; публичное API — Bearer или JWT. Обзор: [Аутентификация](/ru/plugins/auth).
+Same-origin админка — предпочтительно Session; открытое API — Bearer или JWT. Общий вход: [Аутентификация](/ru/plugins/auth).
 
 ## Связанное
 
-- [CORS](/ru/plugins/cors)
+- [Кросс-домен CORS](/ru/plugins/cors)
 - [CSRF](/ru/plugins/csrf)
 - [Аутентификация](/ru/plugins/auth)
-- [Кэш](/ru/core/cache)
-- [Bearer](/ru/plugins/auth-bearer-strategy)
+- [Кеш](/ru/core/cache)
+- [Стратегия Bearer](/ru/plugins/auth-bearer-strategy)

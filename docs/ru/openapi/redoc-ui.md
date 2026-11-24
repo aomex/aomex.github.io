@@ -18,7 +18,7 @@ pnpm add @aomex/redoc-ui
 
 ```typescript
 import { redocUI } from '@aomex/redoc-ui';
-import { generateOpenapi } from '@aomex/openapi';
+import { generateOpenapi } from '@aomex/openapi-generator';
 import { app } from './app.js';
 
 mount: [ // [!code focus:13]

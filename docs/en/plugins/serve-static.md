@@ -4,15 +4,15 @@ outline: deep
 
 # Static files
 
-Map a disk directory (frontend `dist`, `public`, downloads) to HTTP file responses; on miss, `next()` to API routes. Only serve your chosen `root`—not project root or `node_modules`.
+Map a directory on disk (frontend dist, public, download packages) to HTTP file responses; on miss, `next()` hands off to later APIs. Serve only the `root` you choose—do not point at the project root or `node_modules`.
 
 ```bash
 pnpm add @aomex/serve-static
 ```
 
-## Before API routes
+## Before routers
 
-Static middleware usually sits **before** business routes (try file first, then API).
+Static middleware usually sits **before** business routes (try the file first, then hit the API). `root` is required and should point at frontend build output or a download directory.
 
 ```typescript
 import { serveStatic } from '@aomex/serve-static';
@@ -21,7 +21,7 @@ import { routers, WebApp } from '@aomex/web';
 const app = new WebApp({
   services,
   logger: services.logger,
-  language: { mode: 'fixed', language: 'zh-CN' },
+  language: { mode: 'fixed', language: 'en-US' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:4]
     serveStatic({ root: './public' }), // [!code highlight]
@@ -30,19 +30,15 @@ const app = new WebApp({
 });
 ```
 
-Plain `WebMiddleware`. Hits send file content; misses pass through. Path traversal, `..`, NUL, dotfiles are rejected (validation inside the package).
+Plain WebMiddleware. On a hit it sends the file; on a miss it continues. Path traversal, `..`, NUL, dotfiles, and similar are rejected (checks live inside the package). Directory requests fall back to `index.html` by default (change with `indexFile`). When the build already emits sidecar `.br` / `.gz` files, `useCompressedFile` prefers them by default (you can turn that off).
 
-## root and caching
+::: warning
+`root: '.'` or a directory that contains `node_modules` risks path leaks—misconfiguration has shown up in production.
+:::
 
-| Option | When to use | Default |
-| --- | --- | --- |
-| `root` | Frontend build or download dir | **required** |
-| `formatPath` | URL prefix differs from disk (e.g. `/assets`) | — |
-| `indexFile` | Directory requests fall back to index | `index.html` |
-| `useCompressedFile` | Build emits sidecar `.br`/`.gz` | `true` |
-| `cacheControl` | Long cache for hashed assets; short or `noCache` for HTML | `maxAge: 0` |
+## Hashed chunks: long cache
 
-### Long cache (hashed chunks)
+JS/CSS chunks with a content hash can use a long `cacheControl`; entry files such as `index.html` should not be equally `immutable`, or users keep an old shell after you ship.
 
 ```typescript
 serveStatic({
@@ -54,7 +50,11 @@ serveStatic({
 });
 ```
 
-### URL prefix rewrite
+Default `maxAge: 0`. Prefer short cache or `noCache` for HTML.
+
+## URL prefix vs disk path
+
+When CDN / gateway maps `/assets/...` to `./dist`, use `formatPath` to strip the prefix before looking up the file:
 
 ```typescript
 serveStatic({
@@ -66,7 +66,9 @@ serveStatic({
 });
 ```
 
-### API + SPA fallback (deep links → index.html)
+## API + SPA fallback
+
+Deep-link refresh cannot rely on static middleware alone: after routers, fall back to `index.html` for misses. `send` and `serveStatic` are exported from the same package.
 
 ```typescript
 import { middleware } from '@aomex/common';
@@ -89,19 +91,13 @@ mount: [
 ];
 ```
 
-| Environment | Guidance |
+| Environment | Recommendation |
 | --- | --- |
-| Production | High traffic often uses CDN/Nginx; Node still OK for fallback or internal |
+| Production | Heavy traffic often hands static to CDN/Nginx; Node still fits fallback or intranet |
 | Local | Point `serveStatic` at Vite build output |
-
-::: warning
-`root: '.'` or directories containing `node_modules` risk path leaks—misconfigs happen in production.
-:::
-
-Do not give `index.html` the same `immutable` long cache as hashed chunks—or users keep an old shell after deploy. SPA deep links need fallback **after** `routers` to `index.html` (see demo above).
 
 ## Next steps
 
-- Conditional cache: [ETag](/en/plugins/etag)
+- Conditional caching: [ETag](/en/plugins/etag)
 - Transfer compression: [Compress](/en/plugins/compress)
-- Web assembly: [App entry](/en/web/)
+- Assembling the Web entry: [App entry](/en/web/)

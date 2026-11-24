@@ -4,9 +4,9 @@ outline: deep
 
 # レスポンス圧縮
 
-大きな JSON やレポート系 API を、クライアントが `Accept-Encoding` を出すとき gzip / br / zstd などで圧縮し、帯域を減らす。
+大きな JSON やレポート系 API で、クライアントが `Accept-Encoding` を付けるときに gzip / br / zstd などで圧縮し、帯域を減らす。
 
-**本番では Nginx（または CDN）での圧縮を優先**。Node プロセスの CPU を抑え、静的リソースや TLS 終端とも組み合わせやすい。ローカル直結、リバースプロキシなし、ゲートウェイで特定エンコーディングがまだ押せないときだけ、アプリに `@aomex/compress` を載せる。小さなレスポンスや既に圧縮されたリソース（画像・動画）はスキップし、無駄な CPU を避ける。
+**本番では Nginx（または CDN）での圧縮を優先**する。Node プロセスの CPU を節約でき、静的ファイルや TLS 終端と並べやすい。本機直結・反代なし、またはゲートウェイが一時的に特定エンコーディングを押せないときだけ、アプリに `@aomex/compress` を載せる。小さな応答と既に圧縮済みの資源（画像・動画）はスキップし、無駄な CPU を避ける。
 
 ```bash
 pnpm add @aomex/compress
@@ -14,7 +14,7 @@ pnpm add @aomex/compress
 
 ## WebApp にサイト全体でマウント
 
-エッジが同じレスポンスを既に圧縮していないことを確認してから `compress()` を `WebApp.mount` に入れる。レスポンスは `await next()` の**後**で `Accept-Encoding` に応じて圧縮する。業務はこれまでどおり `ctx.send` でよい。action 内で gzip を判定する必要はない。
+エッジが**同じ応答を圧縮していない**ことを確認してから、`compress()` を `WebApp.mount` に載せる。応答は `await next()` の**後**に `Accept-Encoding` で圧縮する。業務はいつもどおり `ctx.send` でよく、action で gzip を判断する必要はない。
 
 ```typescript
 import { compress } from '@aomex/compress';
@@ -32,26 +32,23 @@ const app = new WebApp({
 });
 ```
 
-compress() は CompressProps を付ける。ctx.needCompress でルート単位のオン/オフができ（補完にそのフィールドが出る）。レスポンスには Content-Encoding が付く。text/event-stream などストリーム型は多くの場合スキップし、ストリーム全体をバッファしない。
+compress() は CompressProps を付ける。ctx.needCompress で単一ルートを強制オン/オフできる（補完にフィールドが出る）。応答には Content-Encoding が付く。text/event-stream などストリーム型は通常スキップし、ストリーム全体をバッファしない。
 
-## しきい値とアルゴリズム
+よくある mount 順：アクセスログ / 応答時間 → compress → ルート（圧縮は最終 body を見る）。アルゴリズム優先度（クライアントが全部対応するとき）：**zstd → br → gzip → deflate**。
 
-| オプション | いつ使う | デフォルト |
-| --- | --- | --- |
-| `threshold` | しきい値未満の body は圧縮しない（CPU 節約） | `1024` |
-| `filter` | 圧縮向きでないタイプを全体でスキップ；`ctx.needCompress` で上書き可 | MIME 判定 |
-| `zstd` / `br` / `gzip` / `deflate` | 特定アルゴリズムだけ使うとき他をオフ | すべて有効 |
-| `ctx.needCompress` | SSE・大ファイル DL などルート単位の例外 | `filter` 次第 |
+## 大きな一覧はしきい値を上げる
 
-アルゴリズム優先（クライアントがすべてサポート）：**zstd → br → gzip → deflate**。
-
-### 大きな一覧 / エクスポート
+デフォルトでは約 `1024` バイト未満の body は圧縮せず CPU を節約する。エクスポートや大きな一覧は `threshold` を `'4kb'` などに上げられる。数値や単位なしは byte。
 
 ```typescript
-compress({ threshold: '4kb' });
+compress({ threshold: '4kb' }); // [!code highlight]
 ```
 
-### SSE では圧縮を切る
+特定アルゴリズムだけ使うときは、ほかを `false` にする（例：`br: false`）。`filter` は Content-Type で圧縮するかを決め、単一ルートの `ctx.needCompress` で上書きできる。
+
+## SSE では圧縮を切る
+
+ストリーム API で圧縮を切り忘れると、バッファがリアルタイム性を壊す。action で `ctx.needCompress` を `false` にする：
 
 ```typescript
 router.get('/events', {
@@ -62,26 +59,24 @@ router.get('/events', {
 });
 ```
 
-よくある mount 順：アクセスログ / レスポンス時間 → compress → ルート（圧縮は最終 body を見る）。
-
 | 環境 | 推奨 |
 | --- | --- |
-| ローカル直結 Node | `compress()` でサイズを確認可 |
-| 本番に Nginx / CDN | **エッジ圧縮を優先**；アプリ層は二重圧縮防止のため載せない |
-| エッジがまだ圧縮できない | アプリ内 `compress()` を検討し、ゲートウェイの同種モジュールはオフ |
+| ローカル直結 Node | `compress()` を載せてサイズを観察してよい |
+| 本番に Nginx / CDN あり | **エッジ圧縮を優先**。アプリ層は載せない（二重圧縮防止） |
+| エッジが一時的に押せない | アプリ内 `compress()` を検討し、ゲートウェイ側の同種モジュールは切る |
 
 ::: tip
-Nginx では `gzip on;`（必要なら Brotli モジュール）が一般的。アプリとゲートウェイは**どちらか一方**でよい。
+Nginx の定番は `gzip on;`（必要なら Brotli モジュール）。アプリとゲートウェイは**どちらか一方**でよい。
 :::
 
 ::: warning
-ゲートウェイとアプリが同時に圧縮すると、サイズが小さくならず遅延と CPU が二重になりがち。
+ゲートウェイとアプリが同時に圧縮すると、サイズが小さくならないことが多く、遅延と CPU は二重になりがち。
 :::
 
-ストリーム API（SSE など）で ctx.needCompress = false を忘れるとバッファでリアルタイム性が壊れる。[ETag](/ja/plugins/etag) と重ねるときは順序を決め打ちせず、実リクエストで 304 とサイズを確認する。
+[ETag](/ja/plugins/etag) と重ねるときは順序を思い込みで決めず、変更後に実リクエストで 304 とサイズを確認する。
 
 ## 次のステップ
 
 - 条件付きキャッシュ：[ETag](/ja/plugins/etag)
-- 静的の事前圧縮：[静的ファイル](/ja/plugins/serve-static)
-- レスポンスヘッダーの所要時間：[レスポンス時間](/ja/plugins/response-time)
+- 静的ファイルの事前圧縮：[静的ファイル](/ja/plugins/serve-static)
+- 応答ヘッダーの所要時間：[レスポンス時間](/ja/plugins/response-time)

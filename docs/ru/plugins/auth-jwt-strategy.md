@@ -4,9 +4,9 @@ outline: deep
 
 # Стратегия JWT
 
-Самодостаточные token: проверка на шлюзе или в сервисе, меньше Redis. Отзыв — короткий TTL, refresh, blocklist; пароли в payload не кладите. Если нужно отозвать любую сессию на сервере в любой момент, проще [Bearer + хранилище сессий](/ru/plugins/auth-bearer-strategy).
+Когда нужен «самодостаточный» токен: шлюз или сервис проверяет подпись локально, меньше ходов в Redis. Отзыв обычно через короткий TTL, refresh или чёрный список; пароль в payload не кладите. Если нужно в любой момент гасить любую сессию на сервере, [Bearer + хранение сессии](/ru/plugins/auth-bearer-strategy) часто удобнее.
 
-Установите `@aomex/auth-jwt-strategy`, secret и `onVerified`; `authenticate('jwt')` на Router; в коде `ctx.auth.jwt` (возврат `onVerified`, не `{ token, data }`).
+Поставьте `@aomex/auth-jwt-strategy`, настройте секрет и `onVerified`; на Router — `authenticate('jwt')`, в бизнесе читайте `ctx.auth.jwt` (это возврат `onVerified`, не форма `{ token, data }`).
 
 ## Установка
 
@@ -52,7 +52,7 @@ router.get('/me', {
 });
 ```
 
-Подпись при login или refresh в action:
+При логине или обновлении выдавайте в action:
 
 ```typescript
 const token = auth.strategy('jwt').signature(
@@ -61,30 +61,24 @@ const token = auth.strategy('jwt').signature(
 );
 ```
 
-## Форма ctx.auth vs Bearer
+## Форма ctx.auth и отличие от Bearer
 
-| Стратегия | Примерно `ctx.auth[name]` |
+| Стратегия | Примерная форма `ctx.auth[name]` |
 | --- | --- |
 | Bearer | `{ token, data }` |
-| JWT | сам объект из `onVerified` |
+| JWT | сам объект, возвращённый `onVerified` |
 
-На JWT-маршрутах `ctx.auth.jwt.userId`, не `ctx.auth.jwt.data.userId`. При миграции стратегий держите это в голове.
+Поэтому на JWT-маршрутах обычно `ctx.auth.jwt.userId`, а не `ctx.auth.jwt.data.userId`. Не смешивайте форму ctx.auth с Bearer — при смене стратегии меняйте путь чтения в бизнесе.
 
-`authorize('jwt', level)` следует `onAuthorize`.
+Тип аргументов `authorize('jwt', level)` следует за определением `onAuthorize`.
 
 ::: warning
-Пароли и секреты не в payload JWT — claims читаемы; только идентификаторы и роли.
+Не кладите пароль и прочие чувствительные поля в JWT payload: нагрузку можно декодировать и прочитать — только идентификаторы и роли.
 :::
 
-## verifyOptions и отзыв
+## Жёстче проверка подписи и отзыв
 
-| Опция | Когда использовать |
-| --- | --- |
-| `secret` | Симметричный ключ; монолит / внутреннее |
-| `tokenLoaders` | По умолчанию Bearer в `Authorization`; cookie/query как у Bearer |
-| `verifyOptions` | Алгоритмы, `audience` / `issuer` |
-| `onVerified` | Payload → идентичность; blocklist → `false` → 401 |
-| `onAuthorize` | Админ по роли; `this.getIdentity()` в методах экземпляра |
+В проде часто фиксируют алгоритм и audience, чтобы не принимать неожиданные алгоритмы. В `onVerified` смотрите чёрный список: попадание → `false` → **401**. Token по умолчанию из `Authorization` Bearer; cookie/query как у Bearer — через `tokenLoaders`.
 
 ```typescript
 new AuthJwtStrategy({
@@ -102,12 +96,12 @@ new AuthJwtStrategy({
 });
 ```
 
-Асимметричные ключи и ротация: [Своя стратегия auth](/ru/advanced/auth-strategy).
+Ограничение админ-интерфейсов по роли — всё ещё `onAuthorize`, в методе экземпляра `this.getIdentity()`. Асимметричные ключи, ротация старых ключей — в [Продвинутое: своя стратегия аутентификации](/ru/advanced/auth-strategy).
 
-При провале проверки смотрите рассинхрон часов. Универсального отзыва нет — короткий `expiresIn` + refresh; blocklist — DIY.
+При сбое проверки подписи сначала подумайте о синхронизации часов сервера. Серебряной пули отзыва нет: короткий `expiresIn` + refresh — частая связка; чёрный список ведёте сами.
 
 ## Связанное
 
 - [Аутентификация](/ru/plugins/auth)
-- [Bearer](/ru/plugins/auth-bearer-strategy)
+- [Стратегия Bearer](/ru/plugins/auth-bearer-strategy)
 - [Генерация OpenAPI](/ru/openapi/)

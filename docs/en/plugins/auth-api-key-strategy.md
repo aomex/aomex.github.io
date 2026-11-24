@@ -4,13 +4,13 @@ outline: deep
 
 # API Key strategy
 
-A “bring the key, call the API” channel for scripts, partners, or internal services. `AuthApiKeyStrategy` reads a **raw** key from headers (or configured query/cookie) and maps to app identity—not Bearer’s two-part form. End-user login: [Bearer](/en/plugins/auth-bearer-strategy) or [JWT](/en/plugins/auth-jwt-strategy).
+Give scripts, partners, or internal services a “bring a key and call” path. AuthApiKeyStrategy reads a **bare** secret from a header (or query/cookie you configure) and maps it to an application identity—**not** the two-part Bearer form. For end-user login, use [Bearer](/en/plugins/auth-bearer-strategy) or [JWT](/en/plugins/auth-jwt-strategy).
 
-Validate `x-api-key` (or custom header); after success use `ctx.auth.apiKey`; open platforms often use a separate Router prefix from user login.
+Validate `x-api-key` (or a custom header); after success, business code uses `ctx.auth.apiKey`. An open platform can split from the user-login domain with two Router prefixes.
 
 ## Install
 
-Shares `@aomex/auth` with Bearer.
+Shares the `@aomex/auth` main package with Bearer.
 
 ```bash
 pnpm add @aomex/auth
@@ -20,7 +20,7 @@ pnpm add @aomex/auth
 import { AuthApiKeyStrategy } from '@aomex/auth/api-key';
 ```
 
-## Open platform Router
+## Open-platform Router
 
 ```typescript
 import { Auth } from '@aomex/auth';
@@ -53,7 +53,7 @@ openApi.get('/usage', {
 });
 ```
 
-Coexist with user Bearer—different strategy names on different Routers.
+To coexist with user Bearer, keep strategy names separate and mount them on different Routers.
 
 After success:
 
@@ -61,23 +61,13 @@ After success:
 ctx.auth.apiKey // { key: string; data: T }
 ```
 
-Extra `authorize('apiKey', …)` args follow your `onAuthorize` like Bearer. Without `onAuthorize`, usually only “valid key exists”.
+Extra argument types for `authorize('apiKey', …)` come from your `onAuthorize`, same as Bearer. Without `onAuthorize`, you usually only check “is there a valid key”.
 
-## keyLoaders and rate-limit dimension
+## Multiple key sources and rate-limit dimension
 
-| Option | When to use | Default |
-| --- | --- | --- |
-| `keyLoaders` | Try header / query / cookie in order | `[{ type: 'header', key: 'x-api-key' }]` |
-| `onLoaded` | Validate key, return app identity | **required** |
-| `onAuthorize` | Scopes, plan tier, etc. | optional |
+`onLoaded` is required: validate the key and return an application identity. By default only the `x-api-key` header is accepted; write `keyLoaders` when you want ordered tries across header / query / cookie. Add `onAuthorize` when you also gate by scope or plan.
 
-Loaders:
-
-- `header` — raw header value (key name lowercased)
-- `query` — caution, lands in logs
-- `cookie` — team convention
-
-**No body loader**—avoids keys in body logs. Prefer header in production.
+Supported loaders: header (bare header value; key name matched lowercased), query (use carefully—easy to log), cookie. **Reading the key from the body is not supported**, so secrets do not land in request-body logs. Prefer header in production.
 
 ```typescript
 new AuthApiKeyStrategy({
@@ -91,9 +81,10 @@ new AuthApiKeyStrategy({
 });
 ```
 
-`signature()` can generate random keys when issuing clients—similar to Bearer.
 
-With [@aomex/rate-limit](/en/plugins/rate-limit), quota by key—usually authenticate first or read header yourself:
+`signature()` can generate a random key string (when issuing a new client), similar to the Bearer strategy.
+
+Paired with [@aomex/rate-limit](/en/plugins/rate-limit), you can quota by key—usually ensure auth finished before rate limiting, or read the key from the header yourself:
 
 ```typescript
 rateLimit({
@@ -103,16 +94,16 @@ rateLimit({
 });
 ```
 
-OpenAPI injects `apiKey` scheme; `in` / `name` generally from the **first** `keyLoader`.
+OpenAPI injects an apiKey scheme; `in` / `name` usually come from the **first** keyLoader.
 
 ::: warning
-Leaked key = leaked permission: store hashes, support rotation, no long-lived plaintext in DB. API Key is not a consumer login replacement—use Bearer/JWT for end users.
+A leaked key is leaked authority: store hashes, support rotation, and do not leave plaintext sitting in the DB for long. An API Key is not a substitute for end-user login—consumer products still use Bearer/JWT.
 :::
 
-Do not mix user sessions and API keys in one route group—separate prefix + `authenticate('apiKey')` is clearer.
+Do not mix user sessions and API Keys on the same route group: a dedicated open-platform prefix plus `authenticate('apiKey')` stays clearer.
 
 ## Related
 
 - [Authentication](/en/plugins/auth)
 - [Bearer strategy](/en/plugins/auth-bearer-strategy)
-- [Rate limiting](/en/plugins/rate-limit)
+- [Rate limit](/en/plugins/rate-limit)

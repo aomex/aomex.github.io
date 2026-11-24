@@ -6,12 +6,12 @@ outline: deep
 
 从零拉起一个能跑的 aomex 项目：HTTP 能访问，终端也能跑指令。脚手架把 logger / language / 关停等必填项带好，比空手搭省事。脚手架要求 **Node.js `^22.22.2 || ^24.15.0 || >=26`**。
 
-务必带上 `@latest`，否则本地缓存常会跑到旧版脚手架。用哪条命令启动，就会自动选用对应包管理器（也可用 `--pm` 覆盖）。
+用哪条命令启动，就会自动选用对应包管理器（也可用 `--pm` 覆盖）。
 
 ```bash
-pnpm create aomex@latest
-yarn create aomex@latest
-npm create aomex@latest
+pnpm create aomex
+yarn create aomex
+npm create aomex
 ```
 
 按提示选择 ORM、认证、中间件等；生成后进入目录启动：
@@ -51,7 +51,7 @@ pnpm aomex -h
 | `--cluster` | 集群方案（勿叠用） | `--cluster=none` \| `cluster-listen` \| `pm2` |
 
 ```bash
-pnpm create aomex@latest -- \
+pnpm create aomex -- \
   --project=HelloAomex \
   --pm=pnpm \
   --orm=prisma \

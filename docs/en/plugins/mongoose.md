@@ -4,9 +4,9 @@ outline: deep
 
 # Mongoose
 
-MongoDB pain point: **one validator set for HTTP, another hand-written Mongoose Schema**—fields drift on change. `defineMongooseModel` builds Mongoose Schema from the same `rule`s as routes, extending `ObjectId` / `Decimal128` validation—this page ties model definition, HTTP, and types.
+A common pain in MongoDB projects: **one validation set for HTTP input, another hand-written Mongoose Schema**—change a field and both drift. `defineMongooseModel` builds a Mongoose Schema from the same `rule` chains as routes, and extends ObjectId / Decimal128 validation—this page ties model definition, HTTP wiring, and type expectations together.
 
-Complex indexes, Mongoose middleware, DB-only fields still belong on the model or route `response`; the bridge does not replace all Mongoose config.
+Complex indexes, Mongoose middleware, and fields that exist only in the DB still need to be filled in on the model or route `response`; anything the bridge package does not cover goes back to Mongoose.
 
 ## defineMongooseModel
 
@@ -31,7 +31,7 @@ export const User = defineMongooseModel('users', { // [!code highlight]
 });
 ```
 
-Load Mongo rules before use (adjust entry path):
+Mongo-specific rules need a side-effect import first (adjust the path for your project entry):
 
 ```typescript
 import { rule } from '@aomex/common';
@@ -41,12 +41,12 @@ rule.mongoObjectId();
 rule.mongoDecimal128();
 ```
 
-Typical layers (not middleware):
+Typical layering (this package is **not** middleware):
 
-1. `models/user.ts` — `defineMongooseModel`
-2. `schemas/user.schema.ts` — shared input/output schemas
-3. `routers/user.ts` — `body` / `response` from schemas
-4. `web.ts` — normal `WebApp` + routers
+1. models/user.ts — defineMongooseModel
+2. schemas/user.schema.ts — shared input / output schemas
+3. routers/user.ts — body / response reference the schema or field table
+4. web.ts — normal WebApp + routers
 
 ```typescript
 import { body, response } from '@aomex/web';
@@ -54,7 +54,7 @@ import { userBodySchema } from '../schemas/user.schema.js';
 
 router.post('/users', {
   mount: [body(userBodySchema)], // [!code highlight]
-  response: { content: { /* public DTO—do not leak DB-only fields */ } },
+  response: { content: { /* public DTO—do not leak DB-only fields by default */ } },
   action: async (ctx) => {
     await User.create(ctx.body);
     ctx.send({ ok: true });
@@ -62,24 +62,18 @@ router.post('/users', {
 });
 ```
 
-`defineMongooseModel` returns a standard Mongoose Model with **input/output** inference—hover document fields when creating/querying. Nested objects in `schemas` become object validators like route `body({ ... })`. `rule.mongoObjectId()` etc. appear on `rule` only **after** `import '@aomex/mongoose'`. `formatMongoResult` tidies query results for JSON (`_id`, `Decimal`, etc.)—follow package exports and types.
+`defineMongooseModel` returns a standard Mongoose Model with **input/output** inference—hovering document fields on create/query often lines up with the `rule` chain. Nested bare objects in `schemas` are folded into object validators automatically, same style as route `body({ ... })`. `rule.mongoObjectId()` and similar only appear on `rule` **after** `import '@aomex/mongoose'`; otherwise types and runtime diverge (forgetting the side-effect import skips registration). There is also `formatMongoResult`: reshape query results into a more JSON-friendly form (e.g. `_id`, Decimal)—use the package export and type hints.
 
-## Model fields vs public DTO
+## Model fields vs public DTOs
 
-| Field / option | When to use |
-| --- | --- |
-| `schemas` | field → Validator or nested object |
-| `indexes` | `{ fields, ...IndexOptions }[]` |
-| `timestamps` / `versionKey` | Same as Mongoose SchemaOptions |
-| Other SchemaOptions | Pass through to Mongoose |
-| Route `response({ content })` | Public DTO; DB-only fields not in API by default |
+Fields in `schemas` become Validators (nested bare objects fold into object validators). `indexes`, `timestamps`, `versionKey`, and other SchemaOptions pass through to Mongoose—unique compound indexes, pre hooks, and anything validators cannot cover stay on the model layer.
 
-Different from [Prisma](/en/plugins/prisma)—Mongoose + Mongo, not `definePrismaSchema`.
+Do not `ctx.send` a raw Mongoose document: sensitive or DB-only fields leak. Use `response({ content })` on the route or an explicit pick into a DTO.
 
-Defining only the model but hand-writing another shape on routes defeats shared `rule`. Do not `ctx.send` raw Mongoose documents—sensitive/DB fields leak; use `response` or explicit pick. Unique compound indexes, `pre` hooks, etc. stay on the model.
+Unlike [Prisma](/en/plugins/prisma): this is Mongoose + Mongo, not `definePrismaSchema`. Defining only the model while routes still hand-write another shape means field changes still hit two places—defeating the shared-`rule` goal.
 
 ## Related
 
-- Custom Mongo rules: [Custom validators](/en/advanced/validator) (`mongoObjectId` same pattern)
+- How custom Mongo rules are built: [Custom validators](/en/advanced/validator) (same pattern as mongoObjectId)
 - HTTP input: [Request body](/en/web/body)
 - Validator list: [builtins](/en/validators/builtins)

@@ -2,11 +2,11 @@
 outline: deep
 ---
 
-# JWT 戦略
+# JWT ストラテジー
 
-「自己完結」トークン：ゲートウェイやサービスがローカル検証し Redis 参照を減らす。失効は短い TTL、リフレッシュ、ブラックリストが一般的。payload にパスワードを入れない。サーバーが任意セッションを即時無効化したいなら [Bearer + セッション保存](/ja/plugins/auth-bearer-strategy) の方が扱いやすいことが多い。
+「自己完結」トークンを使うとき：ゲートウェイやサービスがローカルで署名検証し、Redis 照会を減らす。失効はだいたい短い TTL、リフレッシュトークン、またはブラックリスト。payload にパスワードを入れない。サーバー側で任意の session をすぐ無効にしたいなら、[Bearer + セッション保存](/ja/plugins/auth-bearer-strategy) の方が扱いやすいことが多い。
 
-`@aomex/auth-jwt-strategy` を入れ、秘密鍵と onVerified を設定。Router に authenticate('jwt')。業務では ctx.auth.jwt（onVerified の戻り。{ token, data } 構造ではない）。
+`@aomex/auth-jwt-strategy` を入れ、秘密鍵と onVerified を設定する。Router に authenticate('jwt') を載せ、業務では ctx.auth.jwt を読む（onVerified の戻り値そのもの。`{ token, data }` ではない）。
 
 ## インストール
 
@@ -52,7 +52,7 @@ router.get('/me', {
 });
 ```
 
-ログインまたはリフレッシュ時に action で発行：
+ログインや更新時は action で発行する：
 
 ```typescript
 const token = auth.strategy('jwt').signature(
@@ -63,29 +63,22 @@ const token = auth.strategy('jwt').signature(
 
 ## ctx.auth の形と Bearer の違い
 
-| 戦略 | `ctx.auth[name]` の概形 |
+| ストラテジー | `ctx.auth[name]` のおおよそ形 |
 | --- | --- |
 | Bearer | `{ token, data }` |
-| JWT | onVerified が返すオブジェクトそのもの |
+| JWT | `onVerified` が返すオブジェクトそのもの |
 
-JWT ルートでは ctx.auth.jwt.userId が一般的。ctx.auth.jwt.data.userId ではない。Bearer の ctx.auth 形と混ぜない——戦略移行時は業務の参照パスを変える。
+そのため JWT ルートではよく ctx.auth.jwt.userId と書き、ctx.auth.jwt.data.userId ではない。Bearer の ctx.auth 形と混ぜない——ストラテジー移行時は業務の取り出しパスを直す。
 
-authorize('jwt', level) の引数型は onAuthorize 定義に従う。
+authorize('jwt', level) の引数型は onAuthorize の定義に従う。
 
 ::: warning
-パスワード等の機密を JWT payload に書かない。ペイロードはデコード可能。識別子とロールだけ。
-
+パスワードなど機密フィールドを JWT payload に書かない。ペイロードはデコードして読める。識別子とロールだけでよい。
 :::
 
-## verifyOptions と失効
+## 署名検証の締めと失効
 
-| オプション | いつ使う |
-| --- | --- |
-| `secret` | 対称鍵。モノリス / 社内で一般的 |
-| `tokenLoaders` | 既定 `Authorization` Bearer。必要なら Bearer 同様 cookie/query |
-| `verifyOptions` | アルゴリズム、`audience` / `issuer` を絞る |
-| `onVerified` | payload を業務身元に。ブラックリスト命中は `false` → 401 |
-| `onAuthorize` | 管理 API をロールで遮断。インスタンスメソッドで `this.getIdentity()` |
+本番ではアルゴリズムと audience を固定し、想定外のアルゴリズムを受け付けないことが多い。`onVerified` でブラックリストを見る：ヒットしたら `false` → **401**。token はデフォルトで `Authorization` Bearer から取る。Bearer と同様に cookie/query も使うなら `tokenLoaders` を追加する。
 
 ```typescript
 new AuthJwtStrategy({
@@ -103,12 +96,12 @@ new AuthJwtStrategy({
 });
 ```
 
-非対称鍵、旧鍵ローテーションなどは [上級：カスタム認証戦略](/ja/advanced/auth-strategy)。
+管理 API をロールで塞ぐのも引き続き `onAuthorize`。インスタンスメソッドでは `this.getIdentity()`。非対称鍵や旧鍵ローテーションなど上級の設定は [上級：カスタム認証ストラテジー](/ja/advanced/auth-strategy)。
 
-検証失敗時はサーバー時刻同期を疑う。失効に銀の弾はない。短い expiresIn + リフレッシュ API が一般的。ブラックリストは自前保守。
+署名検証が失敗するときは、まずサーバー時計が同期しているかを疑う。失効に銀の弾丸はない：短い expiresIn + 更新 API がよくある組み合わせ。ブラックリストは自分で維持する。
 
 ## 関連
 
 - [認証](/ja/plugins/auth)
-- [Bearer 戦略](/ja/plugins/auth-bearer-strategy)
-- [生成OpenAPI](/ja/openapi/)
+- [Bearer ストラテジー](/ja/plugins/auth-bearer-strategy)
+- [OpenAPI 生成](/ja/openapi/)

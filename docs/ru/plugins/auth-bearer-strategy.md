@@ -4,13 +4,13 @@ outline: deep
 
 # Стратегия Bearer
 
-Типичный фронт: `Authorization: Bearer <token>`. Сервер меняет непрозрачный token на объект пользователя; провал → **401**. Локальная проверка и меньше БД — [JWT](/ru/plugins/auth-jwt-strategy); отзыв и смена прав требуют доп. работы.
+Самый частый фронтовый приём: `Authorization: Bearer <token>`. Сервер меняет непрозрачный token на объект пользователя; неудача — **401**. Локальная проверка подписи и меньше ходов в БД — см. [стратегию JWT](/ru/plugins/auth-jwt-strategy), но отзыв и смена прав обычно требуют отдельной работы.
 
-Настройте `AuthBearerStrategy`: извлечь token, идентичность в `onLoaded`; роли в `onAuthorize`; в коде `ctx.auth.bearer.data`, не сырая строка token.
+Настройте AuthBearerStrategy: достаньте token из запроса, в `onLoaded` превратите в бизнес-личность; роли сравнивайте в `onAuthorize`; в бизнесе читайте `ctx.auth.bearer.data`, не сырую строку token.
 
 ## Установка
 
-Bearer в основном пакете `@aomex/auth` — subpath import.
+Bearer идёт с основным пакетом `@aomex/auth`, импорт с подпути.
 
 ```bash
 pnpm add @aomex/auth
@@ -20,7 +20,7 @@ pnpm add @aomex/auth
 import { AuthBearerStrategy } from '@aomex/auth/bearer';
 ```
 
-## onLoaded и mount на Router
+## onLoaded и монтирование на Router
 
 ```typescript
 import { Auth } from '@aomex/auth';
@@ -62,7 +62,7 @@ router.delete('/posts/:id', {
 });
 ```
 
-Выдача token при login (без authenticate):
+На маршруте логина (без authenticate) выдайте token:
 
 ```typescript
 router.post('/login', { // [!code focus:13]
@@ -80,17 +80,17 @@ router.post('/login', { // [!code focus:13]
 });
 ```
 
-`signature` — **непрозрачная** случайная строка (опциональный бизнес-ключ) — **не** JWT. Login-маршруты без `authenticate`.
+`signature` даёт **непрозрачную** случайную строку (можно подмешать бизнес-ключ для изоляции доменов), это **не** JWT. На сам маршрут логина authenticate не вешайте.
 
-После успеха:
+После успешной аутентификации:
 
 ```typescript
 ctx.auth.bearer // { token: string; data: T }
 ```
 
-`T` — возврат `onLoaded`. `authorize('bearer', n)` следует вашему `onAuthorize`.
+`T` — форма объекта, который `onLoaded` вернул при успехе. Тип `n` в `authorize('bearer', n)` следует за вашим `onAuthorize`.
 
-`onAuthorize` — метод экземпляра (`this.getIdentity()`) или каррирование; типы из определения стратегии:
+`onAuthorize` можно методом экземпляра (`this.getIdentity()`) или каррированием — на выбор, типы пойдут за определением стратегии:
 
 ```typescript
 onAuthorize: (minRole: number) => {
@@ -100,18 +100,14 @@ onAuthorize: (minRole: number) => {
 },
 ```
 
-## tokenLoaders и onLoaded
+## Token из нескольких источников
 
-| Опция | Когда использовать | По умолчанию |
-| --- | --- | --- |
-| `onLoaded` | Поиск в Redis/БД; `false` если нет | **обязательно** |
-| `tokenLoaders` | По умолчанию `Authorization`; cookie/query для embed | header Bearer (предпочтительно) |
-| `onAuthorize` | При `authorize(role)`; только login — можно не задавать | опционально |
+`onLoaded` обязателен: Redis/DB меняет token на пользователя, `false` → **401**. По умолчанию только `Authorization` Bearer (предпочтительно в проде); если встроенная страница не может слать заголовок — добавьте query / cookie / body; query и body легко попадают в access log и Referer — по возможности избегайте. Если нужна только сессия без ролей, `onAuthorize` можно опустить.
 
-Формы `tokenLoaders`:
+Типичные `tokenLoaders`:
 
-- `{ type: 'header', key: 'authorization' }` — только `Bearer <token>` в двух частях
-- `{ type: 'body' | 'query' | 'cookie', key: 'access_token' }` — когда header невозможен
+- `{ type: 'header', key: 'authorization' }` — только двухчастная форма `Bearer <token>`; голый token сюда не кладите
+- `{ type: 'body' | 'query' | 'cookie', key: 'access_token' }` — компромисс, когда заголовок нельзя
 
 ```typescript
 new AuthBearerStrategy({
@@ -126,12 +122,12 @@ new AuthBearerStrategy({
 });
 ```
 
-В OpenAPI передайте в `generateOpenapi({ app })` тот же `WebApp` с `auth.authenticate('bearer')`. Обзор: [Аутентификация](/ru/plugins/auth).
+При генерации OpenAPI передайте в `generateOpenapi({ app })` тот же `WebApp` с `auth.authenticate('bearer')` — схема безопасности Bearer появится в доке. Общий вход: [Аутентификация](/ru/plugins/auth).
 
-`onLoaded` → `false` — неаутентифицирован (**401**); не подменяйте бизнес-исключениями без нужды. Самодостаточный JWT: [JWT](/ru/plugins/auth-jwt-strategy) — не проверяйте JWT как непрозрачный Bearer.
+`onLoaded` → `false` значит «не вошли»; не подменяйте бизнес-исключением, если не нужен свой код ошибки. Самодостаточный JWT — через [стратегию JWT](/ru/plugins/auth-jwt-strategy), не проверяйте JWT как непрозрачную Bearer-строку.
 
 ## Связанное
 
 - [Аутентификация](/ru/plugins/auth)
-- [JWT](/ru/plugins/auth-jwt-strategy)
+- [Стратегия JWT](/ru/plugins/auth-jwt-strategy)
 - [Генерация OpenAPI](/ru/openapi/)

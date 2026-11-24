@@ -15,7 +15,7 @@ aomex 提供三套文件頁外掛：[Swagger UI](/zh-TW/openapi/swagger-ui)、[R
 | 預設字首 | `/swagger` | `/redoc` | `/scalar` |
 | 頁內試調 | 有（Try it out） | **沒有** | 有 |
 | 閱讀體驗 | 偏操作檯，欄位密 | 左側導航、長文友好 | 現代排版，讀 + 調兼顧 |
-| 典型讀者 | 開發、QA 聯調 | 產品、對接方、交接文件 | 既要讀又要隨手打 API |
+| 典型讀者 | 開發、QA 聯調 | 產品、對接方、交接文件 | 既要讀又要隨手打介面 |
 | 包名 | `@aomex/swagger-ui` | `@aomex/redoc-ui` | `@aomex/scalar-ui` |
 
 三套都是普通 Web 中介軟體：掛上就出頁面，**不改變**業務路由上 `ctx` 的型別。全站開了 [envelope](/zh-TW/web/envelope) 時，文件頁會自動 `skipEnvelope`，不會被套殼。
@@ -24,7 +24,7 @@ aomex 提供三套文件頁外掛：[Swagger UI](/zh-TW/openapi/swagger-ui)、[R
 
 | 你現在在幹嘛 | 優先選 | 原因 |
 | --- | --- | --- |
-| 本機 / 內網點開就調 API | Swagger 或 Scalar | 頁內能發真實請求；團隊熟 Try it out 就 Swagger，想要更新一點的介面就 Scalar |
+| 本機 / 內網點開就調介面 | Swagger 或 Scalar | 頁內能發真實請求；團隊熟 Try it out 就 Swagger，想要更新一點的介面就 Scalar |
 | 給對接方一份「說明書」URL | Redoc | 長文、schema 摺疊更清爽；別指望對方在頁裡試調 |
 | 對外 PDF / 週報附件式 API 說明 | Redoc | 印刷 / 滾動閱讀體驗更好 |
 | 新人 onboarding：先讀再試 | Scalar，或 Redoc + Swagger 並存 | 一套頁裡讀完再試；或「讀」與「調」拆成兩個連結 |
@@ -47,7 +47,7 @@ mount: [
 ```
 
 ::: warning
-別讓 QA / 對接方把 Redoc 當成「能點 Try it out 的 Swagger」。連結發錯時，對方只能讀不能調，會誤以為API 壞了。
+別讓 QA / 對接方把 Redoc 當成「能點 Try it out 的 Swagger」。連結發錯時，對方只能讀不能調，會誤以為介面壞了。
 :::
 
 其它邊界：

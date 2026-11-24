@@ -4,15 +4,15 @@ outline: deep
 
 # 静的ファイル
 
-ディスク上のディレクトリ（フロント dist、public、ダウンロード）を HTTP ファイル応答にマップ。未ヒット時 next() で後続 API へ。**指定した root だけ**を配信。プロジェクトルートや node_modules を指さない。
+ディスク上のディレクトリ（フロントの dist、public、ダウンロード用パッケージ）を HTTP ファイル応答にマップする。未ヒットなら next() で後続 API に渡す。指定した root だけを出す。プロジェクトルートや node_modules を指さない。
 
 ```bash
 pnpm add @aomex/serve-static
 ```
 
-## ルートの前に
+## ルートの前に置く
 
-静的ミドルウェアは業務ルート**の前**（先にファイル試行、次 API）。
+静的ミドルウェアは通常、業務ルートの**前**に置く（先にファイルを試し、次に API）。`root` は必須で、フロント成果物やダウンロード用ディレクトリを指す。
 
 ```typescript
 import { serveStatic } from '@aomex/serve-static';
@@ -30,19 +30,15 @@ const app = new WebApp({
 });
 ```
 
-通常 WebMiddleware。ヒットで内容送出。未ヒットで通過。パストラバーサル、..、NUL、ドットファイル等は拒否（パッケージ内安全検証）。
+通常の WebMiddleware。ファイルにヒットしたら内容を送り、未ヒットなら通す。パストラバーサル、`..`、NUL、ドットファイルなどは直接拒否する（安全チェックはパッケージ内）。ディレクトリアクセス時はデフォルトで `index.html` にフォールバック（`indexFile` で変更可）。ビルドが隣に `.br` / `.gz` を出しているとき、`useCompressedFile` はデフォルトで優先する（オフ可）。
 
-## root とキャッシュ
+::: warning
+root: '.' や node_modules を含むディレクトリを指すとパス漏洩のリスクがある。本番で誤設定の例がある。
+:::
 
-| オプション | いつ使う | デフォルト |
-| --- | --- | --- |
-| `root` | フロント成果物または DL ディレクトリ | **必須** |
-| `formatPath` | URL プレフィックスとディスク不一致（例 `/assets`） | — |
-| `indexFile` | ディレクトリアクセスで index にフォールバック | `index.html` |
-| `useCompressedFile` | ビルド済み .br/.gz サイドカー | `true` |
-| `cacheControl` | ハッシュ付き資産は長キャッシュ。HTML は短くまたは `noCache` | `maxAge: 0` |
+## ハッシュ付き chunk：長キャッシュ
 
-### 長キャッシュ（ハッシュ付き chunk）
+content hash 付きの JS/CSS chunk は長い `cacheControl` を付けてよい。`index.html` などの入口に同じ `immutable` は向かない。さもないとリリース後もユーザーが古い殻のままになる。
 
 ```typescript
 serveStatic({
@@ -54,7 +50,11 @@ serveStatic({
 });
 ```
 
-### URL プレフィックス書き換え
+デフォルトは `maxAge: 0`。HTML は短いキャッシュか `noCache` がよい。
+
+## URL プレフィックスとディスクが一致しない
+
+CDN / ゲートウェイが `/assets/...` を `./dist` に向けるときは、`formatPath` でプレフィックスを外してからファイルを探す：
 
 ```typescript
 serveStatic({
@@ -66,7 +66,9 @@ serveStatic({
 });
 ```
 
-### API + SPA フォールバック（深いリンクを index.html へ）
+## API + SPA フォールバック
+
+深いリンクのリフレッシュは静的ミドルウェアだけでは足りない。未ヒットパスは routers の後で `index.html` に落とす。`send` と `serveStatic` は同じパッケージからエクスポートされる。
 
 ```typescript
 import { middleware } from '@aomex/common';
@@ -91,18 +93,11 @@ mount: [
 
 | 環境 | 推奨 |
 | --- | --- |
-| 本番 | 大流量は CDN/Nginx に静的。Node はフォールバックや社内向き |
-| ローカル | `serveStatic` を Vite ビルド出力へ直接 |
-
-::: warning
-root: '.' や node_modules を含むディレクトリはパス漏洩リスク。本番誤設定事例あり。
-
-:::
-
-index.html 等入口をハッシュ付き chunk と同じ immutable 長キャッシュにしない。デプロイ後も古いシェル。SPA 深いリンクは静的だけでは不足。未ヒットパスは routers の後 index.html へ（上記 demo）。
+| 本番 | 大流量なら静的は CDN/Nginx に任せることが多い。Node はフォールバックやイントラ向けに向く |
+| ローカル | Vite のビルド成果物にそのまま `serveStatic` を向ければよい |
 
 ## 次のステップ
 
 - 条件付きキャッシュ：[ETag](/ja/plugins/etag)
 - 転送圧縮：[Compress](/ja/plugins/compress)
-- Web 入口組み立て：[アプリ入口](/ja/web/)
+- Web 入口の組み立て：[アプリ入口](/ja/web/)

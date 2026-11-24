@@ -6,12 +6,12 @@ outline: deep
 
 從零拉起一個能跑的 aomex 專案：HTTP 能訪問，終端也能跑指令。腳手架把 logger / language / 關停等必填項帶好，比空手搭省事。腳手架要求 **Node.js `^22.22.2 || ^24.15.0 || >=26`**。
 
-務必帶上 `@latest`，否則本地快取常會跑到舊版腳手架。用哪條命令啟動，就會自動選用對應包管理器（也可用 `--pm` 覆蓋）。
+用哪條命令啟動，就會自動選用對應包管理器（也可用 `--pm` 覆蓋）。
 
 ```bash
-pnpm create aomex@latest
-yarn create aomex@latest
-npm create aomex@latest
+pnpm create aomex
+yarn create aomex
+npm create aomex
 ```
 
 按提示選擇 ORM、認證、中介軟體等；生成後進入目錄啟動：
@@ -21,7 +21,7 @@ cd <project>
 pnpm start   # 或 yarn start / npm start
 ```
 
-生成專案根目錄含 `AGENTS.md` → `aomex-skill.md`，供 AI 按約定擴充程式碼。
+生成專案根目錄含 `AGENTS.md` → `aomex-skill.md`，供 AI 按約定擴充套件程式碼。
 
 起來之後瀏覽器打一下健康檢查或首頁（埠看模板的 PORT）。終端側：
 
@@ -29,11 +29,11 @@ pnpm start   # 或 yarn start / npm start
 pnpm aomex -h
 ```
 
-## 非互動參數
+## 非互動引數
 
-所有可選項都可用 CLI 參數跳過詢問（適合腳本 / CI）。未傳的項仍會互動詢問。
+所有可選項都可用 CLI 引數跳過詢問（適合指令碼 / CI）。未傳的項仍會互動詢問。
 
-| 參數 | 說明 | 範例 |
+| 引數 | 說明 | 示例 |
 | --- | --- | --- |
 | `--project` | 專案目錄名 | `--project=my-api` |
 | `--node` | Node 版本（不傳則互動選擇 LTS，≥24） | `--node=24.22.0` |
@@ -46,12 +46,12 @@ pnpm aomex -h
 | `--logger` | 日誌出口，逗號多選 | `--logger=console,file` |
 | `--console-middlewares` | Console 外掛；`cron` 始終安裝，可追加 | `--console-middlewares=openapi` |
 | `--lang` | 預設語言（BCP 47） | `--lang=zh-CN` |
-| `--docker` | 是否產生 Docker 生產部署產物 | `--docker=true` \| `false` |
-| `--tz` / `--timezone` | 行程時區 | `--tz=Asia/Shanghai` |
+| `--docker` | 是否生成 Docker 生產部署產物 | `--docker=true` \| `false` |
+| `--tz` / `--timezone` | 程序時區 | `--tz=Asia/Shanghai` |
 | `--cluster` | 叢集方案（勿疊用） | `--cluster=none` \| `cluster-listen` \| `pm2` |
 
 ```bash
-pnpm create aomex@latest -- \
+pnpm create aomex -- \
   --project=HelloAomex \
   --pm=pnpm \
   --orm=prisma \

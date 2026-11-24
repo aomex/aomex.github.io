@@ -4,18 +4,18 @@ outline: deep
 
 # Session 策略
 
-瀏覽器端登入態放在 **HttpOnly Cookie** 裡：Cookie 只存不透明 `sessionId`，使用者資料在 `@aomex/cache` 適配器（memory / Redis）裡。SPA 跨域時還要同時配好 [CORS](/zh-TW/plugins/cors)（帶 Cookie）和 [CSRF](/zh-TW/plugins/csrf)（防跨站寫請求）——少一塊，登入態要麼帶不過去，要麼容易被第三方站點濫用。
+瀏覽器端登入態放在 **HttpOnly Cookie** 裡：Cookie 只存不透明 `sessionId`，使用者資料在 `@aomex/cache` 介面卡（memory / Redis）裡。SPA 跨域時還要同時配好 [CORS](/zh-TW/plugins/cors)（帶 Cookie）和 [CSRF](/zh-TW/plugins/csrf)（防跨站寫請求）——少一塊，登入態要麼帶不過去，要麼容易被第三方站點濫用。
 
 適合「同站或可信前端 + 服務端隨時可廢會話」；純移動端 / 機器呼叫更常見 [Bearer](/zh-TW/plugins/auth-bearer-strategy) 或 [JWT](/zh-TW/plugins/auth-jwt-strategy)。
 
 ## 安裝
 
-Session 策略隨 `@aomex/auth` 主包提供；存會話還要 `@aomex/cache`（及生產用的 Redis 適配器）。跨域 Cookie 場景再裝 CORS / CSRF。
+Session 策略隨 `@aomex/auth` 主包提供；存會話還要 `@aomex/cache`（及生產用的 Redis 介面卡）。跨域 Cookie 場景再裝 CORS / CSRF。
 
 ```bash
 pnpm add @aomex/auth @aomex/cache
 # 跨域 Cookie：pnpm add @aomex/cors @aomex/csrf
-# 多實例共享會話：pnpm add @aomex/cache-redis-adapter
+# 多实例共享会话：pnpm add @aomex/cache-redis-adapter
 ```
 
 ```typescript
@@ -112,17 +112,9 @@ const auth = new Auth({
 });
 ```
 
-生產或多例項請換成 Redis 等外接適配器，見 [快取](/zh-TW/core/cache)。Cookie 預設名 `sessionId`；`setCookie` 預設 `httpOnly: true`、`sameSite: Strict`（跨站前端要改成 `'none'` 並開 `secure`）。
+生產或多例項請換成 Redis 等外接介面卡，見 [快取](/zh-TW/core/cache)。Cookie 預設名 `sessionId`；`setCookie` 預設 `httpOnly: true`、`sameSite: Strict`（跨站前端要改成 `'none'` 並開 `secure`）。`cookie.name` / `path` / `domain` 與前端域名對齊即可。
 
-| 選項 | 什麼時候用 |
-| --- | --- |
-| `store` | 會話落點；本機 memory，多副本 Redis |
-| `cookie.maxAge` | 會話多久失效（秒）；**必填** |
-| `cookie.name` / `path` / `domain` / `sameSite` / `secure` | 與前端域名、是否跨站對齊 |
-| `sliding` | 每次認證成功續期 TTL + Cookie；活躍使用者少被迫下線 |
-| `generateCacheKey` | 自定義鍵字首；預設 `auth:session:${sessionId}` |
-| `onLoaded` | Stored → 業務身份；查庫、吊銷 |
-| `onAuthorize` | 需要 `authorize(角色)` 時再寫 |
+活躍使用者少被迫下線時，開 `sliding`：每次認證成功續期 TTL + Cookie。自定義快取鍵字首用 `generateCacheKey`（預設 `auth:session:${sessionId}`）。需要 `authorize(角色)` 時再寫 `onAuthorize`。
 
 ## 登入、鑑權、退出
 

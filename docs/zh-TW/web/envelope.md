@@ -13,7 +13,7 @@ import { rule } from '@aomex/common';
 import { envelope, formatError, routers, WebApp } from '@aomex/web';
 
 new WebApp({
-  // services / logger / language / proxyIP —— 见 [应用入口](/zh/web/)
+  // services / logger / language / proxyIP —— 见 [应用入口](/zh-TW/web/)
   envelope: { // [!code focus:7]
     content: {
       success: envelope.success, // [!code highlight]
@@ -132,7 +132,7 @@ router.get('/export.csv', { // [!code focus:14]
 
 同一路由可多次掛 `response()`，各自決定要不要 `skipEnvelope`——例如成功套殼、錯誤裸出，或反過來。
 
-**基礎設施響應**（Swagger / Redoc 頁、裸 OpenAPI JSON）可在 action 裡設 `ctx.response.skipEnvelope = true`：無條件跳過本次寫出，不論最終狀態碼。業務接口請優先用上面的 `response({ skipEnvelope })`，好讓文件也登記到對應狀態。
+**基礎設施響應**（Swagger / Redoc 頁、裸 OpenAPI JSON）可在 action 裡設 `ctx.response.skipEnvelope = true`：無條件跳過本次寫出，不論最終狀態碼。業務介面請優先用上面的 `response({ skipEnvelope })`，好讓文件也登記到對應狀態。
 
 ```typescript
 action: async (ctx) => {

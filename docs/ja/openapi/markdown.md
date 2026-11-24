@@ -13,7 +13,7 @@ OpenAPI の多くの **description** フィールドは **CommonMark** として
 サイト全体の説明は `docs.info.description`；グループ説明は `docs.tags[].description`（ルート上の tag 名と対応。詳しくは [タグ](/ja/openapi/tags)）。
 
 ```typescript
-import { generateOpenapi } from '@aomex/openapi';
+import { generateOpenapi } from '@aomex/openapi-generator';
 import { app } from './app.js';
 
 await generateOpenapi({

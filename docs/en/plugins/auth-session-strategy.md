@@ -4,13 +4,13 @@ outline: deep
 
 # Session strategy
 
-Browser login state lives in an **HttpOnly Cookie**: the Cookie holds only an opaque `sessionId`, while user data sits in a `@aomex/cache` adapter (memory / Redis). For a cross-origin SPA you also need [CORS](/en/plugins/cors) (to send Cookies) and [CSRF](/en/plugins/csrf) (to block cross-site writes)—miss either piece and the session either never arrives or can be abused by a third-party page.
+Browser login state lives in an **HttpOnly Cookie**: the Cookie only holds an opaque `sessionId`; user data sits in an `@aomex/cache` adapter (memory / Redis). Cross-origin SPAs also need both [CORS](/en/plugins/cors) (with cookies) and [CSRF](/en/plugins/csrf) (to stop cross-site writes)—miss either piece and the session either never arrives or can be abused by third-party sites.
 
-Prefer this when you have a trusted browser front end and want server-side revocation. Native apps and machine clients usually fit [Bearer](/en/plugins/auth-bearer-strategy) or [JWT](/en/plugins/auth-jwt-strategy) better.
+Fits “same-site or trusted frontend + server can kill the session anytime”; pure mobile / machine clients more often use [Bearer](/en/plugins/auth-bearer-strategy) or [JWT](/en/plugins/auth-jwt-strategy).
 
 ## Install
 
-Session ships with `@aomex/auth`; you also need `@aomex/cache` (and a Redis adapter in production). Add CORS / CSRF for cross-origin Cookie flows.
+Session strategy ships with the `@aomex/auth` main package; storing sessions also needs `@aomex/cache` (and a Redis adapter in production). For cross-origin Cookie scenarios, add CORS / CSRF as well.
 
 ```bash
 pnpm add @aomex/auth @aomex/cache
@@ -24,13 +24,13 @@ import { AuthSessionStrategy } from '@aomex/auth/session';
 
 ## Mount CORS and CSRF first
 
-Cross-origin front ends that send Cookies need:
+A cross-origin frontend that sends cookies requires:
 
-1. Requests with `credentials: 'include'` (or XHR `withCredentials`)
-2. Responses with `Access-Control-Allow-Credentials: true` and a **concrete** `Access-Control-Allow-Origin` (never `*`)
-3. CSRF headers on write methods—otherwise another site can ride your Cookie
+1. The request uses `credentials: 'include'` (or XHR `withCredentials`)
+2. The response has `Access-Control-Allow-Credentials: true`, and `Access-Control-Allow-Origin` is a **concrete origin** (not `*`)
+3. Writes carry a CSRF header—otherwise someone else’s page can “borrow” your Cookie to POST
 
-With `credentials: true` you **must** set `origin` explicitly; the default reflect behavior of bare `cors()` is rejected at startup. CSRF uses the double-submit Cookie pattern: readable Cookie `csrfToken` must match header `x-csrf-token`.
+With `credentials: true` you **must set `origin` explicitly**—you cannot rely on parameterless `cors()` reflecting the request; startup throws otherwise. CSRF uses a double-submit Cookie: the readable `csrfToken` Cookie must match the `x-csrf-token` request header.
 
 ```typescript
 import { cors } from '@aomex/cors';
@@ -55,12 +55,12 @@ const app = new WebApp({
 ```
 
 ::: tip
-For local split-port setups, set origin to `http://localhost:5173` (or your front-end URL)—never `*`. Same-origin deploys can skip cors(), but CSRF is still recommended.
+When debugging on split local ports, set `origin` to `http://localhost:5173` (or your frontend URL)—not `*`. Same-site deploys (same origin for frontend and API) can omit `cors()`, but CSRF is still recommended.
 :::
 
-Order: cors → csrf → routers. Both must sit **before** routers so error responses still carry CORS headers and a freshly issued CSRF Cookie.
+Mount order: cors → csrf → routers. Both must sit **before** routers so error responses still carry CORS / a freshly issued CSRF Cookie.
 
-A mutating front-end call looks roughly like:
+A typical frontend write looks like:
 
 ```typescript
 const csrfToken = document.cookie
@@ -79,11 +79,11 @@ await fetch('https://api.example.com/api/posts', {
 });
 ```
 
-Safe methods such as GET skip CSRF by default; the first visit issues a `csrfToken` Cookie (`HttpOnly=false` so JS can read it). Details: [CSRF](/en/plugins/csrf).
+Safe methods such as GET skip CSRF by default; the first visit issues a `csrfToken` Cookie (`HttpOnly=false`, readable by JS). Details: [CSRF](/en/plugins/csrf).
 
 ## store, cookie, and onLoaded
 
-`cookie.maxAge` (seconds) is required and doubles as the cache TTL. `onLoaded` turns Stored cache data into a business identity; return `false` for revoked users → **401**.
+`cookie.maxAge` (seconds) is required and also acts as the cache TTL. `onLoaded` turns the Stored value from cache into a business identity; return `false` if the user has logged out → **401**.
 
 ```typescript
 import { Auth } from '@aomex/auth';
@@ -98,7 +98,7 @@ const auth = new Auth({
       store: new CacheMemoryAdapter(), // [!code highlight]
       cookie: {
         maxAge: 7 * 24 * 3600,
-        // Cross-site front ends often need: sameSite: 'none', secure: true
+        // Cross-site frontend in production often: sameSite: 'none', secure: true
       },
       onLoaded: async (data: { userId: number }) => {
         const user = await findActiveUser(data.userId);
@@ -112,21 +112,13 @@ const auth = new Auth({
 });
 ```
 
-Use Redis (or another shared adapter) in production / multi-instance setups—see [Cache](/en/core/cache). Default Cookie name is `sessionId`; `setCookie` defaults to `httpOnly: true` and `sameSite: Strict` (cross-site front ends need `'none'` plus `secure`).
+In production or multi-instance setups, switch to Redis or another external adapter—see [Cache](/en/core/cache). Default Cookie name is `sessionId`; `setCookie` defaults to `httpOnly: true`, `sameSite: Strict` (cross-site frontends need `'none'` plus `secure`). Align `cookie.name` / `path` / `domain` with the frontend origin.
 
-| Option | When to use |
-| --- | --- |
-| `store` | Where sessions live; memory locally, Redis across replicas |
-| `cookie.maxAge` | Session lifetime in seconds; **required** |
-| `cookie.name` / `path` / `domain` / `sameSite` / `secure` | Align with front-end origin and cross-site needs |
-| `sliding` | Renew TTL + Cookie on every successful auth |
-| `generateCacheKey` | Custom key prefix; default `auth:session:${sessionId}` |
-| `onLoaded` | Stored → identity; DB lookup / revoke |
-| `onAuthorize` | Only when you call `authorize(role)` |
+To avoid kicking active users offline, turn on `sliding`: each successful auth renews TTL + Cookie. Customize the cache key prefix with `generateCacheKey` (default `auth:session:${sessionId}`). Write `onAuthorize` when you need `authorize(role)`.
 
-## Login, authenticate, logout
+## Login, auth, logout
 
-Do **not** mount `authenticate` on the login route. Call `strategy.login(ctx, stored)` to write the cache and set the Cookie (issues a new `sessionId`; if the request already carried an old Cookie, the old session is deleted after the new one is written). Protect private routes with `authenticate('session')` and read `ctx.auth.session`.
+Do **not** mount `authenticate` on the login route. Use `strategy.login(ctx, stored)` to write the cache and set the Cookie (issues a new `sessionId`; if the request already had an old Cookie, the old session is deleted after a successful write). Private routes mount `authenticate('session')` and read `ctx.auth.session`.
 
 ```typescript
 const session = auth.strategy('session');
@@ -165,28 +157,28 @@ privateRouter.get('/me', {
 });
 ```
 
-After a successful auth:
+After successful auth:
 
 ```typescript
 ctx.auth.session // { sessionId: string; data: Loaded }
 ```
 
-`data` is whatever `onLoaded` returned. `logout` deletes the cache entry and clears the Cookie; `touch` only renews TTL. After a privilege upgrade or sensitive action, call `regenerateSessionId(ctx)` to rotate the id (optionally pass a new Stored payload).
+`data` is the return value of `onLoaded`. `logout` deletes the cache and clears the Cookie; `touch` only renews without changing stored content. After privilege elevation or sensitive actions, call `regenerateSessionId(ctx)` to rotate the id (optionally with new Stored data).
 
 ::: warning
-Cross-origin clients must use `credentials: 'include'`, or the browser will not send the `sessionId` Cookie—login looks fine, then every call is **401**.
+Across origins the frontend must use `credentials: 'include'`, or the browser will not send the `sessionId` Cookie—it looks like “login succeeded then instant 401”.
 :::
 
-## Session vs Bearer / JWT
+## Choosing vs Bearer / JWT
 
 | | Session | Bearer / JWT |
 | --- | --- | --- |
-| Where credential lives | HttpOnly Cookie | Header / local storage |
-| Cross-origin | CORS credentials + usually CSRF | Typically just `Authorization` |
-| Revocation | Delete cache entry | Bearer: delete session; JWT: short TTL / denylist |
-| Typical client | Browser SPA / admin UI | Apps, open platforms, service-to-service |
+| Where credentials live | HttpOnly Cookie | Header / local storage |
+| Cross-origin | Needs CORS credentials + often CSRF | Usually just `Authorization` |
+| Revocation | Delete the cache | Bearer: delete session; JWT: short TTL / blacklist |
+| Typical clients | Browser SPA / admin | Apps, open platforms, service-to-service |
 
-Same-origin admin UIs lean Session; public APIs lean Bearer or JWT. Overview: [Authentication](/en/plugins/auth).
+Prefer Session for same-site admin UIs; prefer Bearer or JWT for open APIs. Overview: [Authentication](/en/plugins/auth).
 
 ## Related
 

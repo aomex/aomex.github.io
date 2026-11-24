@@ -4,13 +4,13 @@ outline: deep
 
 # Bearer strategy
 
-Typical frontend pattern: `Authorization: Bearer <token>`. The server exchanges an opaque token for a user object; failure → **401**. For local verify and fewer DB hits see [JWT strategy](/en/plugins/auth-jwt-strategy)—revocation and permission changes need extra work.
+The most common frontend pattern is `Authorization: Bearer <token>`. The server exchanges an opaque token for a user object; failure → **401**. For local signature checks with fewer DB hits, see [JWT strategy](/en/plugins/auth-jwt-strategy)—but revocation and permission changes usually need extra work.
 
-Configure `AuthBearerStrategy`: extract token from the request, resolve identity in `onLoaded`; compare roles in `onAuthorize`; in business code read `ctx.auth.bearer.data`, not the raw token string.
+Configure AuthBearerStrategy: pull the token from the request, map it to a business identity in `onLoaded`; compare roles in `onAuthorize` when needed; read `ctx.auth.bearer.data` in business code, not the raw token string.
 
 ## Install
 
-Bearer ships with `@aomex/auth` main package—import from subpath.
+Bearer ships with the `@aomex/auth` main package—import from the subpath.
 
 ```bash
 pnpm add @aomex/auth
@@ -62,7 +62,7 @@ router.delete('/posts/:id', {
 });
 ```
 
-Issue token on login (no authenticate):
+Issue a token in the login route (do **not** mount authenticate):
 
 ```typescript
 router.post('/login', { // [!code focus:13]
@@ -80,17 +80,17 @@ router.post('/login', { // [!code focus:13]
 });
 ```
 
-`signature` produces an **opaque** random string (optional business key for isolation)—**not** a JWT. Login routes must not mount `authenticate`.
+`signature` produces an **opaque** random string (you can mix in a business key for domain isolation)—**not** a JWT. Do not mount authenticate on the login route itself.
 
-After success:
+After successful auth:
 
 ```typescript
 ctx.auth.bearer // { token: string; data: T }
 ```
 
-`T` is what `onLoaded` returns. `authorize('bearer', n)` types follow your `onAuthorize`.
+`T` is the object shape `onLoaded` returns on success. The type of `n` in `authorize('bearer', n)` follows your `onAuthorize`.
 
-`onAuthorize` may be an instance method (`this.getIdentity()`) or curried—pick one; types follow the strategy definition:
+`onAuthorize` can be an instance method (use `this.getIdentity()`) or curried—pick one; types follow the strategy definition:
 
 ```typescript
 onAuthorize: (minRole: number) => {
@@ -100,18 +100,14 @@ onAuthorize: (minRole: number) => {
 },
 ```
 
-## tokenLoaders and onLoaded
+## Loading the token from multiple sources
 
-| Option | When to use | Default |
-| --- | --- | --- |
-| `onLoaded` | Redis/DB lookup; `false` when missing | **required** |
-| `tokenLoaders` | Default reads `Authorization`; cookie/query for embed pages | header Bearer (preferred; query/body leak to logs/Referer) |
-| `onAuthorize` | When using `authorize(role)`; omit if login-only | optional |
+`onLoaded` is required: look up Redis/DB to turn the token into a user; return `false` when missing → **401**. By default only `Authorization` Bearer is read (preferred in production); for embeds that cannot send headers, add query / cookie / body—query and body often leak into access logs and Referer, so avoid them when you can. When you only need a logged-in state and not role gates, `onAuthorize` can be omitted.
 
-`tokenLoaders` shapes:
+Common `tokenLoaders` shapes:
 
-- `{ type: 'header', key: 'authorization' }` — `Bearer <token>` two-part only
-- `{ type: 'body' | 'query' | 'cookie', key: 'access_token' }` — when headers impossible
+- `{ type: 'header', key: 'authorization' }` — only the two-part `Bearer <token>` form; bare tokens do not belong here
+- `{ type: 'body' | 'query' | 'cookie', key: 'access_token' }` — fallback when headers are unavailable
 
 ```typescript
 new AuthBearerStrategy({
@@ -126,9 +122,9 @@ new AuthBearerStrategy({
 });
 ```
 
-For OpenAPI, pass the same `WebApp` with `auth.authenticate('bearer')` to `generateOpenapi({ app })`. Overview: [Authentication](/en/plugins/auth).
+When generating OpenAPI, pass the same `WebApp` that mounts `auth.authenticate('bearer')` to `generateOpenapi({ app })` so the Bearer security scheme appears in the docs. See [Authentication](/en/plugins/auth) for the overview.
 
-`onLoaded` returning `false` means unauthenticated (**401**)—do not substitute business exceptions unless you want custom codes. Self-contained JWT: [JWT strategy](/en/plugins/auth-jwt-strategy)—do not verify JWT as opaque Bearer.
+`onLoaded` returning `false` means unauthenticated—do not substitute a business exception unless you need a custom error code. Self-contained JWTs belong on [JWT strategy](/en/plugins/auth-jwt-strategy); do not verify a JWT as an opaque Bearer string.
 
 ## Related
 

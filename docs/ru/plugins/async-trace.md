@@ -2,48 +2,63 @@
 outline: deep
 ---
 
-# Асинхронный трейс
+# Асинхронная трассировка
 
-Access log говорит «запрос занял 800 ms». Чтобы увидеть **какие await съели время**, соберите дерево внутри запроса — для медленных маршрутов и цепочек IO в сервисах. Для обычного CRUD можно не ставить; для классического распределённого трейсинга — OpenTelemetry; этот пакет легче и in-process.
-
-## traceMiddleware на весь запрос
-
-Ставьте при необходимости:
+Access log скажет лишь «этот запрос занял 800 ms». Чтобы увидеть, **какие await съели время**, внутри запроса собирается дерево — удобно для медленных API и разбора цепочки IO в Service. На обычный CRUD по умолчанию не опирайтесь; для стандартной распределённой трассировки смотрите OpenTelemetry — этот пакет легче и ближе к отладке внутри приложения.
 
 ```bash
 pnpm add @aomex/async-trace
 ```
 
-Оберните весь запрос:
+## Обёртка всего запроса
+
+Повесьте `traceMiddleware` в `WebApp.mount` (или на группу Router): на каждый запрос открывается корневой узел; второй аргумент — колбэк после запроса, удобно «логировать только медленные» и стыковать с логгером.
 
 ```typescript
 import { asyncTrace, traceMiddleware } from '@aomex/async-trace';
+import { routers, WebApp } from '@aomex/web';
 
-mount: [
-  traceMiddleware('request', (record) => { // [!code highlight]
-    if (record.duration > 500) {
-      void asyncTrace.toStack([record]);
-    }
-  }),
-  routers('./src/routers'),
-],
+const app = new WebApp({
+  services,
+  logger: services.logger,
+  language: { mode: 'fixed', language: 'zh-CN' },
+  proxyIP: { mode: 'detect' },
+  mount: [ // [!code focus:8]
+    traceMiddleware('request', (record) => {
+      if (record.duration > 500) {
+        void asyncTrace.toStack([record]);
+      }
+    }),
+    routers('./src/routers'),
+  ],
+});
 ```
 
-Без `traceMiddleware` в рантайме и в типах не будет `ctx.asyncTrace` — смонтируйте middleware или используйте только локальный `traceBlock`.
+После монтирования Web-контекст объединяет **AsyncTraceMiddlewareProps**: в запросе доступен `ctx.asyncTrace.record` (поля — по подсказкам типов). Без middleware ждать `ctx.asyncTrace` бессмысленно — ни в типах, ни в runtime корневой записи не будет; либо повесьте middleware, либо используйте локальный `traceBlock`.
 
-Локальные блоки в сервисах:
+`traceMiddleware` — **mixin**-middleware, не фабрика только для `middleware.web`, но его можно класть прямо в Web mount; на Console / command mount тоже. Если тормозит одна группа API и не нужен оверхед на весь сайт — вешайте на mount этого Router.
+
+::: warning
+В проде полный дамп стека без порога даёт runtime-стоимость; в callback фильтруйте по duration или сэмплируйте в систему логов.
+:::
+
+## Разбор горячих точек в Service
+
+На всём запросе видна только суммарная длительность; чтобы понять «какой запрос в БД медленный», оберните await в Service через `traceBlock`. При вложенности `toStack` печатает структуру с отступами.
 
 ```typescript
 import { traceBlock } from '@aomex/async-trace';
 
-const data = await traceBlock('loadUser', async () => { // [!code highlight]
-  const profile = await db.profile.find();
-  const prefs = await db.prefs.find();
-  return { profile, prefs };
-});
+async loadUser(id: number) {
+  return traceBlock('loadUser', async () => { // [!code focus:5]
+    const profile = await db.profile.find(id);
+    const prefs = await db.prefs.find(id);
+    return { profile, prefs };
+  });
+}
 ```
 
-Декоратор метода (чище, чем ручной `traceBlock`, когда в методе много await):
+Когда в методе класса несколько await, декоратор чище ручного `traceBlock`; без label по умолчанию что-то вроде `ClassName.methodName` — удобно читать стек:
 
 ```typescript
 import { traceMethod } from '@aomex/async-trace';
@@ -56,27 +71,11 @@ class UserService {
 }
 ```
 
-Без метки по умолчанию что-то вроде `ClassName.methodName` — удобно в стеках.
+`asyncTrace.run(label, callback)` открывает дочерний узел в уже начатом дереве. В записи обычно есть label, duration, parent / children, error — для отладки часто хватает duration и label.
 
-После `traceMiddleware` в Web-контексте **AsyncTraceMiddlewareProps**: в запросе **ctx.asyncTrace.record** (точные поля — из подсказок типов). `traceMiddleware` — **mixin** middleware, не только `middleware.web`; подходит Web mount, Console и command mount. `asyncTrace.run(label, callback)` открывает дочерние узлы; вложенный `toStack` печатает дерево. В записи обычно label, duration, parent/children, error — для отладки часто хватает duration и label.
-
-## Уровни mount и callback
-
-| Сценарий | Использование |
-| --- | --- |
-| Весь HTTP-сайт | `WebApp.mount: [traceMiddleware('http')]` |
-| Одна группа API | `Router.mount: [traceMiddleware('api-v1')]` |
-| Console-задачи | `ConsoleApp` / command `mount` |
-| Горячие методы | `@traceMethod()` или `traceBlock` |
-| Логировать медленные запросы | второй аргумент `traceMiddleware` — callback; в проде не сливайте полные стеки на горячих путях |
-
-::: warning
-Безлимитные дампы стека в проде жрут CPU; порог или семплирование в callback до отправки в логи.
-:::
-
-Дополняет [@aomex/http-access-log](/ru/plugins/http-access-log): access log — суммарное время, trace — подшаги. Не заменяет OpenTelemetry для межсервисных трасс.
+Дополняет [@aomex/access-log](/ru/plugins/http-access-log): access log пишет суммарное время, трассировка — шаги. Пакет не заменяет распределённый trace вроде OpenTelemetry; между сервисами нужна стандартная схема.
 
 ## Связанное
 
 - Порядок middleware: [Web-приложение](/ru/web/), [Свой middleware](/ru/advanced/middleware)
-- requestId в логах: [Logger · withBindings](/ru/core/logger#request-scoped-context-withbindings)
+- Логи с requestId: [Логи · withBindings](/ru/core/logger#контекст-запроса-withbindings)

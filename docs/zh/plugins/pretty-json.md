@@ -12,7 +12,7 @@ pnpm add @aomex/pretty-json
 
 ## 开发环境全站挂载
 
-`prettyJson()` 在 `await next()` **之后**把 JSON 响应改成带缩进文本，挂进 `WebApp.mount` 即可；生产用 `enable: false` 或只靠 `?pretty` 按需打开。
+`prettyJson()` 在 `await next()` **之后**把 JSON 响应改成带缩进文本，挂进 `WebApp.mount` 即可。本地按环境打开；生产用 `enable: false`。
 
 ```typescript
 import { prettyJson } from '@aomex/pretty-json';
@@ -33,33 +33,22 @@ const app = new WebApp({
 });
 ```
 
-普通 WebMiddleware；ctx 无额外字段。效果是 Content-Type 仍为 JSON 时 body 变成 JSON.stringify(..., null, spaces) 的可读文本；对象模式可读流会走流式 stringify。
+普通 WebMiddleware；ctx 无额外字段。效果是 Content-Type 仍为 JSON 时 body 变成 `JSON.stringify(..., null, spaces)` 的可读文本；对象模式可读流会走流式 stringify。团队习惯 4 空格时加 `spaces: 4`（默认 `2`）。
 
-## enable 与 query 开关
+## 生产按需：只认 ?pretty
 
-| 选项 | 什么时候用 | 默认 |
-| --- | --- | --- |
-| `enable` | 生产务必 `false`；内网调试工具可单独开 | `true` |
-| `query` | 不全站美化，仅 `?pretty` 时生效 | — |
-| `spaces` | 团队习惯 2 或 4 空格 | `2` |
-
-```typescript
-prettyJson({ spaces: 4 });
-```
-
-### 仅内网 / 按需
+全站美化进不了生产时，关掉 `enable`，只留 query 开关：访问 `/internal/debug/state?pretty` 才缩进。公开路由别依赖这个放大响应。
 
 ```typescript
 prettyJson({
   enable: false,
   query: 'pretty', // [!code highlight]
 });
-// GET /internal/debug/state?pretty
 ```
 
 | 环境 | 建议 |
 | --- | --- |
-| 本地 | `enable: true` 或只用 `?pretty` |
+| 本地 | `enable: true`，或只用 `?pretty` |
 | 生产 | `enable: false`；别让公开路由靠 query 放大响应 |
 
 大列表全量 pretty 时体积可能是紧凑 JSON 的数倍，Postman 也会卡。与 [Compress](/zh/plugins/compress) 叠用时能压一点体积，但根源仍是 pretty 变长了 body。

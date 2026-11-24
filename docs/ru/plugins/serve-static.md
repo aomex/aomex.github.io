@@ -4,15 +4,15 @@ outline: deep
 
 # Статические файлы
 
-Каталог на диске (`dist`, `public`, загрузки) → HTTP-файлы; промах → `next()` к API. Служите только выбранный `root`, не корень репозитория и не `node_modules`.
+Каталог на диске (frontend dist, public, пакеты для скачивания) отдаётся как HTTP-файлы; при промахе — `next()` дальше в API. Обслуживайте только указанный `root`, не указывайте корень проекта или `node_modules`.
 
 ```bash
 pnpm add @aomex/serve-static
 ```
 
-## Перед API-маршрутами
+## Перед маршрутами
 
-Статика обычно **перед** бизнес-маршрутами (сначала файл, потом API).
+Статический middleware обычно ставят **перед** бизнес-маршрутами (сначала файл, потом API). `root` обязателен — на продукт фронта или каталог загрузок.
 
 ```typescript
 import { serveStatic } from '@aomex/serve-static';
@@ -30,19 +30,15 @@ const app = new WebApp({
 });
 ```
 
-Обычный `WebMiddleware`. Попадание — отдача файла; промах — дальше по цепочке. Traversal, `..`, NUL, dotfiles отклоняются (валидация внутри пакета).
+Обычный WebMiddleware. При попадании в файл отдаёт содержимое; при промахе пропускает дальше. Path traversal, `..`, NUL, dot-файлы отклоняются (проверки внутри пакета). При доступе к каталогу по умолчанию fallback на `index.html` (меняется через `indexFile`). Если сборка уже положила рядом `.br` / `.gz`, `useCompressedFile` по умолчанию предпочитает их (можно выключить).
 
-## root и кеш
+::: warning
+`root: '.'` или каталог с `node_modules` рискует утечкой путей — на проде такие ошибки уже встречались.
+:::
 
-| Опция | Когда использовать | По умолчанию |
-| --- | --- | --- |
-| `root` | Сборка фронта или каталог загрузок | **обязательно** |
-| `formatPath` | URL-префикс ≠ путь на диске (например `/assets`) | — |
-| `indexFile` | Запрос каталога → index | `index.html` |
-| `useCompressedFile` | Сборка с `.br`/`.gz` рядом | `true` |
-| `cacheControl` | Долгий кеш для hash-ассетов; HTML короче или `noCache` | `maxAge: 0` |
+## Chunk с hash: долгий кеш
 
-### Долгий кеш (chunk с hash)
+JS/CSS chunk с content hash можно отдавать с длинным `cacheControl`; входные вроде `index.html` не стоит делать так же `immutable` — после релиза пользователь останется на старой оболочке.
 
 ```typescript
 serveStatic({
@@ -54,7 +50,11 @@ serveStatic({
 });
 ```
 
-### Переписывание URL-префикса
+По умолчанию `maxAge: 0`. HTML лучше с коротким кешем или `noCache`.
+
+## URL-префикс не совпадает с диском
+
+Когда CDN / шлюз отдаёт `/assets/...` из `./dist`, через `formatPath` снимите префикс и ищите файл:
 
 ```typescript
 serveStatic({
@@ -66,7 +66,9 @@ serveStatic({
 });
 ```
 
-### API + SPA fallback (глубокие ссылки → index.html)
+## API + SPA fallback
+
+Глубокий refresh нельзя закрыть одним статическим middleware: промах после routers нужно отдавать `index.html`. `send` и `serveStatic` экспортируются из одного пакета.
 
 ```typescript
 import { middleware } from '@aomex/common';
@@ -91,17 +93,11 @@ mount: [
 
 | Среда | Рекомендация |
 | --- | --- |
-| Прод | Высокий трафик часто на CDN/Nginx; Node — fallback или внутренняя сеть |
-| Локально | `serveStatic` на выход Vite |
-
-::: warning
-`root: '.'` или каталог с `node_modules` — риск утечки путей; такие ошибки бывают в проде.
-:::
-
-`index.html` не кешируйте `immutable` как hash-chunk — пользователи останутся на старой оболочке. Глубокие ссылки SPA требуют fallback **после** `routers` на `index.html` (демо выше).
+| Прод | большой трафик часто отдаёт статику CDN/Nginx; Node удобен для fallback или интранета |
+| Локально | достаточно `serveStatic` на продукт сборки Vite |
 
 ## Дальше
 
 - Условный кеш: [ETag](/ru/plugins/etag)
-- Сжатие: [Compress](/ru/plugins/compress)
-- Сборка Web: [Точка входа](/ru/web/)
+- Сжатие передачи: [Compress](/ru/plugins/compress)
+- Сборка входа Web: [Вход приложения](/ru/web/)

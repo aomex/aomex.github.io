@@ -2,20 +2,22 @@
 outline: deep
 ---
 
-# 乱用対策
+# 不正利用対策
 
-ディレクトリ走査、ハニーポット命中、短時間の 404 連発、ログアウトでの偽 token 試行——これらは「普通の過剰アクセス」ではなく、境界を探っていることが多い。`@aomex/abuse` は戦略ごとに**カウント**し、上限で** IP をブロック**（またはアカウント凍結はコールバック任せ）する。[レート制限](/ja/plugins/rate-limit)と補完関係：レート制限は突発 QPS、乱用対策はプロービングと業務側が報告する悪意行為向き。
+ディレクトリ走査、ハニーポット接触、短時間の大量 404、偽 token でのログアウト試行——これらは「普通の超過」ではなく境界を探っていることが多い。`@aomex/abuse` は戦略ごとに**数え**、上限で **IP を封鎖**する（またはコールバックであなたがアカウントを封じる）。[リクエスト制限](/ja/plugins/rate-limit) と補完関係：制限は突発 QPS を抑え、不正利用は偵察と業務側からの通報を拾う。
 
-カウントとブロック状態は `@aomex/cache` アダプタ（memory / Redis など）に載る。複数インスタンスなら Redis を共有する。`ctx.request.ip` に依存する。本番では `proxyIP: { mode: 'detect' }`（または固定の信頼チェーン）を設定しないと、全リクエストがリバースプロキシ IP に見える可能性がある。
+カウントと封鎖状態は `@aomex/cache` のアダプタ上（memory / Redis など）。複数インスタンスで共有するなら Redis。`ctx.request.ip` に依存するので、本番では `proxyIP: { mode: 'detect' }`（または固定の信頼チェーン）を付ける。そうしないと全站がリバースプロキシの IP だけに見えることがある。
 
 ```bash
 pnpm add @aomex/abuse
-# 既存の @aomex/cache（本番では Redis アダプタ）も必要
+# 既存の @aomex/cache も必要（本番用の Redis アダプタ含む）
 ```
 
-## ミドルウェアを載せる
+## 作成して `.web()` を載せる
 
-`createAbuse` の戻り値は**ミドルウェア兼 API**（`userAbuse` / `ipAbuse` / `blockIP` など）で、**ctx には載らない**。インスタンスを作り `mount` し、ルートや Service から同じオブジェクトを呼ぶ。
+`createAbuse` が返すのは**サービス**（`ipAbuse` / `blockIP` などの API がある）。mount にそのまま入れられるミドルウェアではない。HTTP 側は `.web()` を `WebApp.mount` に載せる。業務コードでは同じ `abuse` オブジェクトの API を呼び続ける——**`ctx` には載らない**。
+
+次の設定はよく使う 2 戦略を先に載せる：ハニーポットパス（触ったらすぐ封鎖）とエラー状態コード累計（短時間で 401 / 404 が溜まってから封鎖）。
 
 ```typescript
 import { createAbuse } from '@aomex/abuse';
@@ -45,36 +47,21 @@ const abuse = createAbuse({ // [!code focus:18]
 const app = new WebApp({
   services,
   logger: services.logger,
-  language: { mode: 'fixed', language: 'zh-CN' },
+  language: { mode: 'fixed', language: 'ja-JP' },
   proxyIP: { mode: 'detect' },
-  mount: [abuse, routers('./src/routers')], // [!code highlight]
+  mount: [abuse.web(), routers('./src/routers')], // [!code highlight]
 });
 ```
 
-ローカル / 単体テストは memory。本番で複数レプリカなら `store` を Redis アダプタにしないとブロックは各ホストだけ。`window` / `blockFor` などの時間はミリ秒または `'1 hour'`、`'30m'` のような文字列——[キャッシュ](/ja/core/cache#期間-durationinput)と同じ `DurationInput`。
+ローカル / 単体テストは memory。本番の複数レプリカは `store` を Redis アダプタに替える。そうしないと封鎖は自機だけ。`window` / `blockFor` などの長さはミリ秒または読みやすい文字列（`'1 hour'`、`'30m'`）。[キャッシュ](/ja/core/cache#期間-durationinput) と同じ `DurationInput`。
 
-リクエストごと：IP が既にブロック → 既定 **403**。ハニーポットで上限到達 → 即ブロックして 403。`http-error` はレスポンス後にカウント。**上限を超えた当該リクエストは元のステータスのまま**、次のリクエストから 403。
+リクエスト到来時：既に封鎖済み IP → 既定 **403**。ハニーポットに当たり上限 → その場で封鎖して 403。`http-error` は応答後に数える——**当たった当回は元の状態コードのまま**。次のリクエストから封鎖で 403。
 
-## 四つの戦略
+WebSocket 側は同じ `abuse` に `.socket()`（イベントハニーポットなど）。[不正利用対策（WebSocket）](/ja/websocket/abuse) を参照。本ページでは繰り返さない。
 
-| 戦略 | 何がカウントされる | 上限時 |
-| --- | --- | --- |
-| `honeypot` | 意図的に置いたおとりパスへのアクセス | IP ブロック |
-| `http-error` | 指定ステータスコードのレスポンス（`throw` または `send`） | IP ブロック |
-| `ip-abuse` | 業務が `abuse.ipAbuse(ip, reason)` を呼ぶ | IP ブロック |
-| `user-abuse` | 業務が `abuse.userAbuse(id, reason)` を呼ぶ | `onBanUser` のみ。**IP は自動ブロックしない** |
+## ハニーポットパス
 
-### ハニーポットパス
-
-パス文字列は完全一致・簡易 glob。正規表現も可。正規表現は `pathname + search` を見る。変な query のプロービングに向く。`methods` は任意。未設定ならメソッド不問。
-
-| 書き方 | マッチ範囲 |
-| --- | --- |
-| 完全一致（`*` なし） | pathname 全体一致。`'/.env'` は `'/.env.local'` に当たらない |
-| `*` | **一段内**の任意文字、**`/` は跨がない**。`'/wp-*.php'` は `/wp-login.php` に当たり `/wp/admin.php` には当たらない |
-| `**` | **複数段を跨げる**。`'/a/**/c'` は `/a/b/d/c` に当たり `/a/c` には当たらない（間に最低一段必要） |
-| 末尾 `/**` | ディレクトリ自身と任意の深い子パス。`'/.git/**'` は `/.git`、`/.git/config` に当たり `/.github` には当たらない |
-| `RegExp` | `pathname + search`、例 `/^\/admin\?.*dump=/` |
+通常ユーザーが踏まないパスをわざと置く（`/.env`、`/wp-admin/**` など）。誰かが掃くと IP ごとに数え、上限で封鎖。パス文字列は完全一致と単純 glob。正規表現も可。正規表現は `pathname + search` を見るので、変な query 付きの偵察を拾いやすい。`methods` は任意。未指定ならメソッドは問わない。
 
 ```typescript
 {
@@ -87,11 +74,21 @@ const app = new WebApp({
 }
 ```
 
-glob は pathname のみ。query は無視。query 込みなら正規表現。`paths` は空不可。作成時に検証。波括弧などは展開構文ではなくリテラル。
+書き方の対照：
 
-### エラーステータスで累計
+| 書き方 | マッチ範囲 |
+| --- | --- |
+| 正確な文字列（`*` なし） | pathname 全体が完全一致。`'/.env'` は `'/.env.local'` に当たらない |
+| `*` | **単一セグメント内**の任意文字。**`/` は跨がない**。`'/wp-*.php'` は `/wp-login.php` に当たり、`/wp/admin.php` には当たらない |
+| `**` | **複数セグメントを跨げる**。`'/a/**/c'` は `/a/b/d/c` に当たり、`/a/c` には当たらない（間に少なくとも 1 段） |
+| 末尾 `/**` | ディレクトリ自身 + 任意の深い子パス。`'/.git/**'` は `/.git`、`/.git/config` に当たり、`/.github` は誤爆しない |
+| `RegExp` | `pathname + search` を検査。例：`/^\/admin\?.*dump=/` |
 
-同一戦略内の複数 `statusCodes` は**ひとつのバケットで累計**。`paths` / `methods` で絞れる。未設定ならサイト全体の該当ステータス。
+glob は pathname だけ。query は影響しない。query も見たいときは正規表現。`paths` は空にできない。作成時に検証する。波括弧などの拡張構文はなく、リテラルとしてマッチする。
+
+## エラー状態コードの累計
+
+短時間に大量の 404 / 401 は、インターフェース走査や資格情報の当たりが多い。`http-error` を使う：同一戦略内の複数 `statusCodes` は**混ぜて累計**。さらに `paths` / `methods` で絞れる。未指定なら全站その状態コードを数える。
 
 ```typescript
 {
@@ -104,11 +101,11 @@ glob は pathname のみ。query は無視。query 込みなら正規表現。`p
 }
 ```
 
-API スキャン向け。ログインの 401 も厳しくしたいなら `paths` 付きで別戦略を足す。全站 404 と同じバケットに混ぜない。
+API 走査を止めるのに向く。ログイン上の 401 も厳しくしたいなら、`paths` 付きの戦略を別に載せる。全站 404 と同じ桶に混ぜない。
 
-### 業務報告：IP
+## 業務通報：偽 token の試行
 
-レスポンスは成功のまま（logout が常に 204 など）だが IP 単位で「疑わしい試行」を記録したいときは `ip-abuse` とルート内呼び出し。`reason` は文字列でよい。戦略で宣言したものと一致必須。未知の reason は実行時に例外。同一 reason は戦略 1 本だけ。
+応答自体は成功（例：logout は token の有無に関わらず 204）でも、IP 単位で「怪しい試行」を数えたいときは `ip-abuse` + ルート内呼び出し。`reason` は文字列でよい。戦略で宣言した値と一致させる。未知の reason は実行時にエラー。同じ reason は 1 戦略だけ。
 
 ```typescript
 const abuse = createAbuse({
@@ -135,7 +132,7 @@ router.post('/logout', {
 });
 ```
 
-reason が増えたら TypeScript `enum`（文字列・数値どちらも可）でまとめ、魔法文字列を散らさない。戦略と `ipAbuse` に同じメンバを渡すと、第 2 引数は戦略に現れたメンバーに狭まる。未設定メンバーや裸の `'logout-miss'` は型エラー。
+業務 reason が増えたら TypeScript の `enum`（文字列または数値メンバー）でまとめると、魔法文字列の散らばりを防げる。戦略と `ipAbuse` の両方に enum メンバーを渡す。第 2 引数は「戦略に出たメンバー」に絞られ、未設定メンバーや裸の `'logout-miss'` は型で止まる。
 
 ```typescript
 enum IpAbuseReason {
@@ -143,13 +140,13 @@ enum IpAbuseReason {
   TokenProbe = 'token-probe',
 }
 
-// strategies: reason: IpAbuseReason.LogoutMiss
+// strategies 内：reason: IpAbuseReason.LogoutMiss
 await abuse.ipAbuse(ctx.request.ip, IpAbuseReason.LogoutMiss);
 ```
 
-### 業務報告：ユーザー
+## 業務通報：アカウント次元
 
-アカウント単位の乱用（特典の濫用、クレデンシャルスタッフィング後のユーザー軸など）は `user-abuse`。パッケージは**ユーザ DB を書かない**——上限で `onBanUser` のみ。DB 更新・ session 破棄はコールバック側。いずれか `user-abuse` があると **`onBanUser` 必須**（作成時チェック）。`reason` は文字列でも enum でも可。
+アカウント単位の不正利用（クーポン連打、資格情報当たり後のユーザー次元など）は `user-abuse`。パッケージは**ユーザー庫を触らない**——上限では `onBanUser` だけ呼び、あなたがコールバックで DB 更新や session キックをする。どれか 1 つでも `user-abuse` があれば **`onBanUser` は必須**。作成時に検査する。`reason` も文字列または enum。
 
 ```typescript
 const abuse = createAbuse({
@@ -160,7 +157,7 @@ const abuse = createAbuse({
       reason: 'order-probe',
       limit: 10,
       window: '1 day',
-      banFor: '7 days', // 推奨 BAN 時間、コールバックへ
+      banFor: '7 days', // 推奨封鎖時間。コールバック経由で渡る
     },
   ],
   onBanUser: async (id, reason, detail) => { // [!code focus:6]
@@ -174,44 +171,48 @@ const abuse = createAbuse({
 await abuse.userAbuse(userId, 'order-probe');
 ```
 
-enum の使い方は IP と同じ。`detail` に `count` / `limit`、ミリ秒に解釈された `banFor`（戦略未設定なら `undefined`）。同一ユーザー・同一 reason でウィンドウ内の `onBanUser` は最大 1 回（キャッシュプレースホルダで並行重複防止）。コールバックが throw するとプレースホルダ解放されウィンドウ内リトライ可。
+enum の書き方は IP と同じ：戦略は `UserAbuseReason.OrderProbe`、通報と `onBanUser` の `reason` はユニオンメンバーに絞られる。数値 enum（`OrderProbe = 1`）も可。保存前に `String(reason)` するので、バケットキーは文字列形。
 
-## 手動ブロックとフック
+`detail` には `count` / `limit`、ミリ秒に解決した `banFor`（戦略未設定なら `undefined`）。同一ユーザー + 同一 reason は窓内で `onBanUser` が成功するのは一度だけ（キャッシュのプレースホルダで並行走査を防ぐ）。コールバックが例外を投げるとプレースホルダが外れ、窓内の再試行が可能になる。
 
-| API | 役割 |
-| --- | --- |
-| `blockIP(ip, duration)` | 手動 IP ブロック。既にブロックならスキップ（TTL 更新・コールバック重複なし） |
-| `unblockIP(ip)` | ブロック解除 |
-| `isIPBlocked(ip)` | ブロック中か |
-| `onBlockIP` | 戦略命中、`ipAbuse` 上限、手動 `blockIP` 時 |
-| `bypass` | プローブカウントとブロックチェックをスキップ（ヘルス、社内） |
-| `blockedError` | ブロック時のカスタム `HttpError`（既定 403） |
+## ヘルスチェック迂回と手動封鎖
+
+プローブパスを封鎖ロジックで止めない：`.web()` に `bypass` を渡す。運用で一時的に IP を封じ / 解くなら `blockIP` / `unblockIP`。照会は `isIPBlocked`。監査ログを残すなら `onBlockIP`——戦略の上限、`ipAbuse` 満額、手動 `blockIP` のどれでもコールバックに入る。
+
+封鎖時の既定は **403**。制限と同じく 429 に揃えたいなら `blockedError` を渡す。
 
 ```typescript
 const abuse = createAbuse({
   store,
   strategies: [/* ... */],
-  bypass: (ctx) => {
-    return ctx.request.pathname === '/health';
-  },
-  blockedError: new HttpError(429, 'blocked', { code: 'ABUSE_BLOCKED' }),
   onBlockIP: async (ip, reason, detail) => {
     services.logger.warn('abuse.block', { ip, reason, ...detail });
   },
 });
 
+mount: [
+  abuse.web({ // [!code focus:6]
+    bypass: (ctx) => {
+      return ctx.request.pathname === '/health';
+    },
+    blockedError: new HttpError(429, 'blocked', { code: 'ABUSE_BLOCKED' }),
+  }),
+  routers('./src/routers'),
+],
+
 await abuse.blockIP('203.0.113.8', '1 day');
 await abuse.unblockIP('203.0.113.8');
 ```
 
-`onBlockIP` の `reason` は `'honeypot' | 'http-error' | 'ip-abuse' | 'manual'`。`detail.blockFor` はミリ秒。
+HTTP 側の `onBlockIP` の `reason` はよく `'honeypot' | 'http-error' | 'ip-abuse' | 'manual'`。同じインスタンスに WebSocket イベントハニーポットも載せていれば `'socket-events'` も出る（[不正利用対策（WebSocket）](/ja/websocket/abuse)）。`detail.blockFor` の単位はミリ秒。既に封鎖済みなら再度の `blockIP` はスキップ（TTL を伸ばさず、コールバックも繰り返さない）。
 
 ::: tip
-乱用ブロックは「捕まえたらしばらく閉める」向き。サイト全体のソフトリミットは [レート制限](/ja/plugins/rate-limit)。両方載せられる：レート制限を前にして毛刺を抑え、乱用対策で戦略ベースの封じ込め。
+不正利用の封鎖は「捕まえたらしばらく閉じる」寄り。全站のソフト制限は [リクエスト制限](/ja/plugins/rate-limit) を見る。両方載せてよい：制限を前に置いてスパイクを抑え、不正利用は戦略累計のあとで封鎖。
 :::
 
 ## 関連
 
-- [レート制限](/ja/plugins/rate-limit)
+- [リクエスト制限](/ja/plugins/rate-limit)
+- [不正利用対策（WebSocket）](/ja/websocket/abuse)
 - [キャッシュ](/ja/core/cache)（`store` アダプタと `DurationInput`）
-- [CSRF](/ja/plugins/csrf)
+- [CSRF 対策](/ja/plugins/csrf)

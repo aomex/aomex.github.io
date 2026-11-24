@@ -4,23 +4,23 @@ outline: deep
 
 # OAuth2-клиент
 
-Для «редирект на провайдера → code → обмен на token» ядро — `@aomex/oauth2-client`: **authorization code OAuth 2.0** (по умолчанию **PKCE S256**); с `oidc` проверяется `id_token` как OpenID Connect (nonce + JWKS). Сессию логина вы пишете сами (Bearer / Session / JWT…).
+Когда нужен вход «перейти на страницу авторизации → вернуться с code → обменять на token», ядро — `@aomex/oauth2-client`: **authorization code OAuth 2.0** (по умолчанию **PKCE S256**); с `oidc` по OpenID Connect проверяется `id_token` (nonce + JWKS). Состояние входа по-прежнему пишете сами (Bearer / Session / JWT и т.д.).
 
-Для обычных вендоров эндпоинты не пишут вручную: ставьте `@aomex-contrib/oauth2-*` из [aomex-contrib](https://github.com/aomex/aomex-contrib). Свой IdP или вендор вне списка — собирайте `OAuth2Client` напрямую.
+Частым вендорам не пишите эндпоинты руками: сначала пресет `@aomex-contrib/oauth2-*` из [aomex-contrib](https://github.com/aomex/aomex-contrib); свой IdP или отсутствующий в списке — тогда `new OAuth2Client`.
 
 ```bash
 pnpm add @aomex/oauth2-client
-# peer: @aomex/web @aomex/cache @aomex/common
-# если есть пресет, напр.: pnpm add @aomex-contrib/oauth2-google
+# peer：@aomex/web @aomex/cache @aomex/common
+# при пресете, например: pnpm add @aomex-contrib/oauth2-google
 ```
 
-## Пресеты вендоров (предпочтительно)
+## Пресеты вендоров (рекомендуется)
 
-Пресет заполняет authorize / token (или OIDC `issuer`) и scope по умолчанию, сужает типы ответа. Настройка консоли и поля — в **README каждого пакета** (ссылки ниже).
+Пресет-пакет заполняет authorize / token (или OIDC `issuer`) и scope по умолчанию, типы возврата сужены под вендора. Детали бэкенда и полей — в **README каждого пакета** (ссылки в таблице ниже).
 
-Организация: **один Service на вендора** — клиент в `protected` на Service, снаружи только `oauthRedirect` / `oauthCallback`; маршруты вызывают `services.xxx` и не разбрасывают `new GoogleOAuth2Client` по action. Та же форма, что у скаффолда и [сервисного слоя](/ru/core/service).
+В организации удобно: **один вендор — один Service** — внутри Service `protected` держит клиента, наружу только `oauthRedirect` / `oauthCallback`; маршруты зовут `services.xxx`, не разбрасывайте `new GoogleOAuth2Client` по action. Как в скаффолде и [сервисном слое](/ru/core/service).
 
-Пример Google (OIDC, полностраничный redirect):
+Пример Google (полный redirect OIDC):
 
 ```typescript
 // src/services/google.service.ts
@@ -58,7 +58,7 @@ export const services = await combineServices({
 });
 ```
 
-В маршрутах только вызовы Service:
+В маршрутах только Service:
 
 ```typescript
 import { Router } from '@aomex/web';
@@ -75,26 +75,26 @@ router.get('/google', {
 router.get('/google/callback', {
   action: async (ctx) => {
     const claims = await services.google.oauthCallback(ctx); // [!code highlight]
-    // без onProfile: проверенные id_token claims (sub / email …)
-    // здесь выдача своей сессии: Bearer / Session …
+    // без onProfile: уже проверенные claims id_token (sub / email …)
+    // здесь пишите сессию: выдача Bearer / запись Session …
     ctx.send(claims);
   },
 });
 ```
 
-GitHub — та же схема: отдельный `GithubService` с `GitHubOAuth2Client`; `callback` часто даёт `{ base, userinfo }`. Функция `redirectUri` собирает callback из `ctx.request.origin` для нескольких хостов.
+GitHub аналогично: отдельный `GithubService` с `GitHubOAuth2Client`; у `callback` по умолчанию чаще `{ base, userinfo }`. `redirectUri` через `(ctx) => …` собирает колбэк по origin запроса — удобно при нескольких доменах.
 
-`store` держит `state` (и PKCE verifier). Конструктор через `registerLifecycle` сам делает `connect` / при остановке `disconnect`. Локально хватает memory; в проде на нескольких инстансах — Redis-адаптер (скаффолд часто сразу `CacheRedisAdapter`), иначе callback попадёт на другую машину без state. TTL state по умолчанию `'10 minutes'` (`stateTtl`, `DurationInput`). Параллельные callback успешны только у одной стороны; при сбое обмена state **не восстанавливается**.
+`store` временно держит `state` (и PKCE verifier). При конструкторе через `registerLifecycle` автоматически `connect` / при shutdown `disconnect`. Локально — memory; в проде на нескольких инстансах — Redis-адаптер (скаффолд часто сразу `CacheRedisAdapter`), иначе колбэк может попасть на другую машину без state. TTL state по умолчанию `'10 minutes'` (`stateTtl`, `DurationInput`); при параллельных callback успешен только один, при сбое обмена билета state **не** восстанавливается.
 
-Для GIS / One Tap с `credential` на фронте **не** используйте oauth2-google — берите `google-identity-login` ниже (тоже можно оформить отдельным Service).
+Для GIS / One Tap с `credential` не берите oauth2-google — пакет `google-identity-login` из таблицы ниже (тоже можно свернуть в Service).
 
-### Каталог пресетов
+### Обзор пресетов
 
-Пакеты в [aomex/aomex-contrib](https://github.com/aomex/aomex-contrib); установка вида `pnpm add @aomex-contrib/oauth2-google @aomex/oauth2-client`. Откройте имя пакета ради README.
+Пакеты в [aomex/aomex-contrib](https://github.com/aomex/aomex-contrib); установка вроде `pnpm add @aomex-contrib/oauth2-google @aomex/oauth2-client`. Имя пакета ведёт в README репозитория.
 
 | Пакет | Описание |
 | --- | --- |
-| [`oauth2-google`](https://github.com/aomex/aomex-contrib/tree/main/packages/oauth2-google) | Google OIDC (полностраничный redirect) |
+| [`oauth2-google`](https://github.com/aomex/aomex-contrib/tree/main/packages/oauth2-google) | Google OIDC (полный redirect) |
 | [`oauth2-microsoft`](https://github.com/aomex/aomex-contrib/tree/main/packages/oauth2-microsoft) | Microsoft / Entra ID OIDC |
 | [`oauth2-apple`](https://github.com/aomex/aomex-contrib/tree/main/packages/oauth2-apple) | Sign in with Apple (`form_post` + JWT `client_secret`) |
 | [`oauth2-github`](https://github.com/aomex/aomex-contrib/tree/main/packages/oauth2-github) | GitHub OAuth App |
@@ -102,27 +102,27 @@ GitHub — та же схема: отдельный `GithubService` с `GitHubOA
 | [`oauth2-gitlab`](https://github.com/aomex/aomex-contrib/tree/main/packages/oauth2-gitlab) | GitLab.com |
 | [`oauth2-linkedin`](https://github.com/aomex/aomex-contrib/tree/main/packages/oauth2-linkedin) | LinkedIn |
 | [`oauth2-facebook`](https://github.com/aomex/aomex-contrib/tree/main/packages/oauth2-facebook) | Facebook Login |
-| [`oauth2-twitter`](https://github.com/aomex/aomex-contrib/tree/main/packages/oauth2-twitter) | Twitter (X) |
-| [`oauth2-spotify`](https://github.com/aomex/aomex-contrib/tree/main/packages/oauth2-spotify) | Spotify (обмен токена часто с `tokenAuth: 'basic'`) |
-| [`oauth2-wechat`](https://github.com/aomex/aomex-contrib/tree/main/packages/oauth2-wechat) | Открытая платформа WeChat (скан на сайте) / веб-авторизация официального аккаунта |
-| [`oauth2-wecom`](https://github.com/aomex/aomex-contrib/tree/main/packages/oauth2-wecom) | WeCom (корпоративный WeChat): веб-авторизация своего приложения |
+| [`oauth2-twitter`](https://github.com/aomex/aomex-contrib/tree/main/packages/oauth2-twitter) | Twitter（X） |
+| [`oauth2-spotify`](https://github.com/aomex/aomex-contrib/tree/main/packages/oauth2-spotify) | Spotify (обмен часто с `tokenAuth: 'basic'`) |
+| [`oauth2-wechat`](https://github.com/aomex/aomex-contrib/tree/main/packages/oauth2-wechat) | WeChat Open Platform: QR / веб-авторизация официального аккаунта и т.п. |
+| [`oauth2-wecom`](https://github.com/aomex/aomex-contrib/tree/main/packages/oauth2-wecom) | WeCom: веб-авторизация собственного приложения |
 
-**Не** полностраничный redirect OAuth — отдельные пакеты `*-login`:
+То, что **не** полный redirect OAuth, вынесено в отдельные пакеты `*-login` — не встраивайте в поток таблицы выше:
 
 | Пакет | Описание |
 | --- | --- |
 | [`google-identity-login`](https://github.com/aomex/aomex-contrib/tree/main/packages/google-identity-login) | Google GIS: проверка `credential` / обмен code / userinfo |
-| [`wechat-mini-program-login`](https://github.com/aomex/aomex-contrib/tree/main/packages/wechat-mini-program-login) | Мини-программа WeChat: `code2Session` + телефон (не OAuth) |
+| [`wechat-mini-program-login`](https://github.com/aomex/aomex-contrib/tree/main/packages/wechat-mini-program-login) | WeChat mini program `code2Session` + телефон (не OAuth) |
 
-Для своего тонкого враппера вендора можно взять [`oauth2-preset`](https://github.com/aomex/aomex-contrib/tree/main/packages/oauth2-preset) (`mergeOAuth2Preset` / `mergeOidcPreset`). Приложениям обычно **не** нужно зависеть от него напрямую.
+Свой тонкий вендорный wrapper можно собрать на [`oauth2-preset`](https://github.com/aomex/aomex-contrib/tree/main/packages/oauth2-preset) через `mergeOAuth2Preset` / `mergeOidcPreset`; бизнес-приложению обычно **не** нужно зависеть от него напрямую.
 
-## Ручной `OAuth2Client`
+## Ручной OAuth2Client
 
-Если вендора нет в списке или это свой IdP — тоже кладите в Service: внутри `new OAuth2Client(...)`, маршруты только вызывают методы вроде `services.idp.oauthRedirect`.
+Нет в списке или свой IdP — тоже в Service: внутри `new OAuth2Client(...)`, маршруты по-прежнему только `services.idp.oauthRedirect` и т.п.
 
 ### Чистый OAuth2: эндпоинты вручную
 
-Без OIDC discovery нужны `authorizationEndpoint` / `tokenEndpoint` и `onProfile`.
+Без OIDC discovery обязательны `authorizationEndpoint` / `tokenEndpoint` и `onProfile`.
 
 ```typescript
 import { Service } from '@aomex/common';
@@ -161,7 +161,7 @@ export default class IdpService extends Service {
 
 ### OIDC: discovery + проверка id_token
 
-Задайте `oidc.issuer` — подтянется `/.well-known/openid-configuration`. Без `openid` в scope он добавится. Без `onProfile` `callback` возвращает **проверенные** claims.
+С `oidc.issuer` запрашивается `/.well-known/openid-configuration` — эндпоинты и jwks. Если в scope нет `openid`, он добавится сам. Без `onProfile` `callback` сразу возвращает **уже проверенные** claims.
 
 ```typescript
 protected readonly oauth = new OAuth2Client({ // [!code focus:8]
@@ -176,7 +176,7 @@ protected readonly oauth = new OAuth2Client({ // [!code focus:8]
 });
 ```
 
-Маппинг claims в бизнес-пользователя через `onProfile` (в аргументах `oidc.claims`):
+Чтобы по claims писать в БД — `onProfile` с доп. `oidc.claims`:
 
 ```typescript
 onProfile: async ({ token, oidc, ctx }) => {
@@ -184,11 +184,11 @@ onProfile: async ({ token, oidc, ctx }) => {
 },
 ```
 
-Если в `id_token` есть `at_hash`, он сверяется с этим `access_token`; при множественном `aud` нужен `azp` = `client_id`. Discovery можно перекрыть через `oidc.jwksUri` / `expectedIssuer`.
+Если в `id_token` есть `at_hash`, он сверяется с текущим `access_token`; при множественном `aud` ещё требуется `azp` = `client_id`. Discovery можно перекрыть `oidc.jwksUri` / `expectedIssuer`.
 
 ## Обновление и отзыв
 
-После логина сохраните `refresh_token` сами; до истечения вызывайте `this.oauth.refresh` внутри Service. Опциональный `scope` только сужает. При выходе или инвалидации — `revoke` (нужен `revocationEndpoint`; для OIDC без явной настройки берётся discovery `revocation_endpoint`).
+После входа бизнес сам хранит `refresh_token`; до истечения в Service вызывайте `refresh` на `this.oauth`. Опциональный `scope` только сужает, не расширяет. При выходе или отбраковке билета — `revoke` (нужен `revocationEndpoint`; без ручной записи OIDC попробует discovery `revocation_endpoint`; чистому OAuth2 URL часто пишут вручную).
 
 ```typescript
 const tokens = await this.oauth.refresh(storedRefreshToken);
@@ -197,31 +197,21 @@ await this.oauth.revoke(tokens.access_token, {
 });
 ```
 
-## Часто меняемые опции
-
-| Опция | Назначение |
-| --- | --- |
-| `redirectUri` | Строка или `(ctx) => string` (несколько хостов) |
-| `clientSecret` | Строка или `() => string \| Promise<string>` (динамический JWT Apple) |
-| `pkce` | По умолчанию `true` (S256); выключайте только для редких legacy |
-| `tokenAuth` | Куда класть учётные данные при обмене: `body` (по умолчанию) или `basic` |
-| `stateTtl` | Сколько живёт state; по умолчанию `'10 minutes'` |
-| `authorizationParams` | Доп. query в URL авторизации (обязательные поля не перезаписывает) |
-| `revocationEndpoint` | URL отзыва; для чистого OAuth2 часто нужен вручную |
+В конструкторе часто трогают: `redirectUri` — фиксированная строка или `(ctx) => string` по origin (несколько доменов); `clientSecret` — также `() => string | Promise<string>` (динамический JWT у Apple); `pkce` по умолчанию `true` (S256), выключают только редкие старые эндпоинты; учётные данные обмена по умолчанию в body, Spotify и др. — `tokenAuth: 'basic'`; `stateTtl` по умолчанию `'10 minutes'`; доп. query авторизации — `authorizationParams` (не перекрывает обязательные поля).
 
 ::: warning
-`callback` принимает только authorization-code (`code` + `state`). Implicit / hybrid с `id_token` или `token` в query очищают state и бросают ошибку. При отмене пользователем часто приходит `error` (например `access_denied`); state проверяется и потребляется, затем throw. У части вендоров (Apple) — **POST form_post**; смотрите README пресета.
+`callback` принимает только authorization code (`code` + `state`). Если в колбэке есть query implicit / hybrid `id_token` или `token`, state очистится и будет ошибка. При отмене пользователем authorization server часто шлёт `error` (например `access_denied`) — после проверки и потребления state бросается ошибка; текст подсказки решаете в маршруте. У Apple и др. может быть **POST form_post** — смотрите README соответствующего пресета.
 :::
 
-## Связка с Auth
+## Как стыковать с Auth
 
-Ни ядро, ни пресеты не являются стратегией `@aomex/auth`: они дают Profile / claims / `{ base, userinfo }`; дальше вы выдаёте свои credentials. Типично: upsert в `oauthCallback` или маршруте → `auth.strategy('bearer').signature(...)` или [Session](/ru/plugins/auth-session-strategy) → дальше `authenticate`.
+Пакет и пресеты **не** являются стратегиями `@aomex/auth`: после Profile / claims / `{ base, userinfo }` вы сами выдаёте свои учётные данные. Типично: в `oauthCallback` или маршруте `upsert` → `auth.strategy('bearer').signature(...)` или запись [Session](/ru/plugins/auth-session-strategy) → дальше интерфейсы через `authenticate`.
 
 ## Связанное
 
 - Репозиторий и список пакетов: [aomex-contrib](https://github.com/aomex/aomex-contrib)
 - Регистрация сервисов: [Сервисный слой](/ru/core/service)
-- state / однократный расчёт при конкуренции / длительности: [Кэш](/ru/core/cache)
-- Auth после логина: [Auth](/ru/plugins/auth)
-- Cookie-сессии: [Стратегия Session](/ru/plugins/auth-session-strategy)
+- state / single-flight / длительности: [Кеш](/ru/core/cache)
+- Аутентификация после входа: [Единый вход Auth](/ru/plugins/auth)
+- Cookie-сессия: [Стратегия Session](/ru/plugins/auth-session-strategy)
 - Выдача JWT: [Стратегия JWT](/ru/plugins/auth-jwt-strategy)

@@ -2,28 +2,28 @@
 outline: deep
 ---
 
-# HTTP access log
+# Журнал доступа
 
-Одна строка на завершённый запрос: method, URL, status, duration — трафик и медленные эндпоинты.
+Хотите в приложении видеть «кто стукнул какой HTTP-маршрут и сколько это заняло»? Используйте `httpAccessLog()` из `@aomex/access-log`. Одна строка по завершении запроса.
 
-**В проде предпочтительнее Nginx `access_log`** (или встроенный лог шлюза/LB): единый формат, меньше нагрузки на event loop Node, проще ingestion. `@aomex/http-access-log` — локальная разработка, без reverse proxy, или когда в логе нужны **userId / tenant / traceId**, доступные только в приложении.
+**В проде предпочтителен Nginx `access_log`** (или встроенный лог шлюза). Пакет уместен для локальной разработки, когда нет обратного прокси, и когда в строку нужны **userId / tenant / traceId** — поля, которые появляются только после входа в Node.
 
 ```bash
-pnpm add @aomex/http-access-log
+pnpm add @aomex/access-log
 ```
 
-## Рано и на весь сайт
+## До routers
 
-`httpAccessLog()` **перед** `routers`, если нужен in-app access log: combined-строка после запроса; 404 и валидационные 400 учитываются. Позже — искажается полная длительность цепочки.
+Ставьте `httpAccessLog()` **перед** `routers`. После полного прохода «луковицы» пишется строка; 404 и validation 400 тоже попадают. Слишком поздно — длительность и ранние выходы не совпадут с «аудитом всего сайта».
 
 ```typescript
-import { httpAccessLog } from '@aomex/http-access-log';
+import { httpAccessLog } from '@aomex/access-log';
 import { routers, WebApp } from '@aomex/web';
 
 const app = new WebApp({
   services,
   logger: services.logger,
-  language: { mode: 'fixed', language: 'zh-CN' },
+  language: { mode: 'fixed', language: 'ru-RU' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:4]
     httpAccessLog(), // [!code highlight]
@@ -32,27 +32,18 @@ const app = new WebApp({
 });
 ```
 
-По умолчанию combined-подобная строка через logger (часто console). Поля: ip, method, url, statusCode, duration, contentLength.
+Без опций строки идут в консоль примерно в combined-стиле: ip, method, url, statusCode, duration, contentLength. Для локального прямого доступа хватает; при поиске медленных маршрутов добавьте [время ответа](/ru/plugins/response-time).
 
 ::: warning
-После `routers` длительность цепочки и ранние 404 могут не совпасть с «полным аудитом сайта».
+Если повесить **после** routers, длительность всей цепочки и ранние 404 могут не совпасть с «аудитом всего сайта».
 :::
 
-`customTokens` получают `WebContext`: `ctx.auth` и т.п. нужен **завершённый внутренний** auth — лог пишется после `await next()`, обычно видны внутренние props «луковицы». Если в `customTokens` всегда `-` для `ctx.auth`, проверьте порядок: auth на маршрутах, лог снаружи — возможно, поднять auth на `Router.mount`.
+## Формат и запись в файл
 
-## Формат и приёмники
-
-| Возможность | Когда использовать | По умолчанию |
-| --- | --- | --- |
-| `format` | Порядок полей под ELK/Loki в проде | встроенный combined |
-| `transports` | Файл, удалённые коллекторы | console (через `logger`) |
-| `customTokens` | userId, tenant, traceId | — |
-| `HttpAccessLogToken.*` | Собрать `ip` / `method` / `duration` и т.д. | из пакета |
-
-### Прод: файл
+Чтобы выровнять порядок полей под ELK / Loki или писать в файл, используйте `format` + `transports`. `format` лучше собирать из `HttpAccessLogToken`, а не руками набирать плейсхолдеры — их легко опечатать.
 
 ```typescript
-import { HttpAccessLogToken, httpAccessLog } from '@aomex/http-access-log';
+import { HttpAccessLogToken, httpAccessLog } from '@aomex/access-log';
 import { FileTransport } from '@aomex/logger';
 
 httpAccessLog({
@@ -68,7 +59,11 @@ httpAccessLog({
 });
 ```
 
-### userId после auth
+Пустой `transports` или `disabled: true` отключает журнал доступа. В проде с Nginx **сначала** шлюзовой `access_log`; слой приложения для диска / коллекторов открывайте только ради своих token или когда прокси нет — и отделяйте от бизнес-логов.
+
+## Добавить userId
+
+Строка пишется **после** `await next()`, поэтому `ctx.auth` от внутренней авторизации обычно уже читается. Через `customTokens` вставляйте бизнес-поля в `format`; колбэк получает полный `WebContext`.
 
 ```typescript
 httpAccessLog({
@@ -81,17 +76,12 @@ httpAccessLog({
 });
 ```
 
-Часто вместе с [Response time](/ru/plugins/response-time): заголовок клиенту/шлюзу, `duration` в логах — платформе.
+Часто сочетают с [временем ответа](/ru/plugins/response-time): `X-Response-Time` в заголовке — для клиента / шлюза, duration в логе — для платформы сбора.
 
-| Среда | Рекомендация |
-| --- | --- |
-| Локально, прямой доступ | плагин в console; `responseTime()` для медленных маршрутов |
-| Прод с Nginx | **предпочтительно** `access_log`; in-app только для custom tokens |
-| Прод без прокси | файл или коллектор; отдельно от бизнес-логов |
-
-Access log — трафик и latency, не единственный аудит чувствительных действий; добавьте бизнес-логи или audit-таблицы. Nginx и in-app могут сосуществовать — не плодите два конфликтующих формата.
+Журнал доступа — про трафик и задержку, **не** единственный аудит чувствительных действий. Заказы и смена прав всё равно пишите в бизнес-лог или таблицу аудита.
 
 ## Дальше
 
-- Заголовок времени: [Response time](/ru/plugins/response-time)
-- Уровни и requestId: [Logger · withBindings](/ru/core/logger#request-scoped-context-withbindings)
+- Время в заголовке ответа: [Время ответа](/ru/plugins/response-time)
+- Журнал доступа WebSocket (соединения / сообщения): [Журнал доступа (WebSocket)](/ru/websocket/access-log)
+- Уровни стоков / requestId: [Логгер](/ru/core/logger)

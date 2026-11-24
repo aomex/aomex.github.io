@@ -63,7 +63,7 @@ router.get('/export', {
 路由上的 `tags: ['User']` 只贡献**名字**。要在文档顶部给分组加一段介绍（支持 Markdown），在 `generateOpenapi` 的 `docs.tags` 里声明同名项：
 
 ```typescript
-import { generateOpenapi } from '@aomex/openapi';
+import { generateOpenapi } from '@aomex/openapi-generator';
 import { app } from './app.js';
 
 await generateOpenapi({

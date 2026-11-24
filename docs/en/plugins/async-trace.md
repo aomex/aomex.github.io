@@ -2,48 +2,63 @@
 outline: deep
 ---
 
-# Async trace
+# Async Trace
 
-Access logs tell you “this request took 800ms.” To see **which awaits cost time**, build a tree inside the request—good for slow routes and profiling a chain of IO in services. Skip for everyday CRUD; for standard distributed tracing use OpenTelemetry—this package is lighter and in-process.
-
-## Full-request traceMiddleware
-
-Install when needed:
+Access logs only tell you “this request took 800ms”. To find **which awaits ate the time**, collect a tree for this request—useful for slow-endpoint triage and breaking down a chain of IO in a Service. Everyday CRUD doesn’t need this by default; for standard distributed tracing see OpenTelemetry—this package is lighter and aimed at in-app debugging.
 
 ```bash
 pnpm add @aomex/async-trace
 ```
 
-Wrap the whole request:
+## Wrap the whole request
+
+Mount `traceMiddleware` on `WebApp.mount` (or a Router group): each request opens a root node; the second argument is a callback after the request ends—good for “only log slow requests” before wiring to your logger.
 
 ```typescript
 import { asyncTrace, traceMiddleware } from '@aomex/async-trace';
+import { routers, WebApp } from '@aomex/web';
 
-mount: [
-  traceMiddleware('request', (record) => { // [!code highlight]
-    if (record.duration > 500) {
-      void asyncTrace.toStack([record]);
-    }
-  }),
-  routers('./src/routers'),
-],
+const app = new WebApp({
+  services,
+  logger: services.logger,
+  language: { mode: 'fixed', language: 'zh-CN' },
+  proxyIP: { mode: 'detect' },
+  mount: [ // [!code focus:8]
+    traceMiddleware('request', (record) => {
+      if (record.duration > 500) {
+        void asyncTrace.toStack([record]);
+      }
+    }),
+    routers('./src/routers'),
+  ],
+});
 ```
 
-Without `traceMiddleware`, `ctx.asyncTrace` will not exist at runtime or in types—either mount it or use local `traceBlock` only.
+After mounting, the Web context merges **AsyncTraceMiddlewareProps**: you can use `ctx.asyncTrace.record` on the request (follow the type hints for fields). If you expect `ctx.asyncTrace` without mounting, neither types nor runtime will have a root record—either mount the middleware or use local `traceBlock` only.
 
-Local blocks inside services:
+`traceMiddleware` is a **mixin** middleware, not a `middleware.web`-only factory, but you can put it directly in Web mount; Console / command mount works the same. When only one API group is slow and you don’t want site-wide overhead, mount it on that Router’s mount.
+
+::: warning
+Logging full stacks with no sampling in production has runtime cost; in the callback, gate by duration or sampling before sending to your log system.
+:::
+
+## Break down hotspots in a Service
+
+A whole-request span only shows total duration; to split “which DB call was slow”, wrap an await with `traceBlock` in the Service. Nested blocks print as an indented structure via `toStack`.
 
 ```typescript
 import { traceBlock } from '@aomex/async-trace';
 
-const data = await traceBlock('loadUser', async () => { // [!code highlight]
-  const profile = await db.profile.find();
-  const prefs = await db.prefs.find();
-  return { profile, prefs };
-});
+async loadUser(id: number) {
+  return traceBlock('loadUser', async () => { // [!code focus:5]
+    const profile = await db.profile.find(id);
+    const prefs = await db.prefs.find(id);
+    return { profile, prefs };
+  });
+}
 ```
 
-Method decorator (cleaner than manual `traceBlock` when a method has many awaits):
+For class methods with several awaits, a decorator is cleaner than hand-written `traceBlock`; without a label the default looks like `ClassName.methodName`, which is easy to spot in the stack:
 
 ```typescript
 import { traceMethod } from '@aomex/async-trace';
@@ -56,27 +71,11 @@ class UserService {
 }
 ```
 
-Without a label, default is like `ClassName.methodName`—easy to read in stacks.
+`asyncTrace.run(label, callback)` opens a child node inside an already-started tree. Records usually include label, duration, parent / children, error, and so on—often watching duration and label is enough when debugging.
 
-After `traceMiddleware`, Web context merges **AsyncTraceMiddlewareProps**: use **ctx.asyncTrace.record** in the request (exact fields from type hints). `traceMiddleware` is a **mixin** middleware—not exclusive to `middleware.web`—fits Web mount; Console / command mount too. `asyncTrace.run(label, callback)` opens child nodes; nested `toStack` prints indented structure. Records usually carry label, duration, parent/children, error—duration and label often enough for debugging.
-
-## Mount levels and callbacks
-
-| Scenario | Usage |
-| --- | --- |
-| Whole HTTP site | `WebApp.mount: [traceMiddleware('http')]` |
-| One API group | `Router.mount: [traceMiddleware('api-v1')]` |
-| Console jobs | `ConsoleApp` / command `mount` |
-| Hot methods | `@traceMethod()` or `traceBlock` |
-| Log slow requests | `traceMiddleware` second-arg `callback`—avoid unconditional full stacks on hot paths in prod |
-
-::: warning
-Unbounded stack dumps in production cost CPU; threshold or sample in the callback before shipping to logging.
-:::
-
-Complements [@aomex/http-access-log](/en/plugins/http-access-log): access log = total time, trace = substeps. Does not replace OpenTelemetry for cross-service traces.
+Complements [@aomex/access-log](/en/plugins/http-access-log): access logs record total duration; async trace splits sub-steps. This package doesn’t replace OpenTelemetry or other distributed traces—cross-service still needs a standard approach.
 
 ## Related
 
 - Middleware order: [Web app](/en/web/), [Custom middleware](/en/advanced/middleware)
-- requestId in logs: [Logger · withBindings](/en/core/logger#request-scoped-context-withbindings)
+- Attach requestId to logs: [Logger · withBindings](/en/core/logger#request-scoped-context-withbindings)

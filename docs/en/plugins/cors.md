@@ -4,15 +4,15 @@ outline: deep
 
 # CORS
 
-Let browser frontends call your API legally: dev often splits ports and needs preflight; production tightens which **origins** are allowed; cookies need **credentials** configured.
+Let browser frontends call your API legally: in development, different ports need to pass preflight; in production, tighten which origins are allowed, and add credentials when cookies are required.
 
 ```bash
 pnpm add @aomex/cors
 ```
 
-## Before routers
+## Mount before routers
 
-`cors()` writes `Access-Control-*` headers so browsers can read cross-origin responses. Mount **before** `routers` so all responses (including 4xx/5xx) carry headers—otherwise preflight passes but error bodies are unreadable.
+`cors()` writes Access-Control-* response headers in the middleware phase so the browser can read cross-origin response bodies. It must sit **before** `routers`, so every response (including 4xx/5xx) carries the headers—otherwise preflight passes, but when the business returns an error the frontend can’t read the error body.
 
 ```typescript
 import { cors } from '@aomex/cors';
@@ -21,7 +21,7 @@ import { routers, WebApp } from '@aomex/web';
 const app = new WebApp({
   services,
   logger: services.logger,
-  language: { mode: 'fixed', language: 'en-US' },
+  language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:4]
     cors(), // [!code highlight]
@@ -31,32 +31,22 @@ const app = new WebApp({
 ```
 
 ::: warning
-CORS **after** `routers` may drop headers on 404 and validation 400—browser “CORS errors” hide the real cause.
+If CORS is mounted **after** routers, 404 and validation 400 responses may lack the headers, and the browser’s “CORS” error can hide the real cause.
 :::
 
-Local split ports **without** Cookies: parameterless `cors()` reflects request `Origin`—usually enough. Once you send Cookies across origins ([Session](/en/plugins/auth-session-strategy)), you must set `origin` explicitly—see below.
+When local frontend and backend use different ports and **don’t send cookies**, no-arg `cors()` reflects the Origin request header and is usually enough. Once you need cookies across origins ([Session](/en/plugins/auth-session-strategy)), you must set origin explicitly—see the next section.
 
-`cors()` is plain `WebMiddleware`—no new `ctx` fields; actions unchanged. Success shows `Access-Control-Allow-Origin`; with cookies you also need `Access-Control-Allow-Credentials: true` and **cannot** use `origin: '*'`.
+cors() returns a normal WebMiddleware and doesn’t attach new fields on ctx; write business actions as usual—cross-origin is solved by response headers. On success in the browser you’ll see Access-Control-Allow-Origin; with cookies you also need Access-Control-Allow-Credentials: true, and you **must not** use origin: '*'.
 
-## Tighten origin and credentials
+## Cookie login: explicit origin required
 
-| Option | When to use | Default |
-| --- | --- | --- |
-| `origin` | Fixed frontend domain in prod, or allowlist / function | Reflect request `Origin` when credentials are off; **required** when credentials are on |
-| `credentials` | Cross-origin cookies / client certificates | `false` |
-| `allowHeaders` | Custom headers like `Authorization`, `x-csrf-token` | — |
-| `exposeHeaders` | Let JS read `X-Request-Id` etc. | — |
-| `maxAge` | Fewer OPTIONS; `-1` disables cache while debugging | `3600` |
-| `allowMethods` | Restrict to GET/POST only | common verb set |
-| `secureContext` / `privateNetworkAccess` | Isolated pages, public site calling private API (Chrome PNA) | `false` |
+When `credentials: true` (or a function returns `true`):
 
-### Cookie login: explicit origin required
+- You **must** configure `origin` explicitly (a concrete domain, an allowlist array, or a function that returns a concrete origin)
+- You **must not** rely on no-arg cors()’s default reflection—missing config throws at create time or on the request
+- You **must not** use `origin: '*'` (browsers reject that combination anyway)
 
-With `credentials: true` (or a function that returns `true`):
-
-- You **must** set `origin` explicitly (concrete domain, allowlist array, or a function that returns a concrete origin)
-- You **must not** rely on bare `cors()` reflection—missing `origin` throws at create time or on the request
-- You **must not** use `origin: '*'` (browsers reject that combination too)
+If the frontend also sends `Authorization` or `x-csrf-token`, allow them with `allowHeaders`; to let frontend scripts read custom headers like `X-Request-Id`, use `exposeHeaders`.
 
 ```typescript
 cors({
@@ -68,12 +58,14 @@ cors({
 ```
 
 ::: warning
-Credentials without an explicit `origin`, or with `*`, fail fast on purpose—so “reflect any Origin + Cookie” cannot be the accidental default.
+Turning on credentials without writing origin, or setting it to `*`, prevents the app from starting or throws on the first request—this intentionally blocks the dangerous default of “reflect any Origin + Cookie”.
 :::
 
-Session also needs [CSRF](/en/plugins/csrf), and the front end must call `fetch` with `credentials: 'include'`. Full flow: [Session strategy](/en/plugins/auth-session-strategy).
+Session also needs [CSRF](/en/plugins/csrf), and the frontend `fetch` must use `credentials: 'include'`. Full chain: [Session strategy](/en/plugins/auth-session-strategy).
 
-### Multiple frontend origins
+## Allowlist for multiple frontends
+
+When the app and admin console use different domains, `origin` can be an array; only hits are echoed back—misses mean CORS is not enabled for that request.
 
 ```typescript
 const allowlist = [
@@ -88,7 +80,7 @@ cors({
 });
 ```
 
-Or return a concrete origin from a function (only when allowlisted; otherwise `undefined` disables CORS for that request):
+You can also use a function that returns a concrete origin per request (echo only on allowlist hit; return `undefined` on miss to disable CORS):
 
 ```typescript
 cors({
@@ -103,18 +95,20 @@ cors({
 });
 ```
 
-| Environment | Guidance |
-| --- | --- |
-| Local (no Cookie) | Parameterless `cors()` |
-| Local (Session) | `origin: 'http://localhost:5173'` + `credentials: true` |
-| Production | Explicit domain or allowlist; never default-reflect when credentials are on |
+Preflight cache defaults to about one hour (`maxAge: 3600`); for local debugging set `-1` so every OPTIONS is hit again. Tighten with `allowMethods` when you only want GET/POST. `secureContext` / `privateNetworkAccess` are only needed when isolated pages / public sites call an intranet API (Chrome PNA).
 
-Forgetting doc sites / Swagger / admin origins breaks preflight on those domains.
+| Environment | Recommendation |
+| --- | --- |
+| Local (no cookies) | No-arg `cors()` |
+| Local (Session) | `origin: 'http://localhost:5173'` + `credentials: true` |
+| Production | Explicit domains or allowlist; never use default reflection with credentials |
+
+If you only update the Web API origin and forget the docs site / Swagger / admin origins, preflight fails on those domains.
 
 ## Next steps
 
-- Cookie login end-to-end: [Session strategy](/en/plugins/auth-session-strategy)
-- Protect writes: [CSRF](/en/plugins/csrf)
-- Mount order and onion model: [Middleware](/en/core/middleware)
-- Security headers (often beside CORS): [Helmet](/en/plugins/helmet)
+- Full cookie-login chain: [Session strategy](/en/plugins/auth-session-strategy)
+- Protect write requests from forgery: [CSRF](/en/plugins/csrf)
+- Mount order and the onion model: [Middleware](/en/core/middleware)
+- Security response headers (often next to CORS): [Helmet](/en/plugins/helmet)
 - Site-wide observability: [HTTP access log](/en/plugins/http-access-log)

@@ -34,24 +34,21 @@ const app = new WebApp({
 
 compress() 带 CompressProps：ctx.needCompress 可在单条路由上强制开/关（补全会出现该字段）。响应里会有 Content-Encoding；text/event-stream 等流式类型一般会跳过，避免缓冲整段流。
 
-## 阈值与算法
+常见 mount 顺序：访问日志 / 响应时间 → compress → 路由（压缩要看到最终 body）。算法优先级（客户端都支持时）：**zstd → br → gzip → deflate**。
 
-| 选项 | 什么时候用 | 默认 |
-| --- | --- | --- |
-| `threshold` | 小于阈值的 body 不压，省 CPU | `1024` |
-| `filter` | 全局跳过不可压缩类型；可被 `ctx.needCompress` 覆盖 | 按 MIME 判断 |
-| `zstd` / `br` / `gzip` / `deflate` | 只认某一种算法时关掉其余 | 均启用 |
-| `ctx.needCompress` | SSE、大文件下载等单路由例外 | 由 `filter` 决定 |
+## 大列表抬阈值
 
-算法优先级（客户端都支持时）：**zstd → br → gzip → deflate**。
-
-### 大列表 / 导出
+默认小于约 `1024` 字节的 body 不压，省 CPU。导出、大列表可把 `threshold` 调到 `'4kb'` 一类；数字或不带单位时单位是 byte。
 
 ```typescript
-compress({ threshold: '4kb' });
+compress({ threshold: '4kb' }); // [!code highlight]
 ```
 
-### SSE 必须关压缩
+只认某一种算法时，把其余设成 `false`（如 `br: false`）。`filter` 按 Content-Type 判断要不要压，可被单路由的 `ctx.needCompress` 覆盖。
+
+## SSE 必须关压缩
+
+流式接口忘了关压缩时，缓冲会破坏实时性。在 action 里把 `ctx.needCompress` 设成 `false`：
 
 ```typescript
 router.get('/events', {
@@ -61,8 +58,6 @@ router.get('/events', {
   },
 });
 ```
-
-常见 mount 顺序：访问日志 / 响应时间 → compress → 路由（压缩要看到最终 body）。
 
 | 环境 | 建议 |
 | --- | --- |
@@ -78,7 +73,7 @@ Nginx 常见写法是 `gzip on;`（以及按需的 Brotli 模块）。应用与�
 网关和应用同时压缩时，体积未必更小，延迟和 CPU 往往双份。
 :::
 
-流式接口（如 SSE）忘了 ctx.needCompress = false 时，缓冲会破坏实时性。与 [ETag](/zh/plugins/etag) 叠用时别想当然排顺序，改完后用真实请求验 304 与体积。
+与 [ETag](/zh/plugins/etag) 叠用时别想当然排顺序，改完后用真实请求验 304 与体积。
 
 ## 下一步
 

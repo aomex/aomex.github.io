@@ -18,7 +18,7 @@ mount に redocUI を載せると、チームが /redoc（デフォルト）で�
 
 ```typescript
 import { redocUI } from '@aomex/redoc-ui';
-import { generateOpenapi } from '@aomex/openapi';
+import { generateOpenapi } from '@aomex/openapi-generator';
 import { app } from './app.js';
 
 mount: [ // [!code focus:13]

@@ -112,17 +112,9 @@ const auth = new Auth({
 });
 ```
 
-生产或多实例请换成 Redis 等外置适配器，见 [缓存](/zh/core/cache)。Cookie 默认名 `sessionId`；`setCookie` 默认 `httpOnly: true`、`sameSite: Strict`（跨站前端要改成 `'none'` 并开 `secure`）。
+生产或多实例请换成 Redis 等外置适配器，见 [缓存](/zh/core/cache)。Cookie 默认名 `sessionId`；`setCookie` 默认 `httpOnly: true`、`sameSite: Strict`（跨站前端要改成 `'none'` 并开 `secure`）。`cookie.name` / `path` / `domain` 与前端域名对齐即可。
 
-| 选项 | 什么时候用 |
-| --- | --- |
-| `store` | 会话落点；本机 memory，多副本 Redis |
-| `cookie.maxAge` | 会话多久失效（秒）；**必填** |
-| `cookie.name` / `path` / `domain` / `sameSite` / `secure` | 与前端域名、是否跨站对齐 |
-| `sliding` | 每次认证成功续期 TTL + Cookie；活跃用户少被迫下线 |
-| `generateCacheKey` | 自定义键前缀；默认 `auth:session:${sessionId}` |
-| `onLoaded` | Stored → 业务身份；查库、吊销 |
-| `onAuthorize` | 需要 `authorize(角色)` 时再写 |
+活跃用户少被迫下线时，开 `sliding`：每次认证成功续期 TTL + Cookie。自定义缓存键前缀用 `generateCacheKey`（默认 `auth:session:${sessionId}`）。需要 `authorize(角色)` 时再写 `onAuthorize`。
 
 ## 登录、鉴权、退出
 

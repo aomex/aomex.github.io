@@ -2,15 +2,15 @@
 outline: deep
 ---
 
-# API Key 戦略
+# API Key ストラテジー
 
-スクリプト、パートナー、内部向けに「鍵があれば呼べる」経路。AuthApiKeyStrategy はヘッダー（または設定した query/cookie）から**生**の鍵を読み、アプリ身元にマップ——Bearer のような二段式**ではない**。エンドユーザー向けログインは [Bearer](/ja/plugins/auth-bearer-strategy) または [JWT](/ja/plugins/auth-jwt-strategy)。
+スクリプト、協力先、内部サービスに「鍵を付ければ呼べる」通路を一本用意する。AuthApiKeyStrategy はヘッダー（または設定した query/cookie）から**素の**鍵を読み、アプリ身分にマップする——Bearer のような二段式ではない。エンドユーザーのログインは [Bearer](/ja/plugins/auth-bearer-strategy) または [JWT](/ja/plugins/auth-jwt-strategy)。
 
-x-api-key（またはカスタムヘッダー）を検証し、通過後業務で ctx.auth.apiKey。オープン API はユーザーログイン領域と Router プレフィックスを分けられる。
+x-api-key（またはカスタムヘッダー）を検証し、通ったあと業務では ctx.auth.apiKey を使う。オープンプラットフォームはユーザーログイン域と別の Router プレフィックスに分けられる。
 
 ## インストール
 
-Bearer と共通で `@aomex/auth` メインパッケージ。
+Bearer と同じく `@aomex/auth` 本体を使う。
 
 ```bash
 pnpm add @aomex/auth
@@ -53,7 +53,7 @@ openApi.get('/usage', {
 });
 ```
 
-ユーザー Bearer と併存するときは戦略名が別々、別 Router にマウントすればよい。
+ユーザー Bearer と共存させるときは、ストラテジー名をそれぞれ管理し、別の Router に載せればよい。
 
 成功後：
 
@@ -61,25 +61,13 @@ openApi.get('/usage', {
 ctx.auth.apiKey // { key: string; data: T }
 ```
 
-authorize('apiKey', …) の追加引数の型は Bearer と同様、onAuthorize の定義から。onAuthorize なしのときは多く「合法な key があるか」だけ。
+authorize('apiKey', …) の追加引数の型は、Bearer と同じく、書いた onAuthorize から来る。onAuthorize が無いときは、だいたい「合法な key があるか」の一層だけ。
 
-## keyLoaders とレート制限の次元
+## 複数ソースから Key を取る・レート制限の次元
 
-| オプション | いつ使う | デフォルト |
-| --- | --- | --- |
-| `keyLoaders` | header / query / cookie を順に試す | `[{ type: 'header', key: 'x-api-key' }]` |
-| `onLoaded` | key を検証しアプリ身元を返す | **必須** |
-| `onAuthorize` | scope、プランなどでさらに絞る | 任意 |
+`onLoaded` は必須：key を検証しアプリ身分を返す。デフォルトはヘッダー `x-api-key` のみ。header / query / cookie を順に試すなら `keyLoaders` を書く。scope やプランでさらに締めるなら `onAuthorize` を足す。
 
-対応 loader：
-
-- header — ヘッダー生値（key 名は小文字で照合）
-- query — 慎重に。ログに残りやすい
-- cookie — チーム約束
-
-**body から Key は読まない**。鍵がリクエストボディログに落ちないため。query の key はアクセスログに入る。本番は header 優先。
-
-複数ソースのフォールバック例：
+対応する loader：header（ヘッダーの素値。key 名は小文字で照合）、query（慎重に。ログに入りやすい）、cookie。**body から Key は読めない**。鍵がリクエスト本体のログに落ちないようにする。本番は header 優先。
 
 ```typescript
 new AuthApiKeyStrategy({
@@ -93,9 +81,10 @@ new AuthApiKeyStrategy({
 });
 ```
 
-signature() でランダム Key 文字列を生成（新クライアント発行時）。Bearer 戦略と同様。
 
-[@aomex/rate-limit](/ja/plugins/rate-limit) と組み合わせ、key でクォータ次元——レート制限の前に認証完了、または自分で header から key を読む：
+signature() は乱数 Key 串の生成に使える（新しいクライアント発行時）。使い方は Bearer ストラテジーに近い。
+
+[@aomex/rate-limit](/ja/plugins/rate-limit) と組み合わせるときは、key をクォータ次元にできる——通常はレート制限の前に認証が終わっていること、または自分で header から key を読むこと：
 
 ```typescript
 rateLimit({
@@ -105,17 +94,16 @@ rateLimit({
 });
 ```
 
-OpenAPI は apiKey scheme を注入。in / name は多く**最初**の keyLoader から。
+OpenAPI は apiKey scheme を注入する。in / name はだいたい**最初の** keyLoader から取る。
 
 ::: warning
-鍵漏洩は権限漏洩：DB にはハッシュ、ローテーションを支援。平文を長期放置しない。API Key は C 向けログインの代替ではない。エンド製品は Bearer/JWT。
-
+鍵の漏洩は権限の漏洩。保存はハッシュ、ローテーションを支え、平文を長く庫に寝かせない。API Key はエンドユーザーログインの代わりではない。端末プロダクトは引き続き Bearer/JWT。
 :::
 
-ユーザーセッションと API Key を同一路由群に混ぜない。オープン API は別 prefix + authenticate('apiKey') が明確。
+ユーザー session と API Key を同じルートグループに混ぜない。オープンプラットフォームは単独の prefix + authenticate('apiKey') の方がはっきりする。
 
 ## 関連
 
 - [認証](/ja/plugins/auth)
-- [Bearer 戦略](/ja/plugins/auth-bearer-strategy)
+- [Bearer ストラテジー](/ja/plugins/auth-bearer-strategy)
 - [レート制限](/ja/plugins/rate-limit)

@@ -4,12 +4,12 @@ outline: deep
 
 # 生成OpenAPI
 
-在路由上**声明契约**，再扫成 OpenAPI 3.0：内存里给脚本 / Swagger 用，或经 Console **落盘**成文件给 CI、SDK。生成链路在 `@aomex/openapi`；Swagger / Redoc 只是读这份 JSON 的方式。
+在路由上**声明契约**，再扫成 OpenAPI 3.0：内存里给脚本 / Swagger 用，或经 Console **落盘**成文件给 CI、SDK。生成链路在 `@aomex/openapi-generator`；Swagger / Redoc 只是读这份 JSON 的方式。
 
 没挂 query / body / response 的路由，文档里对应段也会空——运行时照样能跑，只是契约不完整。send / throw 的类型收窄见 [约束响应](/zh/web/response)。
 
 ```bash
-pnpm add @aomex/openapi
+pnpm add @aomex/openapi-generator
 ```
 
 **传入与线上同一份 `WebApp` 实例**（`app`），生成器会读它的全局 `mount` 和 `envelope`，security、错误体、套壳才不容易和真环境漂开。
@@ -95,7 +95,7 @@ app.listen(3000);
 
 ```typescript
 import { writeFile } from 'node:fs/promises';
-import { generateOpenapi } from '@aomex/openapi';
+import { generateOpenapi } from '@aomex/openapi-generator';
 import { app } from './app.js';
 
 const document = await generateOpenapi({ // [!code focus:11]
@@ -203,7 +203,7 @@ router.get('/openapi.json', {
 
 ```typescript
 // src/cli.ts
-import { openapi } from '@aomex/openapi';
+import { openapi } from '@aomex/openapi-generator';
 import { commanders, ConsoleApp } from '@aomex/console';
 import { app } from './app.js';
 import { services } from './services/index.js';

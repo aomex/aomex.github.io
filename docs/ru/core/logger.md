@@ -2,9 +2,9 @@
 outline: deep
 ---
 
-# Логирование
+# Логи
 
-Создайте **LoggerService** и объявите, куда его отправлять в createTransports; зарегистрируйте его в joinServices и **нетерпеливо разогрейте**. Веб-консоль/консоль используют один и тот же файл Services.logger и соответствуют необходимому регистратору для WebApp.
+Сделайте **LoggerService**, в `createTransports` объявите, куда писать; зарегистрируйте в `combineServices` и **прогрейте через eager**. Web / Console делят один `services.logger`, и он же закрывает обязательный `logger` у WebApp.
 
 ```bash
 pnpm add @aomex/logger
@@ -42,7 +42,7 @@ await services.logger.info('服务已就绪');
 await services.logger.error(err, '结账失败');
 ```
 
-WebApp нужно передавать отдельно помимо сервисов ` logger: services.logger`(Достаточно той же ссылки):
+У WebApp кроме `services` отдельно передайте `logger: services.logger` (та же ссылка):
 
 ```typescript
 new WebApp({
@@ -53,18 +53,18 @@ new WebApp({
 });
 ```
 
-## Уровень и подпись
+## Уровни и сигнатуры
 
-У каждого журнала есть **уровень**: уровень шума увеличивается от незначительного до фатального. Уровень, установленный в таблице выходов, определяет, «насколько шумно будет входить в этот канал». Первый параметр ошибки подписи/фатальной:` Error `, остальные оценки средние`(message, context?)`.
+У каждой записи есть **level**: шум растёт от trace к fatal; `level` в таблице выходов решает, «насколько шумно» попадёт в этот канал. У error / fatal первый аргумент — `Error`, у остальных обычно `(message, context?)`.
 
-— трассировка/отладка/информация/предупреждение: (сообщение, контекст?)
-- ошибка/фатальная: (ошибка, сообщение, контекст?)
-- Уровень каждого выхода может быть одним уровнем или диапазоном {min, max}.
+- trace / debug / info / warn: (message, context?)
+- error / fatal: (err, message, context?)
+- у каждого выхода level — один уровень или интервал `{ min, max }`
 
-Уровень варьируется от шумного до тихого: трассировка → отладка → информация → предупреждение → ошибка → фатальный.
+От шумного к тихому: trace → debug → info → warn → error → fatal.
 
 ::: warning
-Включение отладки/трассировки на длительное время в рабочей среде сделает горячий путь и диск невыносимым; используйте ошибку и фатальный сбой в бизнесе, чтобы оставить процесс неработоспособным. Не отмечайте все неудачи как фатальные.
+Долгий debug / trace в проде убивает горячий путь и диск; бизнес-сбои — `error`, `fatal` — когда процесс нездоров, не помечайте каждый сбой как fatal.
 :::
 
 ```typescript
@@ -73,25 +73,25 @@ await services.logger.error(err, '结账失败');
 await services.logger.fatal(err, '数据库不可用，准备退出');
 ```
 
-## список экспорта
+## Сначала выберите выход
 
-| Выход | Сумка | когда использовать |
+| Выход | Пакет | Когда |
 | --- | --- | --- |
-| [ConsoleTransport](#consoletransport) | `@aomex/logger ` | Локальная разработка, контейнерный стандартный вывод |
-| [FileTransport](#filetransport) | `@aomex/logger ` | Размещение заказов, сортировка файлов по дням/классам |
-| [StreamTransport](#streamtransport) | `@aomex/logger ` | Напишите любую запись (тест, конвейер) |
-| [WebhookTransport](#webhooktransport) | `@aomex/logger ` | Нажмите на пользовательский HTTP-хук |
-| [CustomTransport](#customtransport) | `@aomex/logger ` | Самостоятельная очередь / БД / SDK производителя |
-| [SentryTransport](#sentrytransport) | `@aomex/logger-sentry ` | ошибка в Sentry |
-| [TelegramTransport](#telegramtransport) | `@aomex/logger-telegram ` | фатально разбуди кого-нибудь |
+| [ConsoleTransport](#consoletransport) | `@aomex/logger` | локальная разработка, stdout контейнера |
+| [FileTransport](#filetransport) | `@aomex/logger` | на диск, файлы по дню / уровню |
+| [StreamTransport](#streamtransport) | `@aomex/logger` | любой Writable (тесты, пайп) |
+| [WebhookTransport](#webhooktransport) | `@aomex/logger` | свой HTTP-хук |
+| [CustomTransport](#customtransport) | `@aomex/logger` | своя очередь / БД / SDK вендора |
+| [SentryTransport](#sentrytransport) | `@aomex/logger-sentry` | error в Sentry |
+| [TelegramTransport](#telegramtransport) | `@aomex/logger-telegram` | fatal разбудит людей |
 
-Распространенные комбинации для производства: информация консоли + предупреждение о файле + ошибка Sentry + фатальная ошибка Telegram. Каждая розетка устанавливает свой уровень, и ни один канал не несет весь шум.
+Типичная продакшен-связка: консоль info + файл warn + Sentry error + Telegram fatal. У каждого выхода свой level — не сваливайте весь шум в один канал. Ниже — как настраивать каждый выход.
 
 ---
 
-### Консольтранспорт
+### ConsoleTransport
 
-Позвоните в терминал. Текст по умолчанию окрашен в цвет телетайпа; конвейер сбора можно изменить на json.
+В терминал. На TTY text по умолчанию с цветом; для NDJSON в пайп сбора — `format: 'json'` и без цвета.
 
 ```typescript
 { transport: new ConsoleTransport(), level: 'debug' },
@@ -104,17 +104,11 @@ new ConsoleTransport({
 });
 ```
 
-| Параметры | когда использовать | по умолчанию |
-| --- | --- | --- |
-| ` format ` | При сборе используйте NDJSON`'json'` | `'text'` |
-| ` colorize ` | Цвет переключателя силы | Вкл. текстовые сообщения и телетайп |
-| ` colors ` | Изменить цвет уровня | встроенный |
-| ` output ` | Все уровни следуют одному и тому же потоку | — |
-| ` stderrLevels ` | Не установлено` output `Какие уровни входят в stderr, когда | ` error `/` fatal ` |
+Без `output` error / fatal идут в stderr, остальное — в stdout; чтобы всё в один поток — задайте `output`. `colors` меняет раскраску уровней.
 
-### Файловый Транспорт
+### FileTransport
 
-Добавить локальные файлы; если каталог не существует, он будет создан автоматически.
+Дописывает локальный файл; каталог создаётся сам. Фиксированного пути часто хватает одной строкой; для разбиения по дню / уровню — плейсхолдеры `{year}` / `{month}` / `{day}` / `{level}` (или `(log) => path`).
 
 ```typescript
 {
@@ -125,20 +119,16 @@ new ConsoleTransport({
 
 ```typescript
 new FileTransport({
-  file: './logs/{year}-{month}-{day}/{level}.log',
+  file: './logs/{year}-{month}-{day}/{level}.log', // [!code highlight]
   format: 'json',
 });
 ```
 
-| Параметры | когда использовать | по умолчанию |
-| --- | --- | --- |
-| ` file ` | Фиксированный путь или с`{year}`/`{level}` держатель места; также доступен `(log) => path` | Сортировка файлов по дню + уровню |
-| ` format ` | Дайте Fluent Bit время на использование`'json'` | `'text'` |
-| ` fileMode `/` dirMode ` | Если вы хотите ужесточить разрешения | Система по умолчанию |
+Для Fluent Bit и т.п. — `format: 'json'`. Права — через `fileMode` / `dirMode`.
 
-### СтримТранспорт
+### StreamTransport
 
-Написание произвольных записываемых объектов (поддельные потоки модульных тестов, конвейеры процессов).
+Любой Writable (фейковый поток в unit-тестах, пайп процесса):
 
 ```typescript
 new StreamTransport({
@@ -147,34 +137,25 @@ new StreamTransport({
 });
 ```
 
-| Параметры | когда использовать |
-| --- | --- |
-| ` stream ` | Обязательно, цель доступна для записи |
-| ` format ` | `'text'`/`'json'`, текст по умолчанию |
+`stream` обязателен; `format` по умолчанию text.
 
-### ВебхукТранспорт
+### WebhookTransport
 
-HTTP-отправка к конечной точке тревоги/собственной коллекции.
+HTTP на алерт / свой коллектор. Медленный хук — поднимите `timeoutMs` (по умолчанию около `30000`); авторизация — `headers`.
 
 ```typescript
 new WebhookTransport({
   url: process.env.ALERT_WEBHOOK_URL!, // [!code highlight]
-  headers: { Authorization: ` Bearer ${process.env.HOOK_TOKEN}` },
+  headers: { Authorization: `Bearer ${process.env.HOOK_TOKEN}` },
   format: 'json',
 });
 ```
 
-| Параметры | когда использовать | по умолчанию |
-| --- | --- | --- |
-| ` url ` | Обязательно, адрес привязки | — |
-| ` method ` | Когда не публикуется | ` POST ` |
-| ` headers ` | Аутентификация, пользовательский заголовок | — |
-| ` format ` | `'json'`/`'text'`, или функция пишется тело | `'json'` |
-| ` timeoutMs ` | Поднимите медленный крючок | `30000` |
+`format` может быть функцией — сами соберёте body. method по умолчанию POST.
 
 ### CustomTransport
 
-Самостоятельная логика потребления; formatLog настраивается в этом отношении.
+Своя логика потребления; на `this` доступен `formatLog`.
 
 ```typescript
 new CustomTransport({
@@ -184,7 +165,7 @@ new CustomTransport({
 });
 ```
 
-Если одна линия выйдет из строя, другие выходы, как правило, не будут заблокированы. Наследуйте Transport, когда вам нужен более точный контроль.
+Сбой одной записи обычно не блокирует другие выходы. Для более тонкого контроля наследуйте Transport.
 
 ### SentryTransport
 
@@ -203,14 +184,9 @@ import { SentryTransport } from '@aomex/logger-sentry';
 },
 ```
 
-| Параметры | когда использовать | по умолчанию |
-| --- | --- | --- |
-| ` dsn ` | Необходимый; будет создан при построении` Sentry.init ` | — |
-| ` flushTimeout ` | Дождитесь отчета перед выключением | `2000` |
+DSN — из переменных окружения, не в репозиторий. level лучше не ниже error — не заливайте info в Sentry. Перед shutdown дождаться отправки — `flushTimeout` (по умолчанию около `2000`).
 
-DSN использует переменные среды, не записывайте их в хранилище. Рекомендуется уровень должен быть не ниже ошибки и не заливать инфу в Sentry.
-
-### TelegramТранспорт
+### TelegramTransport
 
 ```bash
 pnpm add @aomex/logger-telegram
@@ -228,16 +204,11 @@ import { TelegramTransport } from '@aomex/logger-telegram';
 },
 ```
 
-| Параметры | когда использовать | по умолчанию |
-| --- | --- | --- |
-| ` botToken `/` chatId ` | Обязательно, от BotFather/идентификатор группы | — |
-| ` timeout ` | Общий тайм-аут с автоматическими повторами | `120000` |
-| ` format ` | Пользовательское тело сообщения | встроенный |
-| ` dedupe ` | Слияние с отпечатками пальцев внутри интервала;` false `закрытие | Включено (около 30 с) |
+Подходит для «процесс падает — разбудить людей»; не привязывайте кучу warn. В интервале одинаковый отпечаток сливается (`dedupe`, около 30 s; `false` выключает). `timeout` включает автоповторы, по умолчанию около `120000`.
 
-Подходит для "звонка кому-нибудь после зависания процесса"; не привязывайте много предупреждений.
+## Комбинация нескольких выходов
 
-## Комбинация нескольких розеток
+Соберите выше в один Service и разведите по уровням:
 
 ```typescript
 import { BaseLoggerService, ConsoleTransport, FileTransport } from '@aomex/logger';
@@ -268,11 +239,11 @@ class LoggerService extends BaseLoggerService {
 }
 ```
 
-Также можно просто отправить файл на пересылку в Fluent Bit — сторона приложения тоньше.
+Можно оставить только файл и отдать Fluent Bit — приложение тоньше.
 
-## Контекст уровня запроса: withBindings
+## Контекст запроса: withBindings
 
-При устранении неполадок задайте вопрос: «Какому запросу принадлежит этот журнал?»: оберните next() перед веб-монтированием, и в нисходящем журнале автоматически появятся поля.
+Чтобы в разборе было ясно «эта запись к какому запросу»: ближе к началу Web mount оберните `next()`, нижестоящие логи сами получат поля.
 
 ```typescript
 import { middleware } from '@aomex/common';
@@ -300,20 +271,20 @@ mount: [
 ],
 ```
 
-После аутентификации добавляем userId (объединяем с внешним слоем, внутренний слой перезаписываем одноименным ключом):
+После аутентификации допишите userId (слияние с внешним; одноимённый ключ перекрывается внутренним):
 
 ```typescript
 await ctx.logger.withBindings({ userId: ctx.auth.bearer.data.id }, next);
 ```
 
-То же самое относится и к Services.logger.withBindings в консоли/Cron. Вы можете дождаться Services.logger.flush() перед завершением работы или тестированием.
+В Console / Cron то же для `services.logger.withBindings`. Перед shutdown или концом теста можно `await services.logger.flush()`.
 
 ::: warning
-withBindings должен обернуть await next() в обратный вызов, в противном случае нисходящий журнал может находиться в другом контексте.
+`withBindings` должен обернуть `await next()` в колбэке, иначе нижестоящие логи могут оказаться вне того же контекста.
 :::
 
-## Связанный
+## Связанное
 
-- [Услуги](/ru/core/service)
-- [Промежуточное ПО](/ru/core/middleware)
-- [Журнал доступа](/ru/plugins/http-access-log) (HTTP требует времени на строку, что дополняет иерархический экспорт)
+- [Сервисный слой](/ru/core/service)
+- [Middleware](/ru/core/middleware)
+- [Access log](/ru/plugins/http-access-log) (одна строка HTTP с длительностью; дополняет уровневые выходы)

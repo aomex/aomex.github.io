@@ -4,9 +4,9 @@ outline: deep
 
 # JWT strategy
 
-When using self-contained tokens: verify locally at gateway or service, fewer Redis lookups. Revocation usually means short TTL, refresh tokens, or blocklists—do not put passwords in payload. To revoke any session server-side anytime, [Bearer + session store](/en/plugins/auth-bearer-strategy) is often simpler.
+When you use “self-contained” tokens: the gateway or service verifies the signature locally and rarely hits Redis. Revocation usually relies on short TTL, refresh tokens, or a blacklist; do not put passwords in the payload. If you need the server to invalidate any session at any time, [Bearer + stored session](/en/plugins/auth-bearer-strategy) is often smoother.
 
-Install `@aomex/auth-jwt-strategy`, configure secret and `onVerified`; mount `authenticate('jwt')` on Router; business reads `ctx.auth.jwt` (the `onVerified` return value—not `{ token, data }`).
+Install `@aomex/auth-jwt-strategy`, configure the secret and `onVerified`; mount `authenticate('jwt')` on the Router, and read `ctx.auth.jwt` in business code (that is the return value of `onVerified`, not a `{ token, data }` shape).
 
 ## Install
 
@@ -52,7 +52,7 @@ router.get('/me', {
 });
 ```
 
-Sign on login or refresh in the action:
+Issue a token in the login or refresh action:
 
 ```typescript
 const token = auth.strategy('jwt').signature(
@@ -63,28 +63,22 @@ const token = auth.strategy('jwt').signature(
 
 ## ctx.auth shape vs Bearer
 
-| Strategy | Rough `ctx.auth[name]` shape |
+| Strategy | Rough shape of `ctx.auth[name]` |
 | --- | --- |
 | Bearer | `{ token, data }` |
-| JWT | `onVerified` return object itself |
+| JWT | The object returned by `onVerified` itself |
 
-JWT routes use `ctx.auth.jwt.userId`, not `ctx.auth.jwt.data.userId`. Mind the difference when migrating strategies.
+So JWT routes commonly use `ctx.auth.jwt.userId`, not `ctx.auth.jwt.data.userId`. Do not mix Bearer’s `ctx.auth` shape—when you migrate strategies, update how business code reads identity.
 
-`authorize('jwt', level)` args follow `onAuthorize`.
+The argument types of `authorize('jwt', level)` follow your `onAuthorize` definition.
 
 ::: warning
-Do not put passwords or secrets in JWT payload—claims are readable; identifiers and roles only.
+Do not put passwords or other sensitive fields in the JWT payload: the claims can be decoded and read. Put only identifiers and roles.
 :::
 
-## verifyOptions and revocation
+## Tighten verification and revocation
 
-| Option | When to use |
-| --- | --- |
-| `secret` | Symmetric key; common for monolith / internal |
-| `tokenLoaders` | Default `Authorization` Bearer; add cookie/query like Bearer |
-| `verifyOptions` | Tighten algorithms, `audience` / `issuer` |
-| `onVerified` | Map payload to identity; blocklist hit → `false` → 401 |
-| `onAuthorize` | Admin routes by role; instance methods use `this.getIdentity()` |
+In production, pin algorithm and audience so unexpected algorithms are rejected. In `onVerified`, check a blacklist: return `false` on a hit → **401**. The token is taken from `Authorization` Bearer by default; add cookie/query via `tokenLoaders` when you need Bearer-like sources.
 
 ```typescript
 new AuthJwtStrategy({
@@ -102,9 +96,9 @@ new AuthJwtStrategy({
 });
 ```
 
-Asymmetric keys and rotation: [Advanced: custom auth strategies](/en/advanced/auth-strategy).
+Role gates on admin APIs still go through `onAuthorize`, using `this.getIdentity()` on the instance. For asymmetric keys, old-key rotation, and other advanced setups, see [Advanced: custom auth strategy](/en/advanced/auth-strategy).
 
-On verify failure check server clock skew. No silver bullet for revocation—short `expiresIn` + refresh is common; blocklists are DIY.
+When verification fails, check whether server clocks are in sync first. There is no silver bullet for revocation: short `expiresIn` plus a refresh endpoint is a common combo; blacklists are yours to maintain.
 
 ## Related
 

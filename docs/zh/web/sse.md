@@ -32,9 +32,7 @@ router.get('/events', { // [!code focus:13]
 
 ## heartbeat 与 retry
 
-浏览器长连接容易被反代当成空闲掐断。**heartbeat** 周期性推注释行保活；**retry** 建议客户端断线后隔多少毫秒重连（写在连接建立时的 SSE 选项里）。本地短测可把 heartbeat 关掉；经 Nginx、CDN 的生产流要两项都对一下。
-
-长连接经 Nginx、CDN 时保活；本地短测可关掉心跳：
+浏览器长连接容易被反代当成空闲掐断。`heartbeat` 周期性推注释行保活（常见约 15s；本地短测可 `heartbeat: false`）。`retry` 建议客户端断线后隔多少毫秒重连（通知流常设 `3000`）。经 Nginx、CDN 的生产流要两项都对一下。
 
 ```typescript
 const sse = ctx.sse({
@@ -43,21 +41,9 @@ const sse = ctx.sse({
 });
 ```
 
-| 选项 | 默认 / 习惯 | 什么时候用 |
-| --- | --- | --- |
-| `heartbeat` | 常见约 15s | 经 Nginx、CDN 的长连接保活；本地短测可 `heartbeat: false` |
-| `retry` | 不设 | 希望浏览器断线后按毫秒间隔重连（通知流常设 `3000`） |
-
 ## 单条事件字段
 
-每次 `send` / `emit` 可带 event 名、id、可选的单条 retry，以及 data 载荷。对象型 data 会自动 JSON 序列化；设 **id** 时浏览器重连会带 `Last-Event-ID`，便于续传。
-
-| 字段 | 什么时候用 |
-| --- | --- |
-| `data` | 载荷；对象自动 JSON |
-| `event` | 多种事件共存（`job` / `progress` / `ready`），前端按名监听 |
-| `id` | 断线续传；重连带 `Last-Event-ID` |
-| `retry` | 单条事件里临时改重连间隔 |
+每次 `send` / `emit` 可带 event 名、id、可选的单条 retry，以及 data 载荷。对象型 data 会自动 JSON 序列化；设 **id** 时浏览器重连会带 `Last-Event-ID`，便于续传。多种事件共存（`job` / `progress` / `ready`）时前端按 `event` 名监听。
 
 ```typescript
 sse.send({ data: { hello: 'world' } });
@@ -72,28 +58,20 @@ sse.send({
 
 ## stream、续传与收尾
 
-`stream` 把「边读上游、边 emit」包成一段生命周期：客户端断开时 **signal** abort，迭代结束会收尾，省得手写定时器和 close。`lastEventId` 来自请求头，用它从某条事件之后续推；`onClose` 里释放订阅、记审计。
+`stream` 把「边读上游、边 emit」包成一段生命周期：客户端断开时 **signal** abort（传给 Redis 订阅、队列 watch），迭代结束会收尾，省得手写定时器和 close。`lastEventId` 来自请求头，用它从某条事件之后续推；`onClose` 里释放订阅、记审计；任务结束也可主动 `close()`（`stream` 结束会自动调）。
 
 ```typescript
-await sse.stream(async (emit, signal) => {
-  // emit 等同 sse.send；signal 断开即 abort
+await sse.stream(async (emit, signal) => { // [!code focus:8]
+  const after = sse.lastEventId;
+  sse.onClose(() => {
+    subscription.unsubscribe();
+  });
+  for await (const item of watchEvents({ after, signal })) {
+    emit({ id: String(item.id), event: 'item', data: item });
+  }
 });
 ```
 
-| 成员 | 常见做法是怎么用 |
-| --- | --- |
-| `lastEventId` | 从该 id 之后继续推 |
-| `signal` | 传给 Redis 订阅、队列 watch，客户端走了上游也停 |
-| `onClose(fn)` | 释放订阅、记审计 |
-| `close()` | 任务结束主动关流；`stream` 结束会自动调 |
-
-```typescript
-const after = sse.lastEventId; // [!code highlight]
-sse.onClose(() => {
-  subscription.unsubscribe();
-});
-sse.close();
-```
 
 连接已关或不可写时，send 会静默忽略——别当成「一定送达」。要断线续传就给事件设稳定 id，否则 lastEventId 对不上、重连会从头发。
 

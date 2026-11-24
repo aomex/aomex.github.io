@@ -24,7 +24,7 @@ export const listQuery = schema({
 - nullable() 會單獨允許 null；和「沒傳」不是一回事，PATCH 清空欄位時型別上是 null，不是 undefined。
 - strict() 開著時，字串 '18' 往往過不了 `rule.int()`；query 裡幾乎總是字串進來，通常**不對 query 開 strict**。
 - transform(fn) 的返回型別會替換欄位型別——`rule.string().transform(...)` 之後推斷的是 transform 的返回值，不是 string。
-- docs(...) **不改執行時型別**，只影響 OpenAPI 後設資料。
+- docs(...) **不改執行時型別**，隻影響 OpenAPI 後設資料。
 
 個別組合類或 file 可能缺 default / strict，以專頁為準。
 
@@ -77,7 +77,7 @@ rule.int().nullable();
 
 未開 nullable 時，null 有時會被當成「空」處理，具體以型別提示為準。
 
-PATCH 要清空欄位用 nullable() 傳 null；要表示「不改」靠沒傳 → undefined——別只用 optional() 卻分不清兩者。
+PATCH 要清空欄位用 nullable() 傳 null；要表示「不改」靠沒傳 → undefined——別隻用 optional() 卻分不清兩者。
 
 ### default(值 | () => 值)
 
@@ -153,7 +153,7 @@ rule.string().docs({ description: '用户昵称', example: 'Ada' });
 rule.string().docs({ title: 'Name' }, 'replace');
 ```
 
-docs() 只影響 OpenAPI 後設資料，**不會改變**執行時校驗行為。
+docs() 隻影響 OpenAPI 後設資料，**不會改變**執行時校驗行為。
 
 | 引數 | 什麼時候用 |
 | --- | --- |

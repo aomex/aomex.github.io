@@ -6,16 +6,18 @@ outline: deep
 
 Directory scans, honeypot hits, burst 404s, fake tokens on logout—these are often probing your edges, not ordinary traffic spikes. `@aomex/abuse` **counts** by strategy and, when the limit is hit, **blocks the IP** (or calls you to ban an account). It complements [rate limiting](/en/plugins/rate-limit): rate limits blunt burst QPS; abuse catches probes and business-reported malice.
 
-Counts and block state live on a `@aomex/cache` adapter (memory / Redis, etc.). Share Redis across instances. It relies on `ctx.request.ip`—in production set `proxyIP: { mode: 'detect' }` (or a fixed trust chain), or every request may look like the reverse proxy.
+Counts and block state live on a `@aomex/cache` adapter (memory / Redis, etc.). Share Redis across instances. Relies on `ctx.request.ip`—in production set `proxyIP: { mode: 'detect' }` (or a fixed trust chain), or every request may look like the reverse proxy.
 
 ```bash
 pnpm add @aomex/abuse
-# also need @aomex/cache (and a Redis adapter in production)
+# also need existing @aomex/cache (and a Redis adapter in production)
 ```
 
-## Mount the middleware
+## Create and mount `.web()`
 
-`createAbuse` returns a value that is **both middleware and an API** (`userAbuse` / `ipAbuse` / `blockIP`, …)—**not** hung on `ctx`. Create the instance, `mount` it, then call the same object from routes or services.
+`createAbuse` returns a **service** (APIs like `ipAbuse` / `blockIP`), not middleware you drop straight into `mount`. On HTTP use `.web()` on `WebApp.mount`. Keep calling APIs on that same `abuse` object—it is **not** hung on `ctx`.
+
+The config below mounts two common strategies first: honeypot paths (one hit → block) and error-status tallies (burst 401 / 404 before block).
 
 ```typescript
 import { createAbuse } from '@aomex/abuse';
@@ -45,36 +47,21 @@ const abuse = createAbuse({ // [!code focus:18]
 const app = new WebApp({
   services,
   logger: services.logger,
-  language: { mode: 'fixed', language: 'zh-CN' },
+  language: { mode: 'fixed', language: 'en-US' },
   proxyIP: { mode: 'detect' },
-  mount: [abuse, routers('./src/routers')], // [!code highlight]
+  mount: [abuse.web(), routers('./src/routers')], // [!code highlight]
 });
 ```
 
 Use memory locally / in tests; for multi-replica production pass a Redis adapter as `store`, or blocks stay local. `window` / `blockFor` accept milliseconds or readable strings (`'1 hour'`, `'30m'`)—the same `DurationInput` as [Cache](/en/core/cache#durationinput).
 
-On each request: if the IP is already blocked → default **403**; honeypot hit that reaches the limit → block and 403 immediately. `http-error` counts after the response; **the request that crosses the limit still returns the original status**, and only the next request becomes 403.
+On request: if the IP is already blocked → default **403**; honeypot hit at limit → block and 403 immediately. `http-error` counts after the response—**the hitting request still returns the original status**; the next request gets 403.
 
-## Four strategies
+On WebSocket use the same `abuse` with `.socket()` (event honeypots, etc.)—see [Abuse protection (WebSocket)](/en/websocket/abuse); this page does not repeat it.
 
-| Strategy | What increments | On limit |
-| --- | --- | --- |
-| `honeypot` | Hits on bait paths you place | Block IP |
-| `http-error` | Responses with listed status codes (`throw` or `send`) | Block IP |
-| `ip-abuse` | Business calls `abuse.ipAbuse(ip, reason)` | Block IP |
-| `user-abuse` | Business calls `abuse.userAbuse(id, reason)` | Only `onBanUser`—**no** automatic IP block |
+## Honeypot paths
 
-### Honeypot paths
-
-Path strings support exact match and simple globs; you can also pass a regex. Regexes test `pathname + search`, handy for odd query probes. `methods` is optional; omit to allow any method.
-
-| Pattern | Matches |
-| --- | --- |
-| Exact (no `*`) | Full pathname equality—`'/.env'` does not match `'/.env.local'` |
-| `*` | Any chars **within one segment**, **no** `/`. `'/wp-*.php'` matches `/wp-login.php`, not `/wp/admin.php` |
-| `**` | **Across segments**. `'/a/**/c'` matches `/a/b/d/c`, not `/a/c` (needs at least one middle segment) |
-| Trailing `/**` | The directory itself plus any deeper children. `'/.git/**'` matches `/.git`, `/.git/config`, not `/.github` |
-| `RegExp` | Tests `pathname + search`, e.g. `/^\/admin\?.*dump=/` |
+Place paths a normal user never hits (`/.env`, `/wp-admin/**`, …). Hits count per IP; at the limit the IP is blocked. Path strings support exact match and simple globs; you can also pass a regex. Regexes test `pathname + search`, which helps catch probes with odd query strings. `methods` is optional; omit it to allow any method.
 
 ```typescript
 {
@@ -87,11 +74,21 @@ Path strings support exact match and simple globs; you can also pass a regex. Re
 }
 ```
 
-Globs look at pathname only; query does not matter—use a regex to include query. `paths` must not be empty; validated at create time. Braces and similar are not expansion syntax—matched literally.
+Pattern reference:
 
-### Count by error status
+| Pattern | Matches |
+| --- | --- |
+| Exact (no `*`) | Full pathname equality—`'/.env'` does not match `'/.env.local'` |
+| `*` | Any chars **within one segment**, **no** `/`. `'/wp-*.php'` hits `/wp-login.php`, not `/wp/admin.php` |
+| `**` | **Across segments**. `'/a/**/c'` hits `/a/b/d/c`, not `/a/c` (at least one segment in between) |
+| Trailing `/**` | Directory itself plus any deeper children. `'/.git/**'` hits `/.git` and `/.git/config`, not `/.github` |
+| `RegExp` | Tests `pathname + search`, e.g. `/^\/admin\?.*dump=/` |
 
-Multiple `statusCodes` in one strategy are **pooled**. Optionally narrow with `paths` / `methods`; omit to count site-wide for those statuses.
+Globs look at pathname only—query does not matter; use a regex when query must count. `paths` cannot be empty; creation validates that. Brace expansion and friends are not supported—matched as literals.
+
+## Error status tallies
+
+A burst of 404 / 401 often means scanning or credential stuffing. Use `http-error`: multiple `statusCodes` in one strategy **share one counter**. You can further limit with `paths` / `methods`; omit them to count that status site-wide.
 
 ```typescript
 {
@@ -104,11 +101,11 @@ Multiple `statusCodes` in one strategy are **pooled**. Optionally narrow with `p
 }
 ```
 
-Good against API scanners. If you also want strict 401s on login, add a separate strategy with `paths`—do not mix them into the same bucket as site-wide 404s.
+Good for API scanners. If you also want to police 401 on login, hang a separate strategy with `paths`—do not mix it into the same bucket as site-wide 404.
 
-### Business reports: IP
+## Business report: fake token probes
 
-When the response is still success (e.g. logout always 204) but you want to tally suspicious probes per IP, use `ip-abuse` and call it from the route. `reason` can be a string; it must match a strategy entry—unknown reasons throw at runtime. One strategy per reason.
+Sometimes the response itself is success (e.g. logout always returns 204 whether the token exists), but you still want to count “suspicious probes” per IP. Use `ip-abuse` and call it from the route. `reason` is a string and must match a strategy declaration; unknown reasons throw at runtime. One reason → one strategy only.
 
 ```typescript
 const abuse = createAbuse({
@@ -135,7 +132,7 @@ router.post('/logout', {
 });
 ```
 
-When reasons grow, you can also use a TypeScript `enum` (string or numeric members) so magic strings do not scatter. Pass enum members in strategies and to `ipAbuse`; the second argument then narrows to members that appear in strategies—unconfigured members and bare `'logout-miss'` are type errors.
+When reasons pile up, a TypeScript `enum` (string or numeric members) keeps magic strings from spreading. Pass enum members in both strategies and `ipAbuse`; the second argument then narrows to members that appear in strategies—unconfigured members and bare `'logout-miss'` are type-blocked.
 
 ```typescript
 enum IpAbuseReason {
@@ -147,9 +144,9 @@ enum IpAbuseReason {
 await abuse.ipAbuse(ctx.request.ip, IpAbuseReason.LogoutMiss);
 ```
 
-### Business reports: user
+## Business report: account dimension
 
-Account-level abuse (promo abuse, post-credential-stuffing user signals, etc.) uses `user-abuse`. The package **does not write your user store**—on limit it only calls `onBanUser`; you update the DB and drop sessions there. If any `user-abuse` strategy exists, **`onBanUser` is required** (checked at create). `reason` can be a string or an enum.
+Account-level abuse (coupon farming, user-scoped stuffing after credential hits) uses `user-abuse`. The package **does not touch your user store**—at the limit it only calls `onBanUser`; you update the DB and kick sessions in the callback. If any `user-abuse` strategy is configured, **`onBanUser` is required** and checked at creation. `reason` can be a string or an enum.
 
 ```typescript
 const abuse = createAbuse({
@@ -174,46 +171,48 @@ const abuse = createAbuse({
 await abuse.userAbuse(userId, 'order-probe');
 ```
 
-With an enum, use the same pattern as IP: strategy uses `UserAbuseReason.OrderProbe`; reports and `onBanUser`'s `reason` become a union of those members. Numeric enums (e.g. `OrderProbe = 1`) work too; storage uses `String(reason)`, so bucket keys are string forms.
+With an enum, the pattern matches IP: strategies use `UserAbuseReason.OrderProbe`; report calls and `onBanUser`’s `reason` narrow to those members. Numeric enums (`OrderProbe = 1`) work too; storage runs `String(reason)`, so bucket keys are string forms.
 
-`detail` has `count` / `limit` and `banFor` in milliseconds (`undefined` if the strategy omits it). For the same user and reason, `onBanUser` fires at most once per window (cache placeholder avoids concurrent duplicates); if the callback throws, the placeholder is cleared so the window can retry.
+`detail` includes `count` / `limit`, and `banFor` resolved to milliseconds (`undefined` if the strategy omitted it). For the same user + reason, `onBanUser` succeeds at most once per window (a cache placeholder stops concurrent duplicates); if the callback throws, the placeholder is released so the window can retry.
 
-## Manual blocks and hooks
+## Health-check bypass and manual blocks
 
-| API | Role |
-| --- | --- |
-| `blockIP(ip, duration)` | Manual IP block; if already blocked, skip (no TTL refresh, no duplicate callback) |
-| `unblockIP(ip)` | Clear block |
-| `isIPBlocked(ip)` | Whether blocked |
-| `onBlockIP` | Fired on strategy hit, `ipAbuse` limit, or manual `blockIP` |
-| `bypass` | Skip probe counting and block checks (health, intranet) |
-| `blockedError` | Custom `HttpError` when blocked (default 403) |
+Probe paths should not hit block logic: pass `bypass` to `.web()`. Ops can temporarily block / unblock an IP with `blockIP` / `unblockIP`; use `isIPBlocked` to query. For audit logs, hang `onBlockIP`—strategy trips, `ipAbuse` at limit, and manual `blockIP` all call it.
+
+Blocked requests default to **403**; pass `blockedError` to align with rate-limit semantics (e.g. 429).
 
 ```typescript
 const abuse = createAbuse({
   store,
   strategies: [/* ... */],
-  bypass: (ctx) => {
-    return ctx.request.pathname === '/health';
-  },
-  blockedError: new HttpError(429, 'blocked', { code: 'ABUSE_BLOCKED' }),
   onBlockIP: async (ip, reason, detail) => {
     services.logger.warn('abuse.block', { ip, reason, ...detail });
   },
 });
 
+mount: [
+  abuse.web({ // [!code focus:6]
+    bypass: (ctx) => {
+      return ctx.request.pathname === '/health';
+    },
+    blockedError: new HttpError(429, 'blocked', { code: 'ABUSE_BLOCKED' }),
+  }),
+  routers('./src/routers'),
+],
+
 await abuse.blockIP('203.0.113.8', '1 day');
 await abuse.unblockIP('203.0.113.8');
 ```
 
-`onBlockIP`'s `reason` is `'honeypot' | 'http-error' | 'ip-abuse' | 'manual'`; `detail.blockFor` is milliseconds.
+On the HTTP side, `onBlockIP`’s `reason` is commonly `'honeypot' | 'http-error' | 'ip-abuse' | 'manual'`; if the same instance also mounts a WebSocket event honeypot, you will also see `'socket-events'` (see [Abuse protection (WebSocket)](/en/websocket/abuse)). `detail.blockFor` is milliseconds; calling `blockIP` again on an already-blocked IP is a no-op (TTL not refreshed, callback not repeated).
 
 ::: tip
-Abuse blocks are “caught you—lock for a while”; soft site-wide limits still belong in [rate limiting](/en/plugins/rate-limit). You can mount both: rate limit first for spikes, abuse for strategy-based bans.
+Abuse blocks lean “caught you—sit out a while”; soft site-wide throttling still lives in [rate limiting](/en/plugins/rate-limit). Mount both: rate limit first for spikes, abuse for strategy tallies then block.
 :::
 
 ## Related
 
 - [Rate limiting](/en/plugins/rate-limit)
+- [Abuse protection (WebSocket)](/en/websocket/abuse)
 - [Cache](/en/core/cache) (`store` adapters and `DurationInput`)
-- [CSRF](/en/plugins/csrf)
+- [CSRF protection](/en/plugins/csrf)

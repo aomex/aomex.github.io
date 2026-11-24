@@ -24,7 +24,7 @@ import { routers, WebApp } from '@aomex/web';
 const app = new WebApp({
   services,
   logger: services.logger,
-  language: { mode: 'fixed', language: 'ja-JP' },
+  language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:5]
     cors({ origin: 'https://app.example.com', credentials: true }),
@@ -38,21 +38,23 @@ const app = new WebApp({
 必ず routers の**前**に。検証失敗がエラーミドルウェアに入るとき、csrf が後ろだと発行直後の `Set-Cookie` がブラウザに届かず、フロントがずっと token 欠乏になる。
 :::
 
-ミドルウェアは ctx に `csrfToken`（現在の token 文字列）を付ける。Cookie は **強制** `httpOnly: false`（ダブルサブミットは JS が読む必要がある）。ほかの属性（`sameSite` / `path` / `maxAge`）は設定可能で、デフォルトは `setCookie` と同じ（`SameSite=Strict` 含む）。
+ミドルウェアは ctx に `csrfToken`（現在の token 文字列）を載せる。Cookie は**強制**で `httpOnly: false`（ダブルサブミットは JS から読める必要がある）。ほかの属性（`sameSite` / `path` / `maxAge`）は設定可で、デフォルトは `setCookie` と同じ（`SameSite=Strict` を含む）。
 
-ログイン Cookie もクロスオリジンで送るなら、CORS は `credentials: true` と **明示的な** `origin`、`allowHeaders` に `x-csrf-token`。[CORS](/ja/plugins/cors) と [Session](/ja/plugins/auth-session-strategy) を参照。
+クロスオリジンでログイン Cookie も付けるときは、CORS で `credentials: true` かつ**明示的な** `origin`、さらに `allowHeaders` で `x-csrf-token` を通す。[CORS](/ja/plugins/cors) と [Session](/ja/plugins/auth-session-strategy) を参照。
 
 ## フロントの付け方
 
-1. 任意の GET（またはページ表示）で応答に `Set-Cookie: csrfToken=...`
-2. `document.cookie`（または cookie ヘルパー）で値を読む
-3. 書き込みにヘッダー `x-csrf-token: <同じ値>`。ログイン Cookie も使うなら `credentials: 'include'`
+1. まず任意の GET（またはページを開く）。応答に `Set-Cookie: csrfToken=...` が付く
+2. `document.cookie`（または cookie ユーティリティ）で値を読む
+3. 書き込みリクエストにヘッダー `x-csrf-token: <同じ値>` を付け、ログイン Cookie も使うなら `credentials: 'include'`
 
 ```typescript
 function readCsrfToken() {
   const row = document.cookie
     .split('; ')
-    .find((line) => line.startsWith('csrfToken='));
+    .find((line) => {
+      return line.startsWith('csrfToken=');
+    });
   return row?.slice('csrfToken='.length);
 }
 
@@ -67,32 +69,37 @@ await fetch('/api/orders', {
 });
 ```
 
-Cookie 無しでいきなり POST すると **403**。ただし応答に新しい `Set-Cookie` が付くことがあるので、読んでリトライすればよい。
+Cookie が無いエンドポイントへいきなり POST すると **403** になるが、応答に新規発行の `Set-Cookie` が付くことがある。フロントが読んでからリトライすればよい。
 
-## オプションとスキップ
+## フロントの慣習に合わせる
 
-| オプション | いつ使うか | デフォルト |
-| --- | --- | --- |
-| `cookie.name` | 既存フロントの約定に合わせる | `csrfToken` |
-| `cookie.sameSite` / `path` / `maxAge` / `secure` | クロスサイト、パス分離、有効期限 | `setCookie` と同じ。`httpOnly` は常に `false` |
-| `headerName` | フロントが別ヘッダー名を使っている | `x-csrf-token` |
-| `ignoreMethods` | 検証しないメソッド | `GET`、`HEAD`、`OPTIONS` |
-| `ignore` | ヘルスチェック、外部 webhook などをリクエスト単位でスキップ | — |
+フロントがすでに `x-xsrf-token` を使う、または Cookie 名が `csrfToken` でないときは、コンストラクタ引数で揃える。`httpOnly` は引き続き強制オフ。
 
 ```typescript
 csrf({
-  cookie: { sameSite: 'lax', maxAge: 86400 },
+  cookie: { name: 'XSRF-TOKEN', sameSite: 'lax', maxAge: 86400 }, // [!code highlight]
   headerName: 'x-xsrf-token',
-  ignore: (ctx) => {
+});
+```
+
+`sameSite` / `path` / `secure` / `maxAge` は業務 Cookie の方針に合わせる。クロスサイトのフロントでは `sameSite` を `lax` にすることが多い。
+
+## webhook とヘルスチェックを通す
+
+第三者コールバックやロードバランサの探活はブラウザ Cookie がなく、ダブルサブミットにも乗らない。`ignore` でパス単位にスキップする。CSRF を全体で切らない。
+
+```typescript
+csrf({
+  ignore: (ctx) => { // [!code focus:3]
     return ctx.request.pathname.startsWith('/webhooks/');
   },
 });
 ```
 
-読むのは Header + Cookie だけ。**body は読まない**ので `body()` 解析と干渉しない。Webhook などブラウザ以外は `ignore` で通す。CSRF を全体オフにしない。
+読むのは Header と Cookie だけ。**body は読まない**ので `body()` の解析と干渉しない。デフォルトで検証しないメソッドは GET / HEAD / OPTIONS。`ignoreMethods` を変える必要はほとんどない。
 
 ## 関連
 
 - [Session ストラテジー](/ja/plugins/auth-session-strategy)
-- [CORS](/ja/plugins/cors)
-- [Helmet](/ja/plugins/helmet)
+- [クロスオリジン CORS](/ja/plugins/cors)
+- [セキュリティヘッダー Helmet](/ja/plugins/helmet)

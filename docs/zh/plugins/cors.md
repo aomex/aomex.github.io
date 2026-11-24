@@ -34,29 +34,19 @@ const app = new WebApp({
 CORS 挂在 routers **后面** 时，404 和校验 400 可能缺头，浏览器报「跨域」会把真因盖住。
 :::
 
-本地前后端不同端口、**又不带 Cookie** 时，无参 cors() 会反射请求头里的 Origin，一般够用。一旦要跨域带 Cookie（[Session](/zh/plugins/auth-session-strategy)），就必须显式写 origin，见下一节。
+本地前后端不同端口、**又不带 Cookie** 时，无参 `cors()` 会反射请求头里的 Origin，一般够用。一旦要跨域带 Cookie（[Session](/zh/plugins/auth-session-strategy)），就必须显式写 origin，见下一节。
 
 cors() 返回普通 WebMiddleware，不往 ctx 上挂新字段；业务 action 里照常写，跨域由响应头解决。浏览器里成功时能看到 Access-Control-Allow-Origin；带 Cookie 的场景还要 Access-Control-Allow-Credentials: true，且 **不能** 用 origin: '*'。
 
-## 收紧 Origin 与凭据
-
-| 选项 | 什么时候用 | 默认 |
-| --- | --- | --- |
-| `origin` | 生产固定前端域名，或多套前端用白名单 / 函数 | 未开凭证时反射请求 `Origin`；**开凭证时必填** |
-| `credentials` | 跨域要带 Cookie / 客户端证书等 | `false` |
-| `allowHeaders` | 前端要带 `Authorization`、`x-csrf-token` 等 | — |
-| `exposeHeaders` | 前端要读 `X-Request-Id` 等响应头 | — |
-| `maxAge` | 减少重复 OPTIONS；调试可 `-1` 不缓存 | `3600` |
-| `allowMethods` | 只开放 GET/POST 时收紧 | 常见动词全集 |
-| `secureContext` / `privateNetworkAccess` | 隔离页面、公网页访问内网 API（Chrome PNA） | `false` |
-
-### Cookie 登录：必须显式 origin
+## Cookie 登录：必须显式 origin
 
 `credentials: true`（或函数返回 `true`）时：
 
 - **必须**显式配置 `origin`（具体域名、白名单数组、或返回具体来源的函数）
 - **禁止**依赖无参 cors() 的默认反射——漏配会在创建或请求阶段直接抛错
 - **禁止** `origin: '*'`（浏览器也不认这种组合）
+
+前端还要带 `Authorization`、`x-csrf-token` 时，用 `allowHeaders` 放行；要让前端脚本读到 `X-Request-Id` 等自定义头，用 `exposeHeaders`。
 
 ```typescript
 cors({
@@ -73,7 +63,9 @@ cors({
 
 Session 还要挂 [CSRF](/zh/plugins/csrf)，并让前端 `fetch` 使用 `credentials: 'include'`。完整链路见 [Session 策略](/zh/plugins/auth-session-strategy)。
 
-### 多套前端白名单
+## 多套前端白名单
+
+App 与管理端分域名时，`origin` 可以直接给数组；命中才回写，未命中等于不启用 CORS。
 
 ```typescript
 const allowlist = [
@@ -102,6 +94,8 @@ cors({
   credentials: true,
 });
 ```
+
+预检缓存默认约一小时（`maxAge: 3600`）；本地调试可设 `-1` 让每次 OPTIONS 都重新打。只开放 GET/POST 时再用 `allowMethods` 收紧。隔离页面 / 公网页访问内网 API（Chrome PNA）才需要 `secureContext` / `privateNetworkAccess`。
 
 | 环境 | 建议 |
 | --- | --- |

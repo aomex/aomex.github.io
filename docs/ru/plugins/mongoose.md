@@ -4,9 +4,9 @@ outline: deep
 
 # Mongoose
 
-Боль MongoDB: **одни правила для HTTP, вторая Mongoose Schema руками** — поля расходятся при изменениях. `defineMongooseModel` строит Mongoose Schema из тех же `rule`, что и маршруты, плюс валидация `ObjectId` / `Decimal128` — здесь модель, HTTP и типы в одной цепочке.
+Типичная боль MongoDB-проектов: **одна валидация HTTP-входа, вторая — руками в Mongoose Schema**, при смене поля плывут оба места. `defineMongooseModel` строит Mongoose Schema теми же `rule`, что и маршруты, и расширяет проверки ObjectId / Decimal128 — эта страница связывает определение модели, стыковку с HTTP и ожидания по типам.
 
-Сложные индексы, middleware Mongoose, поля только в БД остаются в модели или `response` маршрута; мост не заменяет всю настройку Mongoose.
+Сложные индексы, middleware Mongoose и поля, живущие только в БД, всё равно дополняете в модели или в `response` маршрута; то, что мост не покрывает, остаётся в Mongoose.
 
 ## defineMongooseModel
 
@@ -31,7 +31,7 @@ export const User = defineMongooseModel('users', { // [!code highlight]
 });
 ```
 
-Mongo-правила нужно зарегистрировать до использования (путь входа — под ваш проект):
+Mongo-специфичные правила нужно зарегистрировать импортом пакета (путь подстройте под вход проекта):
 
 ```typescript
 import { rule } from '@aomex/common';
@@ -41,12 +41,12 @@ rule.mongoObjectId();
 rule.mongoDecimal128();
 ```
 
-Типичные слои (это **не** middleware):
+Типичное разбиение (этот пакет **не** middleware):
 
-1. `models/user.ts` — `defineMongooseModel`
-2. `schemas/user.schema.ts` — общие input/output schema
-3. `routers/user.ts` — `body` / `response` из schema
-4. `web.ts` — обычный `WebApp` + routers
+1. models/user.ts — defineMongooseModel
+2. schemas/user.schema.ts — общие schema входа / выхода
+3. routers/user.ts — body / response ссылаются на schema или таблицу полей
+4. web.ts — обычный WebApp + routers
 
 ```typescript
 import { body, response } from '@aomex/web';
@@ -54,7 +54,7 @@ import { userBodySchema } from '../schemas/user.schema.js';
 
 router.post('/users', {
   mount: [body(userBodySchema)], // [!code highlight]
-  response: { content: { /* 对外 DTO，别默认泄露仅 DB 字段 */ } },
+  response: { content: { /* внешний DTO, не светите поля только из БД */ } },
   action: async (ctx) => {
     await User.create(ctx.body);
     ctx.send({ ok: true });
@@ -62,24 +62,18 @@ router.post('/users', {
 });
 ```
 
-`defineMongooseModel` возвращает обычную Mongoose Model с выводом **input/output** — при создании/запросе поля документа в подсказках. Вложенные объекты в `schemas` становятся object-валидаторами как `body({ ... })` на маршруте. `rule.mongoObjectId()` появляется на `rule` только **после** `import '@aomex/mongoose'`. `formatMongoResult` приводит результат запроса к JSON-дружелюбному виду (`_id`, `Decimal` и т.д.) — смотрите экспорты и типы пакета.
+`defineMongooseModel` возвращает стандартную Mongoose Model с выводом **входа/выхода** — при создании и запросах поля документа при наведении часто совпадают с цепочкой `rule`. Вложенные голые объекты в `schemas` автоматически сворачиваются в объектную валидацию, стиль как у `body({ ... })` на маршруте. `rule.mongoObjectId()` и т.п. появляются на `rule` только **после** `import '@aomex/mongoose'`; иначе типы и runtime разъедутся (без side-effect import регистрация не сработает). Есть ещё `formatMongoResult`: результат запроса в более JSON-дружелюбный вид (например `_id`, Decimal) — по экспорту пакета и подсказкам типов.
 
-## Поля модели vs публичный DTO
+## Поля модели и внешний DTO
 
-| Поле / опция | Когда использовать |
-| --- | --- |
-| `schemas` | поле → Validator или вложенный объект |
-| `indexes` | `{ fields, ...IndexOptions }[]` |
-| `timestamps` / `versionKey` | Как у Mongoose SchemaOptions |
-| Прочие SchemaOptions | Пробрасываются в Mongoose |
-| `response({ content })` на маршруте | Публичный DTO; поля только БД не в API по умолчанию |
+В `schemas` пишете поля → Validator (вложенные голые объекты сами становятся объектной проверкой). `indexes`, `timestamps`, `versionKey` и прочие SchemaOptions пробрасываются в Mongoose — уникальные составные индексы, pre hook и то, что валидатор не покрывает, настраиваете на уровне модели.
 
-Не путать с [Prisma](/ru/plugins/prisma) — здесь Mongoose + Mongo, не `definePrismaSchema`.
+Снаружи не отдавайте документ Mongoose как есть через `ctx.send`: утекут чувствительные или только-DB поля. На маршруте сузьте через `response({ content })` или явный pick в DTO.
 
-Только модель, а на маршрутах другая форма — снова два места правок. Не `ctx.send` сырого документа Mongoose — утечут чувствительные/служебные поля; `response` или явный pick. Составные уникальные индексы, `pre` hook и т.п. — в слое модели.
+Это не сценарий [Prisma](/ru/plugins/prisma): здесь Mongoose + Mongo, не `definePrismaSchema`. Если модель определена, а маршруты всё ещё держат другой shape вручную, при смене поля снова две правки — против идеи «общие rule».
 
 ## Связанное
 
-- Свои Mongo-правила: [Пользовательские валидаторы](/ru/advanced/validator) (тот же подход, что `mongoObjectId`)
-- HTTP input: [Тело запроса](/ru/web/body)
+- Идея кастомных Mongo-правил: [Свой валидатор](/ru/advanced/validator) (тот же приём, что у mongoObjectId)
+- HTTP-вход: [Тело запроса](/ru/web/body)
 - Список валидаторов: [builtins](/ru/validators/builtins)

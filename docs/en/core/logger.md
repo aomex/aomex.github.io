@@ -2,9 +2,9 @@
 outline: deep
 ---
 
-# Logger
+# Logging
 
-Build **LoggerService**, declare sinks in `createTransports`, register with `combineServices` and **eager** warm-up. Web and Console share `services.logger`; satisfies `WebApp` required `logger`.
+Build a **LoggerService**, declare where logs go in `createTransports`, register it with `combineServices`, and **eager-warm** it. Web and Console share the same `services.logger`, which also satisfies WebApp’s required `logger`.
 
 ```bash
 pnpm add @aomex/logger
@@ -38,60 +38,60 @@ export const services = await combineServices(
   { eager: ['logger'] }, // [!code highlight]
 );
 
-await services.logger.info('Service ready');
-await services.logger.error(err, 'Checkout failed');
+await services.logger.info('service ready');
+await services.logger.error(err, 'checkout failed');
 ```
 
-`WebApp` also needs `logger: services.logger` (same reference):
+Besides `services`, WebApp also needs `logger: services.logger` separately (same reference is fine):
 
 ```typescript
 new WebApp({
   services,
   logger: services.logger, // [!code highlight]
-  language: { mode: 'fixed', language: 'zh-CN' },
+  language: { mode: 'fixed', language: 'en-US' },
   proxyIP: { mode: 'detect' },
 });
 ```
 
 ## Levels and signatures
 
-Each log has a **level** from `trace` to `fatal`; sink `level` decides what passes. `error` / `fatal` first arg is `Error`; others `(message, context?)`.
+Every log line has a **level**: noisiness grows from trace to fatal; the level on each transport decides “how noisy before this channel accepts it”. For `error` / `fatal` the first argument is an `Error`; other levels are usually `(message, context?)`.
 
-- trace / debug / info / warn: `(message, context?)`
-- error / fatal: `(err, message, context?)`
-- Per-sink `level` may be a single level or `{ min, max }` range
+- trace / debug / info / warn: (message, context?)
+- error / fatal: (err, message, context?)
+- Each transport’s level can be a single level or a `{ min, max }` range
 
-Loudest to quiet: trace → debug → info → warn → error → fatal.
+From noisy to quiet: trace → debug → info → warn → error → fatal.
 
 ::: warning
-Leaving debug/trace on in production hurts hot paths and disks; use `error` for business failures, `fatal` for process unhealthy—not every failure as fatal.
+Leaving debug / trace on in production for long hammers hot paths and disk; use error for business failures, and reserve fatal for an unhealthy process—do not mark every failure as fatal.
 :::
 
 ```typescript
-await services.logger.info('Service ready');
-await services.logger.error(err, 'Checkout failed');
-await services.logger.fatal(err, 'Database unavailable, exiting');
+await services.logger.info('service ready');
+await services.logger.error(err, 'checkout failed');
+await services.logger.fatal(err, 'database unavailable, preparing to exit');
 ```
 
-## Transports
+## Pick transports first
 
 | Transport | Package | When to use |
 | --- | --- | --- |
-| [ConsoleTransport](#consoletransport) | `@aomex/logger` | Local dev, container stdout |
-| [FileTransport](#filetransport) | `@aomex/logger` | Files, daily/level split |
+| [ConsoleTransport](#consoletransport) | `@aomex/logger` | Local development, container stdout |
+| [FileTransport](#filetransport) | `@aomex/logger` | On disk, split by day / level |
 | [StreamTransport](#streamtransport) | `@aomex/logger` | Any Writable (tests, pipes) |
-| [WebhookTransport](#webhooktransport) | `@aomex/logger` | Custom HTTP hooks |
-| [CustomTransport](#customtransport) | `@aomex/logger` | Queue / DB / vendor SDK |
-| [SentryTransport](#sentrytransport) | `@aomex/logger-sentry` | Errors to Sentry |
-| [TelegramTransport](#telegramtransport) | `@aomex/logger-telegram` | Fatal alerts |
+| [WebhookTransport](#webhooktransport) | `@aomex/logger` | Push to a custom HTTP hook |
+| [CustomTransport](#customtransport) | `@aomex/logger` | Your own queue / DB / vendor SDK |
+| [SentryTransport](#sentrytransport) | `@aomex/logger-sentry` | Errors into Sentry |
+| [TelegramTransport](#telegramtransport) | `@aomex/logger-telegram` | Wake someone on fatal |
 
-Common production: console info + file warn + Sentry error + Telegram fatal. Set `level` per sink—one channel should not take all noise.
+A common production mix: console info + file warn + Sentry error + Telegram fatal. Each transport sets its own level—do not push all noise through one channel. Below: how to configure each.
 
 ---
 
 ### ConsoleTransport
 
-Terminal output. TTY + `text` colors by default; pipelines may use `json`.
+Writes to the terminal. On a TTY, text is colorized by default; for NDJSON into a collector set `format: 'json'` and turn color off.
 
 ```typescript
 { transport: new ConsoleTransport(), level: 'debug' },
@@ -104,17 +104,11 @@ new ConsoleTransport({
 });
 ```
 
-| Option | When to use | Default |
-| --- | --- | --- |
-| `format` | NDJSON collectors → `'json'` | `'text'` |
-| `colorize` | Force color on/off | on for text+TTY |
-| `colors` | Level color map | built-in |
-| `output` | All levels to one stream | — |
-| `stderrLevels` | Without `output`, levels to stderr | `error` / `fatal` |
+Without `output`, error / fatal go to stderr by default and the rest to stdout; set `output` when everything should share one stream. `colors` can retune level colors.
 
 ### FileTransport
 
-Append to local files; creates directories.
+Appends to a local file; missing directories are created. A fixed path is enough for a one-liner; to split by day / level, use `{year}` / `{month}` / `{day}` / `{level}` placeholders (or `(log) => path`).
 
 ```typescript
 {
@@ -125,20 +119,16 @@ Append to local files; creates directories.
 
 ```typescript
 new FileTransport({
-  file: './logs/{year}-{month}-{day}/{level}.log',
+  file: './logs/{year}-{month}-{day}/{level}.log', // [!code highlight]
   format: 'json',
 });
 ```
 
-| Option | When to use | Default |
-| --- | --- | --- |
-| `file` | Fixed path, `{year}`/`{level}` placeholders, or `(log) => path` | daily+level split |
-| `format` | Fluent Bit etc. → `'json'` | `'text'` |
-| `fileMode` / `dirMode` | Tighten permissions | OS default |
+Use `format: 'json'` when forwarding to Fluent Bit and similar. Tighten permissions with `fileMode` / `dirMode` when needed.
 
 ### StreamTransport
 
-Any Writable (test doubles, pipes).
+Write to any Writable (fake streams in unit tests, process pipes):
 
 ```typescript
 new StreamTransport({
@@ -147,14 +137,11 @@ new StreamTransport({
 });
 ```
 
-| Option | When to use |
-| --- | --- |
-| `stream` | Required Writable |
-| `format` | `'text'` / `'json'`, default text |
+`stream` is required; `format` defaults to text.
 
 ### WebhookTransport
 
-HTTP to alert or custom collectors.
+HTTP push to an alert / custom collector endpoint. Slow hooks can raise `timeoutMs` (default about `30000`); auth goes in `headers`.
 
 ```typescript
 new WebhookTransport({
@@ -164,17 +151,11 @@ new WebhookTransport({
 });
 ```
 
-| Option | When to use | Default |
-| --- | --- | --- |
-| `url` | Required webhook URL | — |
-| `method` | Non-POST | `POST` |
-| `headers` | Auth, custom headers | — |
-| `format` | `'json'` / `'text'` or function body | `'json'` |
-| `timeoutMs` | Slow webhooks | `30000` |
+`format` can also be a function that builds the body. Method defaults to POST.
 
 ### CustomTransport
 
-Custom consume logic; `this.formatLog` available.
+Your own consume logic; call `formatLog` on `this`.
 
 ```typescript
 new CustomTransport({
@@ -184,7 +165,7 @@ new CustomTransport({
 });
 ```
 
-Single failure usually does not block other sinks. Extend `Transport` for finer control.
+A single failure usually does not block other transports. Subclass `Transport` for finer control.
 
 ### SentryTransport
 
@@ -203,12 +184,7 @@ import { SentryTransport } from '@aomex/logger-sentry';
 },
 ```
 
-| Option | When to use | Default |
-| --- | --- | --- |
-| `dsn` | Required; calls `Sentry.init` | — |
-| `flushTimeout` | Wait on shutdown | `2000` |
-
-DSN from env—not committed. Level at least `error`; do not flood Sentry with info.
+Keep the DSN in an env var—do not commit it. Prefer at least `error` for level; do not flood Sentry with info. Use `flushTimeout` (default about `2000`) to wait for reports before shutdown.
 
 ### TelegramTransport
 
@@ -228,16 +204,11 @@ import { TelegramTransport } from '@aomex/logger-telegram';
 },
 ```
 
-| Option | When to use | Default |
-| --- | --- | --- |
-| `botToken` / `chatId` | Required from BotFather / chat | — |
-| `timeout` | Total timeout with retries | `120000` |
-| `format` | Custom message body | built-in |
-| `dedupe` | Merge same fingerprint in window; `false` off | on (~30s) |
+Fits “page a human when the process is about to die”; do not bind a flood of warn. Same fingerprints within the interval are merged (`dedupe`, about 30s; set `false` to disable). `timeout` includes automatic retries, default about `120000`.
 
-For “wake someone when process dies”—not every warn.
+## Combining multiple transports
 
-## Multiple transports
+Wire the above into one Service and split by level:
 
 ```typescript
 import { BaseLoggerService, ConsoleTransport, FileTransport } from '@aomex/logger';
@@ -268,11 +239,11 @@ class LoggerService extends BaseLoggerService {
 }
 ```
 
-Or file-only + Fluent Bit forwarding—leaner app.
+You can also file-only and let Fluent Bit (etc.) forward—thinner on the app side.
 
 ## Request-scoped context: withBindings
 
-Correlate logs to a request: wrap `next()` early in Web `mount`.
+When debugging you want “which request does this log belong to”: wrap `next()` early in Web mount so downstream logs carry the fields automatically.
 
 ```typescript
 import { middleware } from '@aomex/common';
@@ -300,20 +271,20 @@ mount: [
 ],
 ```
 
-After auth, add `userId` (merged; inner keys win):
+Add `userId` after auth (merged with the outer scope; same keys override from the inside):
 
 ```typescript
 await ctx.logger.withBindings({ userId: ctx.auth.bearer.data.id }, next);
 ```
 
-`services.logger.withBindings` works in Console / Cron too. Before shutdown or tests: `await services.logger.flush()`.
+The same pattern works on `services.logger.withBindings` in Console / Cron. You can `await services.logger.flush()` before shutdown or when tests finish.
 
 ::: warning
-`withBindings` must wrap `await next()` in the callback—or downstream logs miss the context.
+`withBindings` must wrap `await next()` inside the callback, or downstream logs may leave that context.
 :::
 
 ## Related
 
 - [Services](/en/core/service)
 - [Middleware](/en/core/middleware)
-- [Access log](/en/plugins/http-access-log) (one HTTP line per request—complements level-based sinks)
+- [Access log](/en/plugins/http-access-log) (one HTTP timing line; complements leveled transports)

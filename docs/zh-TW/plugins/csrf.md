@@ -52,7 +52,9 @@ const app = new WebApp({
 function readCsrfToken() {
   const row = document.cookie
     .split('; ')
-    .find((line) => line.startsWith('csrfToken='));
+    .find((line) => {
+      return line.startsWith('csrfToken=');
+    });
   return row?.slice('csrfToken='.length);
 }
 
@@ -69,27 +71,32 @@ await fetch('/api/orders', {
 
 首次就對無 Cookie 的介面直接 POST：會 **403**，但響應裡仍可能帶上新簽發的 `Set-Cookie`，前端讀到後再重試即可。
 
-## 選項與跳過
+## 對齊前端約定
 
-| 選項 | 什麼時候用 | 預設 |
-| --- | --- | --- |
-| `cookie.name` | 與現有前端約定對齊 | `csrfToken` |
-| `cookie.sameSite` / `path` / `maxAge` / `secure` | 跨站前端、路徑隔離、過期策略 | 與 `setCookie` 預設一致；`httpOnly` 固定 `false` |
-| `headerName` | 前端已用別的頭名 | `x-csrf-token` |
-| `ignoreMethods` | 哪些方法不校驗 | `GET`、`HEAD`、`OPTIONS` |
-| `ignore` | 健康檢查、外部 webhook 等按請求跳過 | — |
+前端已用 `x-xsrf-token`、或 Cookie 名不是 `csrfToken` 時，在構造引數裡對齊即可；`httpOnly` 仍會被強制關掉。
 
 ```typescript
 csrf({
-  cookie: { sameSite: 'lax', maxAge: 86400 },
+  cookie: { name: 'XSRF-TOKEN', sameSite: 'lax', maxAge: 86400 }, // [!code highlight]
   headerName: 'x-xsrf-token',
-  ignore: (ctx) => {
+});
+```
+
+`sameSite` / `path` / `secure` / `maxAge` 跟業務 Cookie 策略走；跨站前端常把 `sameSite` 調成 `lax`。
+
+## 放行 webhook 與健康檢查
+
+第三方回撥、負載均衡探活沒有瀏覽器 Cookie，也不該走雙提交。用 `ignore` 按路徑跳過；別全域性關掉 CSRF。
+
+```typescript
+csrf({
+  ignore: (ctx) => { // [!code focus:3]
     return ctx.request.pathname.startsWith('/webhooks/');
   },
 });
 ```
 
-只讀 Header + Cookie，**不讀 body**，和 `body()` 解析互不干擾。Webhook 等無瀏覽器場景用 `ignore` 放行，別全域性關掉 CSRF。
+只讀 Header + Cookie，**不讀 body**，和 `body()` 解析互不干擾。預設不校驗的方法是 GET / HEAD / OPTIONS；極少需要改 `ignoreMethods`。
 
 ## 相關
 

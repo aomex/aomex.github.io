@@ -13,7 +13,7 @@ Good for: endpoint background, auth notes, pagination rules, error code tables. 
 Put site-wide copy in `docs.info.description`; group intros in `docs.tags[].description` (names must match route tags—see [Tags](/en/openapi/tags)).
 
 ```typescript
-import { generateOpenapi } from '@aomex/openapi';
+import { generateOpenapi } from '@aomex/openapi-generator';
 import { app } from './app.js';
 
 await generateOpenapi({

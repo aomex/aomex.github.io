@@ -12,7 +12,7 @@ pnpm add @aomex/serve-static
 
 ## 放在路由之前
 
-靜態中介軟體通常放在業務路由**之前**（先嚐試檔案，再進 API）。
+靜態中介軟體通常放在業務路由**之前**（先嚐試檔案，再進 API）。`root` 必填，指向前端產物或下載目錄。
 
 ```typescript
 import { serveStatic } from '@aomex/serve-static';
@@ -30,19 +30,15 @@ const app = new WebApp({
 });
 ```
 
-普通 WebMiddleware。命中檔案時直接送出內容；不命中則放行。路徑穿越、..、NUL、點檔案等會直接拒絕（安全校驗在包內）。
+普通 WebMiddleware。命中檔案時直接送出內容；不命中則放行。路徑穿越、..、NUL、點檔案等會直接拒絕（安全校驗在包內）。訪問目錄時預設回落 `index.html`（可用 `indexFile` 改）。構建已產出旁路 `.br` / `.gz` 時，`useCompressedFile` 預設會優先用（可關）。
 
-## root 與快取
+::: warning
+root: '.' 或指到含 node_modules 的目錄有路徑洩露風險，線上見過誤配。
+:::
 
-| 選項 | 什麼時候用 | 預設 |
-| --- | --- | --- |
-| `root` | 前端產物或下載目錄 | **必填** |
-| `formatPath` | URL 字首與磁碟不一致（如 `/assets`） | — |
-| `indexFile` | 訪問目錄回落首頁 | `index.html` |
-| `useCompressedFile` | 構建已產出旁路 `.br`/`.gz` | `true` |
-| `cacheControl` | 帶 hash 資源長快取；HTML 宜短或 `noCache` | `maxAge: 0` |
+## 帶 hash 的 chunk：長快取
 
-### 長快取（帶 hash 的 chunk）
+帶 content hash 的 JS/CSS chunk 可以設長 `cacheControl`；`index.html` 等入口不宜同樣 `immutable`，否則發版後用戶一直舊殼。
 
 ```typescript
 serveStatic({
@@ -54,7 +50,11 @@ serveStatic({
 });
 ```
 
-### URL 字首改寫
+預設 `maxAge: 0`。HTML 宜短快取或 `noCache`。
+
+## URL 字首與磁碟不一致
+
+CDN / 閘道器把 `/assets/...` 指到 `./dist` 時，用 `formatPath` 去掉字首再找檔案：
 
 ```typescript
 serveStatic({
@@ -66,7 +66,9 @@ serveStatic({
 });
 ```
 
-### API + SPA 兜底（深鏈回 index.html）
+## API + SPA 兜底
+
+深鏈重新整理不能只靠靜態中介軟體：未命中路徑要在 routers 後再回落 `index.html`。`send` 與 `serveStatic` 同包匯出。
 
 ```typescript
 import { middleware } from '@aomex/common';
@@ -93,12 +95,6 @@ mount: [
 | --- | --- |
 | 生產 | 大流量常把靜態交給 CDN/Nginx；Node 仍適合做兜底或內網 |
 | 本地 | 直接 `serveStatic` 指向 Vite 構建產物即可 |
-
-::: warning
-root: '.' 或指到含 node_modules 的目錄有路徑洩露風險，線上見過誤配。
-:::
-
-index.html 等入口不宜與帶 hash 的 chunk 一樣設 immutable 長快取，否則發版後用戶一直舊殼。SPA 深鏈不能僅靠靜態中介軟體：未命中路徑要在 routers 後再回落 index.html（見上方 demo）。
 
 ## 下一步
 

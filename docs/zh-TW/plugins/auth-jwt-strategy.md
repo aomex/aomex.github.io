@@ -76,15 +76,9 @@ authorize('jwt', level) 的引數型別跟著 onAuthorize 定義走。
 別把密碼等敏感欄位寫進 JWT payload：載荷可被解碼閱讀，只放標識和角色即可。
 :::
 
-## verifyOptions 與吊銷
+## 收緊驗籤與吊銷
 
-| 選項 | 什麼時候用 |
-| --- | --- |
-| `secret` | 對稱金鑰；單體 / 內網常見 |
-| `tokenLoaders` | 預設 `Authorization` Bearer；需要時可像 Bearer 一樣加 cookie/query |
-| `verifyOptions` | 收緊演算法、`audience` / `issuer` |
-| `onVerified` | 把 payload 收成業務身份；黑名單命中返回 `false` → 401 |
-| `onAuthorize` | 管理介面按角色攔截；例項方法裡用 `this.getIdentity()` |
+生產常把演算法和 audience 寫死，避免接受意外演算法。`onVerified` 裡查黑名單：命中返回 `false` → **401**。token 預設從 `Authorization` Bearer 取；要像 Bearer 一樣加 cookie/query 時再配 `tokenLoaders`。
 
 ```typescript
 new AuthJwtStrategy({
@@ -102,7 +96,7 @@ new AuthJwtStrategy({
 });
 ```
 
-非對稱金鑰、舊金鑰輪換等進階配法見 [高階：自定義鑑權策略](/zh-TW/advanced/auth-strategy)。
+管理介面按角色攔截仍走 `onAuthorize`，例項方法裡用 `this.getIdentity()`。非對稱金鑰、舊金鑰輪換等進階配法見 [高階：自定義鑑權策略](/zh-TW/advanced/auth-strategy)。
 
 驗籤失敗時先想伺服器時鐘是否同步。吊銷沒有銀彈：短 expiresIn + 重新整理介面是常見組合，黑名單要自己維護。
 

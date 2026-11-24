@@ -34,29 +34,19 @@ const app = new WebApp({
 CORS 掛在 routers **後面** 時，404 和校驗 400 可能缺頭，瀏覽器報「跨域」會把真因蓋住。
 :::
 
-本地前後端不同埠、**又不帶 Cookie** 時，無參 cors() 會反射請求頭裡的 Origin，一般夠用。一旦要跨域帶 Cookie（[Session](/zh-TW/plugins/auth-session-strategy)），就必須顯式寫 origin，見下一節。
+本地前後端不同埠、**又不帶 Cookie** 時，無參 `cors()` 會反射請求頭裡的 Origin，一般夠用。一旦要跨域帶 Cookie（[Session](/zh-TW/plugins/auth-session-strategy)），就必須顯式寫 origin，見下一節。
 
 cors() 返回普通 WebMiddleware，不往 ctx 上掛新欄位；業務 action 裡照常寫，跨域由響應頭解決。瀏覽器裡成功時能看到 Access-Control-Allow-Origin；帶 Cookie 的場景還要 Access-Control-Allow-Credentials: true，且 **不能** 用 origin: '*'。
 
-## 收緊 Origin 與憑據
-
-| 選項 | 什麼時候用 | 預設 |
-| --- | --- | --- |
-| `origin` | 生產固定前端域名，或多套前端用白名單 / 函式 | 未開憑證時反射請求 `Origin`；**開憑證時必填** |
-| `credentials` | 跨域要帶 Cookie / 客戶端證書等 | `false` |
-| `allowHeaders` | 前端要帶 `Authorization`、`x-csrf-token` 等 | — |
-| `exposeHeaders` | 前端要讀 `X-Request-Id` 等響應頭 | — |
-| `maxAge` | 減少重複 OPTIONS；除錯可 `-1` 不快取 | `3600` |
-| `allowMethods` | 只開放 GET/POST 時收緊 | 常見動詞全集 |
-| `secureContext` / `privateNetworkAccess` | 隔離頁面、公網頁訪問內網 API（Chrome PNA） | `false` |
-
-### Cookie 登入：必須顯式 origin
+## Cookie 登入：必須顯式 origin
 
 `credentials: true`（或函式返回 `true`）時：
 
 - **必須**顯式配置 `origin`（具體域名、白名單陣列、或返回具體來源的函式）
 - **禁止**依賴無參 cors() 的預設反射——漏配會在建立或請求階段直接拋錯
 - **禁止** `origin: '*'`（瀏覽器也不認這種組合）
+
+前端還要帶 `Authorization`、`x-csrf-token` 時，用 `allowHeaders` 放行；要讓前端指令碼讀到 `X-Request-Id` 等自定義頭，用 `exposeHeaders`。
 
 ```typescript
 cors({
@@ -73,7 +63,9 @@ cors({
 
 Session 還要掛 [CSRF](/zh-TW/plugins/csrf)，並讓前端 `fetch` 使用 `credentials: 'include'`。完整鏈路見 [Session 策略](/zh-TW/plugins/auth-session-strategy)。
 
-### 多套前端白名單
+## 多套前端白名單
+
+App 與管理端分域名時，`origin` 可以直接給陣列；命中才回寫，未命中等於不啟用 CORS。
 
 ```typescript
 const allowlist = [
@@ -102,6 +94,8 @@ cors({
   credentials: true,
 });
 ```
+
+預檢快取預設約一小時（`maxAge: 3600`）；本地除錯可設 `-1` 讓每次 OPTIONS 都重新打。只開放 GET/POST 時再用 `allowMethods` 收緊。隔離頁面 / 公網頁訪問內網 API（Chrome PNA）才需要 `secureContext` / `privateNetworkAccess`。
 
 | 環境 | 建議 |
 | --- | --- |

@@ -4,50 +4,87 @@ outline: deep
 
 # Быстрая установка
 
-Поднимите работающий проект aomex с нуля: возможен доступ к HTTP, а терминал также может запускать команды. Scaffolding предоставляет обязательные поля, такие как журнал/язык/выключение, что проще, чем настраивать с пустыми руками.
+С нуля поднимаете рабочий проект aomex: HTTP доступен, в терминале тоже можно гонять команды. Скаффолд уже кладёт обязательные logger / language / shutdown — проще, чем собирать с пустых рук. Нужен **Node.js `^22.22.2 || ^24.15.0 || >=26`**.
 
-Скаффолд требует **Node.js `^22.22.2 || ^24.15.0 || >=26`**. Всегда указывайте `@latest`, иначе локальный кэш может запустить старый scaffold. Какой create-командой запускаете — такой пакетный менеджер и выберется (можно переопределить через `--pm`).
+Какой командой запустите — тот пакетный менеджер и подтянется (можно перекрыть `--pm`).
 
 ```bash
-pnpm create aomex@latest
-yarn create aomex@latest
-npm create aomex@latest
+pnpm create aomex
+yarn create aomex
+npm create aomex
 ```
 
-По подсказкам выберите ORM, auth, middleware и т.д.; после генерации зайдите в каталог и запустите:
+По подсказкам выберите ORM, аутентификацию, middleware и т.д.; после генерации зайдите в каталог и стартуйте:
 
 ```bash
 cd <project>
 pnpm start   # или yarn start / npm start
 ```
 
-В корне сгенерированного проекта есть `AGENTS.md` → `aomex-skill.md`, чтобы ИИ расширял код по соглашению.
+В корне сгенерированного проекта есть `AGENTS.md` → `aomex-skill.md` — для расширения кода ИИ по соглашениям.
 
-После запуска откройте проверку работоспособности или домашнюю страницу в браузере (порт — `PORT` шаблона). В терминале:
+После старта откройте в браузере health-check или главную (порт — в `PORT` шаблона). В терминале:
 
 ```bash
 pnpm aomex -h
 ```
 
+## Неинтерактивные параметры
+
+Все опции можно задать CLI-аргументами и пропустить вопросы (удобно для скриптов / CI). Не переданные пункты по-прежнему спросят интерактивно.
+
+| Параметр | Описание | Пример |
+| --- | --- | --- |
+| `--project` | имя каталога проекта | `--project=my-api` |
+| `--node` | версия Node (без аргумента — интерактивный выбор LTS, ≥24) | `--node=24.22.0` |
+| `--pm` | пакетный менеджер (по умолчанию как у create) | `--pm=pnpm` \| `yarn` \| `npm` |
+| `--orm` | ORM | `--orm=prisma` \| `mongoose` \| `none` |
+| `--db` | БД Prisma (только `--orm=prisma`) | `--db=mysql` \| `postgresql` \| … |
+| `--auth` | стратегии аутентификации, через запятую; `none` — без | `--auth=bearer,jwt` \| `--auth=none` |
+| `--web-plugins` | опциональный Web middleware (`cors` / `etag` / `helmet` / `response-time` ставятся всегда) | `--web-plugins=http-access-log,async-trace` |
+| `--docs` | UI документации | `--docs=swagger` \| `redoc` \| `scalar` \| `none` |
+| `--logger` | выходы логов, через запятую | `--logger=console,file` |
+| `--console-middlewares` | плагины Console; `cron` всегда, можно добавить | `--console-middlewares=openapi` |
+| `--lang` | язык по умолчанию (BCP 47) | `--lang=zh-CN` |
+| `--docker` | генерировать Docker-артефакты для прода | `--docker=true` \| `false` |
+| `--tz` / `--timezone` | часовой пояс процесса | `--tz=Asia/Shanghai` |
+| `--cluster` | схема кластера (не наслаивайте) | `--cluster=none` \| `cluster-listen` \| `pm2` |
+
+```bash
+pnpm create aomex -- \
+  --project=HelloAomex \
+  --pm=pnpm \
+  --orm=prisma \
+  --db=mysql \
+  --auth=bearer \
+  --docs=swagger \
+  --lang=zh-CN \
+  --docker=true \
+  --tz=Asia/Shanghai \
+  --web-plugins=http-access-log,async-trace \
+  --logger=console,file \
+  --cluster=none
+```
+
 ## Структура каталогов
 
-Шаблон выглядит примерно так (версия чуть подправит детали). Три линии: `src/web.ts` поднимает HTTP, `src/cli.ts` — терминал / Cron / экспорт OpenAPI; `src/routers/` и `src/commanders/` — API и CLI-команды; переиспользуемые middleware (аутентификация, formatError, access log, Swagger и т.д.) лежат в `src/middleware/` и подключаются в `web.ts` или в mount маршрута; БД и кэш — в `src/services/`, **общие для Web и Console**.
+Скаффолд примерно такой (в разных версиях чуть плывёт). Держитесь трёх линий: `src/web.ts` поднимает HTTP, `src/cli.ts` — терминал / Cron / запись OpenAPI на диск, `src/routers/` и `src/commanders/` — интерфейсы и команды; переиспользуемый middleware (аутентификация, формат ошибок, access log) — в `src/middleware/`, БД и кеш — в `src/services/`, **общие для обеих сторон**.
 
-| Файл / каталог | Зачем трогать |
+| Файл / каталог | Зачем вы его правите |
 | --- | --- |
-| `src/web.ts` | Запуск HTTP |
-| `src/cli.ts` | CLI / Cron / экспорт OpenAPI в файл |
-| `src/routers/` | HTTP-маршруты |
-| `src/commanders/` | CLI-команды |
-| `src/middleware/` | Переиспользуемые middleware: аутентификация, formatError, access log, Swagger — смонтировать в `web.ts` или mount маршрута |
-| `src/services/` | БД, кэш, почта — бизнес-SQL не в `action` маршрута |
-| `src/schemas/` | Общие валидаторы, файлы `xxx.schema.ts` (одна схема для OpenAPI и CLI) |
+| `src/web.ts` | поднять HTTP |
+| `src/cli.ts` | терминальные команды / Cron / запись OpenAPI |
+| `src/routers/` | писать API |
+| `src/commanders/` | писать CLI-команды |
+| `src/middleware/` | аутентификация, formatError, access log, Swagger и т.п. — переиспользуемый middleware, потом на `web.ts` / mount маршрутов |
+| `src/services/` | БД, кеш, почта — SQL не кладите в `action` маршрута |
+| `src/schemas/` | переиспользуемая валидация, имя `xxx.schema.ts` (OpenAPI и CLI делят одну копию) |
 
-Просто удалите те, которые вам не нужны (prisma, i18n...), нет необходимости держать их напоказ. CORS, аутентификация, OpenAPI и т. д. являются независимыми пакетами и должны быть установлены после использования.
+Ненужное (prisma, i18n…) можно удалить — не держите «для вида». CORS, аутентификация, OpenAPI — отдельные пакеты, ставьте по мере надобности.
 
-## Попробуйте сменить интерфейс
+## Попробуйте изменить интерфейс
 
-Уже в строительных лесах ` src/routers/`. новый файл ` export const router = new Router()`,` routers('./src/routers')`Он будет отсканирован. Прежде чем приступить к действию, расставьте приоритеты:
+В скаффолде уже есть `src/routers/`. Новый файл с `export const router = new Router()` подхватит `routers('./src/routers')`. Сначала валидация, потом action:
 
 ```typescript
 // src/routers/hello.router.ts
@@ -61,28 +98,28 @@ router.get('/hello', {
     query({ name: rule.string().default('world') }), // [!code highlight]
   ],
   action: async (ctx) => {
-    ctx.send({ message: ` hello, ${ctx.query.name}` });
+    ctx.send({ message: `hello, ${ctx.query.name}` });
   },
 });
 ```
 
-` pnpm start `позже посетить`/hello?name=ada `, в это время` ctx.query.name `Уже строка.
+После `pnpm start` откройте `/hello?name=ada` — к этому моменту `ctx.query.name` уже string.
 
 ## Попробуйте запустить команду
 
-Консоль **совместно** использует службы/схемы с Web. изменять` src/commanders/`Инструкции здесь или напрямую запустите ту, которая идет в комплекте со лесами:
+Console и Web **делят** services / schemas. Правите команды в `src/commanders/` или сразу гоняйте те, что дал скаффолд:
 
 ```bash
 pnpm aomex hello
 pnpm aomex hello --user Ada
 ```
 
-Запланированные задачи и OpenAPI также можно разместить на диске. ` src/cli.ts `, см. [Cron](/ru/plugins/cron) · [Генерация OpenAPI](/ru/openapi/).
+Планировщик и запись OpenAPI тоже через `src/cli.ts` — см. [Cron](/ru/plugins/cron) · [Генерация OpenAPI](/ru/openapi/).
 
 ## Дальше
 
-1. [Запись веб-приложения](/ru/web/) —` WebApp` Обязательные поля, язык, выключение
-2. [HTTP-маршрутизация](/ru/web/router) — монтировать, документы, отключено
-3. [Валидаторы](/ru/validators/) — Как проверять поля и узкие типы
-4. [Услуги](/ru/core/service) — Куда разместить базу данных и кэш
-5. [Запись консольного приложения](/ru/console/) — Команды и Cron
+1. [Вход Web-приложения](/ru/web/) — обязательные поля `WebApp`, language, shutdown  
+2. [Маршрутизация API](/ru/web/router) — mount, docs, disabled  
+3. [Валидаторы](/ru/validators/) — как проверять поля и сужать типы  
+4. [Сервисный слой](/ru/core/service) — куда класть БД и кеш  
+5. [Вход Console-приложения](/ru/console/) — команды и Cron

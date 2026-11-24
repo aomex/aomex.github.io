@@ -38,14 +38,9 @@ const app = new WebApp({
 
 ## CSP 與環境分支
 
-| 能力 | 什麼時候用 | 經驗預設 |
-| --- | --- | --- |
-| 無參整包 | 生產 Web / 給瀏覽器用的 API | 常見防護開齊 |
-| `contentSecurityPolicy` | 有前端頁面、防 XSS | 按 CDN/指令碼域名白名單寫 |
-| `contentSecurityPolicy: false` | Swagger/ReDoc 內聯指令碼起不來 | 常僅開發或文件路由 |
-| 按 `NODE_ENV` 分支 | 本地少摩擦、上線收緊 | 見下方 demo |
+有前端頁面時，在無參整包之上收緊 `contentSecurityPolicy`：按 CDN / 指令碼域名寫白名單。Swagger / ReDoc 內聯指令碼起不來時，開發或文件路由可臨時 `contentSecurityPolicy: false`。
 
-### 生產：收緊 CSP（示例骨架）
+生產收緊 CSP（骨架，按真實資源改）：
 
 ```typescript
 helmet({
@@ -59,7 +54,7 @@ helmet({
 });
 ```
 
-### 開發 vs 生產
+本地少摩擦、上線收緊，常見按環境分支：
 
 ```typescript
 const security =

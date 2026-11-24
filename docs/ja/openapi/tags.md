@@ -63,7 +63,7 @@ router.get('/export', {
 ルート上の `tags: ['User']` が渡すのは**名前だけ**。ドキュメント上部でグループに紹介文（Markdown 可）を付けるには、`generateOpenapi` の `docs.tags` で同名エントリを宣言する：
 
 ```typescript
-import { generateOpenapi } from '@aomex/openapi';
+import { generateOpenapi } from '@aomex/openapi-generator';
 import { app } from './app.js';
 
 await generateOpenapi({

@@ -2,28 +2,28 @@
 outline: deep
 ---
 
-# HTTP アクセスログ
+# アクセスログ
 
-リクエスト終了時に 1 行のアクセスログ：メソッド、URL、ステータス、所要時間など。流量と遅い API の把握向き。
+アプリ内で「誰がどの HTTP ルートを叩き、何ミリ秒かかったか」を見たい——`@aomex/access-log` の `httpAccessLog()` を使う。リクエスト終了時に 1 行書く。
 
-**本番は Nginx access_log 優先**（ゲートウェイ / LB 付属ログ）：フォーマット統一、Node イベントループを占有しにくく、既存収集と相性がよい。`@aomex/http-access-log` はローカル開発、リバースプロキシなし、アプリに入って初めて取れる **userId / テナント / traceId** をログに載せたいとき。
+**本番では Nginx の access_log を優先**（またはゲートウェイ同梱）。本パッケージが向くのはローカル開発、前段にリバースプロキシが無いとき、そして **userId / テナント / traceId** のように Node に入ってからしか取れないフィールドを行に載せたいとき。
 
 ```bash
-pnpm add @aomex/http-access-log
+pnpm add @aomex/access-log
 ```
 
-## 前の方にサイト全体で
+## routers の前に載せる
 
-アプリ内アクセスログが要るとき `httpAccessLog()` を `routers` の**前**へ：終了時に combined 風 1 行。404、バリデーション 400 も記録。後ろだとチェーン全体の時間が揃いにくい。
+`httpAccessLog()` は `routers` の**前**に置く。玉ねぎ一通り終わったあと 1 行書く。404 や検証 400 も記録される。後ろすぎると、所要時間や早期 return が「全站監査」と揃わない。
 
 ```typescript
-import { httpAccessLog } from '@aomex/http-access-log';
+import { httpAccessLog } from '@aomex/access-log';
 import { routers, WebApp } from '@aomex/web';
 
 const app = new WebApp({
   services,
   logger: services.logger,
-  language: { mode: 'fixed', language: 'zh-CN' },
+  language: { mode: 'fixed', language: 'ja-JP' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:4]
     httpAccessLog(), // [!code highlight]
@@ -32,28 +32,18 @@ const app = new WebApp({
 });
 ```
 
-無設定時は combined 風 1 行テキスト。既定は logger 出口（ローカルは多くコンソール）。フィールド例：ip、method、url、statusCode、duration、contentLength。
+何も渡さないと既定でコンソールへ、だいたい combined 風：ip、method、url、statusCode、duration、contentLength。ローカル直結ならこれで十分。遅いルートを追うときは [応答時間](/ja/plugins/response-time) も足す。
 
 ::: warning
-routers の**後ろ**だとチェーン全体の時間と早期 404 が「サイト全体監査」意図と合わないことがある。
-
+routers の**後ろ**に載せると、鎖全体の所要時間や早期 404 が「全站監査」と合わないことがある。
 :::
 
-customTokens のコールバック引数は WebContext。ctx.auth 等は**内側の認証完了後**に読める——アクセスログは await next() の後に行を書くため、オニオン内側の属性は一般に取れる。customTokens で ctx.auth が常に - ならオニオン順を確認。認証がルート内、ログが外側で終わる前に切れるなら認証を Router mount へ上げる。
+## 形式を変え、ファイルに落とす
 
-## フォーマットと永続化
-
-| 能力 | いつ使う | デフォルト |
-| --- | --- | --- |
-| `format` | 本番で ELK/Loki のフィールド順に合わせる | 組み込み combined 風 |
-| `transports` | ファイル、リモート収集 | コンソール（`logger` に追随） |
-| `customTokens` | ユーザー ID、テナント、traceId | — |
-| `HttpAccessLogToken.*` | `ip` / `method` / `duration` 等を連結 | パッケージ export |
-
-### 本番：ファイル出力
+本番で ELK / Loki のフィールド順に合わせる、またはファイルに書くときは `format` + `transports`。`format` は `HttpAccessLogToken` を並べて組み立てるのが安全。手打ちプレースホルダは打ち間違いやすい。
 
 ```typescript
-import { HttpAccessLogToken, httpAccessLog } from '@aomex/http-access-log';
+import { HttpAccessLogToken, httpAccessLog } from '@aomex/access-log';
 import { FileTransport } from '@aomex/logger';
 
 httpAccessLog({
@@ -69,7 +59,11 @@ httpAccessLog({
 });
 ```
 
-### 認証後に userId
+空の `transports` や `disabled: true` はアクセスログをオフにするのと同じ。本番に Nginx があるときは**優先**してゲートウェイの `access_log`。カスタム token が要る、または前段が無いときだけアプリ層で落盤 / 収集し、業務ログと分ける。
+
+## userId を載せる
+
+行は `await next()` の**あと**に書くので、内側の認証が付けた `ctx.auth` はだいたい読める。`customTokens` で業務フィールドを `format` に差し込む。コールバックが受け取るのは完全な `WebContext`。
 
 ```typescript
 httpAccessLog({
@@ -82,17 +76,12 @@ httpAccessLog({
 });
 ```
 
-[レスポンス時間](/ja/plugins/response-time) と併用が多い：ヘッダー X-Response-Time はクライアント/ゲートウェイ、ログ duration はプラットフォーム。
+よく [応答時間](/ja/plugins/response-time) と組む：ヘッダーの `X-Response-Time` はクライアント / ゲートウェイ向け、ログの duration は収集基盤向け。
 
-| 環境 | 推奨 |
-| --- | --- |
-| ローカル直結 | 本プラグインでコンソールへ。遅い API なら `responseTime()` 追加可 |
-| 本番 Nginx あり | **優先** `access_log`。カスタム token（ユーザー、テナント）が要るときだけアプリ層 |
-| 本番 リバースプロキシなし | 本プラグインでファイル/収集。業務ログと分流 |
-
-アクセスログは流量・時間の観測向き。**機密操作の唯一の監査源にしない**——重要業務は業務ログや監査テーブル。Nginx access_log とアプリ内ログは併存可。フィールド定義が二系統で矛盾しないよう注意。
+アクセスログはトラフィックと所要時間向き。**機密操作の唯一の監査にしない**——注文や権限変更は業務ログや監査表に書く。
 
 ## 次のステップ
 
-- レスポンスヘッダー時間：[レスポンス時間](/ja/plugins/response-time)
-- レベル別出口 / requestId：[ログ](/ja/core/logger)
+- 応答ヘッダーの所要時間：[応答時間](/ja/plugins/response-time)
+- WebSocket の接続 / メッセージアクセスログ：[アクセスログ（WebSocket）](/ja/websocket/access-log)
+- レベル付き出口 / requestId：[ログ](/ja/core/logger)

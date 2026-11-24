@@ -4,9 +4,9 @@ outline: deep
 
 # Заголовки безопасности Helmet
 
-Разумный набор HTTP security-заголовков для ответов в браузере (clickjacking, MIME sniffing и т.д.). Для чистого JSON API опционально; для H5, админки, док-сайта обычно включают по умолчанию — CSP под реальные ресурсы.
+Добавляет к ответам для браузера разумный набор HTTP security-заголовков (clickjacking, MIME sniffing и т.д.) и снижает типичные фронтовые риски. Для чистого JSON API опционально; при H5, админке, док-сайте обычно вешают по умолчанию, а CSP ужесточают под реальные ресурсы.
 
-На базе [helmet](https://github.com/helmetjs/helmet); опции как `HelmetOptions` — [документация helmet](https://helmetjs.github.io/).
+На базе upstream [helmet](https://github.com/helmetjs/helmet); опции совпадают с HelmetOptions, детали — в [документации helmet](https://helmetjs.github.io/).
 
 ```bash
 pnpm add @aomex/helmet
@@ -14,7 +14,7 @@ pnpm add @aomex/helmet
 
 ## Стандартный набор на WebApp
 
-Безаргументный `helmet()` — дефолты upstream; типично в `WebApp.mount` при HTML, доках, админке; для только JSON можно не ставить.
+Безаргументный `helmet()` включает дефолтный набор браузерных security-заголовков upstream; при HTML, док-сайте, админке обычно кладут в `WebApp.mount`, для чистого JSON API можно не ставить.
 
 ```typescript
 import { helmet } from '@aomex/helmet';
@@ -32,20 +32,15 @@ const app = new WebApp({
 });
 ```
 
-С [CORS](/ru/plugins/cors) оба **перед** `routers`; заголовки можно и на reverse proxy — in-app удобнее для переключения по среде.
+Вместе с [CORS](/ru/plugins/cors) оба ставьте перед routers; заголовки можно добавить и на reverse proxy, in-app удобнее переключать по среде.
 
-Обычный `WebMiddleware`, бизнес-поля `ctx` не трогает. В DevTools → Network видны `X-Content-Type-Options`, `X-Frame-Options` и т.д. (набор зависит от дефолтов и подопций).
+Возвращает обычный WebMiddleware, бизнес-поля ctx не трогает. В DevTools → Network → Response Headers видны X-Content-Type-Options, X-Frame-Options и т.д. (конкретный набор зависит от дефолтов helmet и подопций).
 
 ## CSP и ветки по среде
 
-| Возможность | Когда использовать | Типичный дефолт |
-| --- | --- | --- |
-| Без аргументов | Прод Web / API для браузера | Базовая защита вкл |
-| `contentSecurityPolicy` | Фронтенд-страницы, XSS | Белый список CDN/скриптов |
-| `contentSecurityPolicy: false` | Блок inline у Swagger/ReDoc | часто dev или только doc-маршруты |
-| Ветка по `NODE_ENV` | Проще локально, жёстче в проде | см. демо ниже |
+Когда есть фронтовые страницы, поверх безаргументного набора ужесточайте `contentSecurityPolicy`: белый список CDN / доменов скриптов. Если у Swagger / ReDoc не поднимаются inline-скрипты, в разработке или на doc-маршрутах временно `contentSecurityPolicy: false`.
 
-### Прод: ужесточённый CSP (скелет)
+Прод: ужесточённый CSP (скелет, правьте под реальные ресурсы):
 
 ```typescript
 helmet({
@@ -59,7 +54,7 @@ helmet({
 });
 ```
 
-### Разработка vs прод
+Локально меньше трения, в проде жёстче — часто ветвят по среде:
 
 ```typescript
 const security =
@@ -72,15 +67,15 @@ mount: [security, cors(), routers('./src/routers')];
 
 | Среда | Рекомендация |
 | --- | --- |
-| Прод (админка / H5) | Включить; CSP по списку ассетов фронта |
-| Прод (только JSON, без HTML) | Опционально; если шлюз уже ставит заголовки |
-| Локально | Для доков / Swagger можно `contentSecurityPolicy: false` |
+| Прод (админка / H5) | включить, CSP сверить со списком фронтовых ресурсов |
+| Прод (только JSON, без HTML) | опционально; если шлюз уже ставит заголовки — можно опустить |
+| Локально | док-сайт / Swagger могут с `contentSecurityPolicy: false` |
 
-CSP из шаблона без CDN/скриптов — белый экран и ошибки CSP в консоли. Выключить CSP в проде — больше inline-риск. Helmet **не заменяет** [CORS](/ru/plugins/cors) — кросс-домен настраивайте отдельно.
+Если скопировать жёсткий CSP-шаблон и забыть CDN / домены скриптов — белый экран и куча CSP в консоли. Выключить CSP в проде «для простоты» расширяет поверхность inline-скриптов — против цели ужесточения. Helmet **не заменяет** [CORS](/ru/plugins/cors): кросс-домен настраивается отдельно.
 
 ## Дальше
 
 - Кросс-домен: [CORS](/ru/plugins/cors)
-- CSRF для Cookie-логина: [CSRF](/ru/plugins/csrf)
-- UI документации: [Swagger UI](/ru/openapi/swagger-ui), [Redoc UI](/ru/openapi/redoc-ui)
-- Размещение middleware: [Middleware](/ru/core/middleware)
+- Cookie-вход и защита от подделки: [CSRF](/ru/plugins/csrf)
+- UI публичной документации API: [Swagger UI](/ru/openapi/swagger-ui), [Redoc UI](/ru/openapi/redoc-ui)
+- Куда вешать middleware: [Middleware](/ru/core/middleware)

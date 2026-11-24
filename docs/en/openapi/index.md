@@ -4,12 +4,12 @@ outline: deep
 
 # Generate OpenAPI
 
-**Declare contracts on routes**, then scan them into OpenAPI 3.0: in memory for scripts / Swagger, or **write to disk** via Console for CI and SDKs. The generation pipeline lives in `@aomex/openapi`; Swagger / Redoc are only ways to read that JSON.
+**Declare contracts on routes**, then scan them into OpenAPI 3.0: in memory for scripts / Swagger, or **write to disk** via Console for CI and SDKs. The generation pipeline lives in `@aomex/openapi-generator`; Swagger / Redoc are only ways to read that JSON.
 
 Routes without mounted `query` / `body` / `response` leave the corresponding sections empty in the doc—runtime still works, but the contract is incomplete. Type narrowing for `send` / `throw`: [Constrain responses](/en/web/response).
 
 ```bash
-pnpm add @aomex/openapi
+pnpm add @aomex/openapi-generator
 ```
 
 **Pass the same `WebApp` instance as production** (`app`). The generator reads its global `mount` and `envelope` so security, error bodies, and wrapping are less likely to drift from the live app.
@@ -95,7 +95,7 @@ app.listen(3000);
 
 ```typescript
 import { writeFile } from 'node:fs/promises';
-import { generateOpenapi } from '@aomex/openapi';
+import { generateOpenapi } from '@aomex/openapi-generator';
 import { app } from './app.js';
 
 const document = await generateOpenapi({ // [!code focus:11]
@@ -203,7 +203,7 @@ When you only need the contract as a **file** without changing the HTTP process,
 
 ```typescript
 // src/cli.ts
-import { openapi } from '@aomex/openapi';
+import { openapi } from '@aomex/openapi-generator';
 import { commanders, ConsoleApp } from '@aomex/console';
 import { app } from './app.js';
 import { services } from './services/index.js';

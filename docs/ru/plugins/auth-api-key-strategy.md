@@ -4,13 +4,13 @@ outline: deep
 
 # Стратегия API Key
 
-Канал «принёс ключ — вызвал API» для скриптов, партнёров, внутренних сервисов. `AuthApiKeyStrategy` читает **сырой** ключ из заголовков (или query/cookie по конфигу) и сопоставляет с идентичностью приложения — не двухчастный Bearer. Логин конечного пользователя: [Bearer](/ru/plugins/auth-bearer-strategy) или [JWT](/ru/plugins/auth-jwt-strategy).
+Канал «с ключом можно вызывать» для скриптов, партнёров или внутренних сервисов. AuthApiKeyStrategy читает **голый** ключ из заголовка (или настроенных query/cookie) и отображает в личность приложения — это **не** двухчастная форма Bearer. Для входа конечного пользователя — [Bearer](/ru/plugins/auth-bearer-strategy) или [JWT](/ru/plugins/auth-jwt-strategy).
 
-Проверяйте `x-api-key` (или свой header); после успеха `ctx.auth.apiKey`; открытые платформы часто отдельный префикс Router от user login.
+Проверка `x-api-key` (или своего заголовка); после успеха в бизнесе — `ctx.auth.apiKey`; открытую платформу можно вынести на другой prefix Router, отдельно от пользовательского входа.
 
 ## Установка
 
-Общий `@aomex/auth` с Bearer.
+Тот же основной пакет `@aomex/auth`, что и Bearer.
 
 ```bash
 pnpm add @aomex/auth
@@ -53,7 +53,7 @@ openApi.get('/usage', {
 });
 ```
 
-Рядом с user Bearer — разные имена стратегий на разных Router.
+Рядом с пользовательским Bearer имена стратегий независимы — вешайте на разные Router.
 
 После успеха:
 
@@ -61,23 +61,13 @@ openApi.get('/usage', {
 ctx.auth.apiKey // { key: string; data: T }
 ```
 
-Доп. аргументы `authorize('apiKey', …)` как у Bearer в `onAuthorize`. Без `onAuthorize` обычно только «ключ валиден».
+Тип доп. аргументов `authorize('apiKey', …)` как у Bearer — из вашего `onAuthorize`. Без `onAuthorize` обычно только слой «есть ли валидный key».
 
-## keyLoaders и лимиты
+## Key из нескольких источников и измерение лимита
 
-| Опция | Когда использовать | По умолчанию |
-| --- | --- | --- |
-| `keyLoaders` | Порядок header / query / cookie | `[{ type: 'header', key: 'x-api-key' }]` |
-| `onLoaded` | Проверка ключа, идентичность | **обязательно** |
-| `onAuthorize` | Scopes, тариф и т.д. | опционально |
+`onLoaded` обязателен: проверить key и вернуть личность приложения. По умолчанию только заголовок `x-api-key`; для порядка header / query / cookie — `keyLoaders`. Доп. слой по scope / тарифу — `onAuthorize`.
 
-Loaders:
-
-- `header` — сырое значение (имя ключа в нижнем регистре)
-- `query` — осторожно, попадает в логи
-- `cookie` — по договорённости команды
-
-**Нет loader из body** — ключи не в логах тела. В проде предпочтительнее header.
+Поддерживаемые loader: header (голое значение заголовка, имя в нижнем регистре), query (осторожно — легко в логи), cookie. **Чтение Key из body не поддерживается**, чтобы ключ не попадал в логи тела. В проде предпочтителен header.
 
 ```typescript
 new AuthApiKeyStrategy({
@@ -91,9 +81,10 @@ new AuthApiKeyStrategy({
 });
 ```
 
-`signature()` может генерировать случайные ключи при выдаче клиентам — по аналогии с Bearer.
 
-С [@aomex/rate-limit](/ru/plugins/rate-limit) квота по ключу — обычно сначала authenticate или читаете header сами:
+`signature()` генерирует случайную строку Key (при выдаче нового клиента), похоже на стратегию Bearer.
+
+Вместе с [@aomex/rate-limit](/ru/plugins/rate-limit) можно мерить квоту по key — обычно аутентификация уже должна пройти до лимита, или key читаете сами из header:
 
 ```typescript
 rateLimit({
@@ -103,16 +94,16 @@ rateLimit({
 });
 ```
 
-OpenAPI добавляет схему `apiKey`; `in` / `name` обычно из **первого** `keyLoader`.
+OpenAPI получит apiKey scheme; `in` / `name` обычно из **первого** keyLoader.
 
 ::: warning
-Утечка ключа = утечка прав: храните хеши, ротация, без долгого plaintext в БД. API Key не замена login пользователя — конечным пользователям Bearer/JWT.
+Утечка ключа = утечка прав: храните хеш, поддерживайте ротацию, не держите plaintext долго в БД. API Key — не замена C-end логина; продукты для людей — Bearer/JWT.
 :::
 
-Не смешивайте сессии пользователя и API keys в одной группе маршрутов — отдельный префикс + `authenticate('apiKey')` яснее.
+Не смешивайте пользовательскую session и API Key в одной группе маршрутов: у открытой платформы отдельный prefix + `authenticate('apiKey')` понятнее.
 
 ## Связанное
 
 - [Аутентификация](/ru/plugins/auth)
-- [Bearer](/ru/plugins/auth-bearer-strategy)
-- [Rate limit](/ru/plugins/rate-limit)
+- [Стратегия Bearer](/ru/plugins/auth-bearer-strategy)
+- [Лимит запросов](/ru/plugins/rate-limit)

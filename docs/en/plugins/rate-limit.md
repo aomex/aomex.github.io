@@ -4,21 +4,21 @@ outline: deep
 
 # Rate limiting
 
-Count requests per client identifier inside a time window; return **429** when over the limit—to blunt API abuse and traffic spikes.
+Count requests per client identity inside a time window; over the limit return **429**. Use it to blunt scrapers and traffic spikes.
 
-**IP / connection-wide limits in production: prefer Nginx** (e.g. `limit_req_zone` / `limit_req`) so requests never reach Node and replicas do not need Redis first. `@aomex/rate-limit` fits better when you need **per-user / API Key business keys**, tighter limits on login or SMS routes, or no reverse proxy locally.
+**For site-wide IP / connection limits in production, prefer Nginx** (`limit_req_zone` / `limit_req`): traffic never reaches Node, and multi-replica setups do not need Redis first. `@aomex/rate-limit` fits **per-user / API Key business keys**, tightening a single route (login, SMS), or holding the line locally when there is no reverse proxy yet.
 
-Default **in-process memory** counters—fine on one machine; with multiple replicas and in-app counting you need Redis or the effective cap is roughly `maxRequest × instance count`.
+Default counting is **in-process memory**—fine on one node. Multi-replica that must share counts needs Redis, or the effective cap is roughly `limit × instances`.
 
 ```bash
 pnpm add @aomex/rate-limit
-# Multi-instance shared in-app counting:
+# Multi-instance and you must share counts in the app:
 pnpm add @aomex/rate-limit-redis-store
 ```
 
-## App-wide mount
+## Mount site-wide
 
-If the edge already rate-limits by IP, you do not need another app-wide `rateLimit()`. When you need business keys or run without a proxy, put `rateLimit()` early in `mount`: over limit in the window → **429** without counting in every action. Multi-replica shared counts need a Redis store (below).
+If the edge already limits by IP, you do not need another full-site `rateLimit()`. For business keys or local direct access, put `rateLimit()` early in mount: over limit → **429**, with no per-action counters.
 
 ```typescript
 import { rateLimit } from '@aomex/rate-limit';
@@ -27,36 +27,30 @@ import { routers, WebApp } from '@aomex/web';
 const app = new WebApp({
   services,
   logger: services.logger,
-  language: { mode: 'fixed', language: 'zh-CN' },
+  language: { mode: 'fixed', language: 'en-US' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:7]
     rateLimit({
-      maxRequest: 100,
-      duration: 60_000, // [!code highlight]
+      limit: 100,
+      window: 60_000, // [!code highlight]
     }),
     routers('./src/routers'),
   ],
 });
 ```
 
-A normal `WebMiddleware`; over limit throws an HTTP error with **429**—no per-action checks. `id` returning `false` skips counting (common for health checks).
+`window` is the counting window (milliseconds or readable durations like `'1 hour'` / `'30s'`; default 1 hour). `limit` is how many hits are allowed in that window (default 2500). With no options you get “per IP, 2500 per hour”—keep it loose on local direct access so you do not lock yourself out while debugging.
 
-## Counter keys and allow/deny lists
+Plain WebMiddleware; over limit throws an HTTP error with status **429**. Responses include `X-RateLimit-*` headers; pass `headers: false` to turn them off.
 
-| Option | When to use | Default |
-| --- | --- | --- |
-| `duration` | Window length | 1 hour |
-| `maxRequest` | Allowed hits per window | 2500 |
-| `id` | Per API Key / user; `false` exempts | IP |
-| `allowList` / `denyList` | Skip internal nets; block IPs | — |
-| `store` | **Multi-instance: use Redis** | memory |
+## Per Key / user, skip health checks
 
-### Per key / user, skip health checks
+Default `id` is `ctx.request.ip`. To bucket by API Key or logged-in user, write your own `id`; return `false` to skip counting (common for health checks). Skip a whole intranet range with `allowList`; block certain IPs outright with `denyList` (hits throw **403**, no counting).
 
 ```typescript
 rateLimit({
-  maxRequest: 60,
-  duration: 60_000,
+  limit: 60,
+  window: 60_000,
   id: (ctx) => { // [!code highlight]
     if (ctx.request.pathname === '/health') {
       return false;
@@ -73,7 +67,11 @@ rateLimit({
 });
 ```
 
-### Single route only
+IP-only limits behind NAT share one key for a whole office—easy false positives. Login and SMS routes suit user or API Key keys better. When the site-wide cap is too loose, mount a tighter limit on hot routes.
+
+## Limit a single route
+
+Login and captcha endpoints often need a tighter cap than the site-wide one. Mount `rateLimit()` on that route next to `body()`.
 
 ```typescript
 import { body } from '@aomex/web';
@@ -81,7 +79,7 @@ import { rule } from '@aomex/common';
 
 router.post('/login', {
   mount: [
-    rateLimit({ maxRequest: 10, duration: 60_000 }), // [!code highlight]
+    rateLimit({ limit: 10, window: 60_000 }), // [!code highlight]
     body({ email: rule.email(), password: rule.string() }),
   ],
   action: async (ctx) => {
@@ -90,9 +88,11 @@ router.post('/login', {
 });
 ```
 
-### Production multi-replica: Redis
+## Multi-replica production: Redis
 
-Construct with **`RedisOptions` only** (`host` / `port`, etc.; types from this package)—do **not** pass an existing `Redis` instance. `ioredis` ships with `@aomex/rate-limit-redis-store`; no extra install. The store uses `lazyConnect`; `rateLimit()` connects/disconnects via [`registerLifecycle`](/en/core/service#lifecycle-hooks) on the process side.
+If every pod still uses the default memory store, each instance counts alone and the total quota multiplies. For shared counts, switch to `@aomex/rate-limit-redis-store`.
+
+Pass `RedisOptions` only (`host` / `port`, …)—not an already-built `Redis` instance. `ioredis` ships with the package; you do not add it separately. The store `lazyConnect`s; `rateLimit()` registers connect / disconnect via [`registerLifecycle`](/en/core/service#lifecycle-hooks).
 
 ```typescript
 import { RateLimitRedisStore } from '@aomex/rate-limit-redis-store';
@@ -102,8 +102,8 @@ rateLimit({
     host: '127.0.0.1',
     port: 6379,
   }),
-  maxRequest: 500,
-  duration: 3_600_000,
+  limit: 500,
+  window: 3_600_000,
   id: (ctx) => {
     const key = ctx.request.headers['x-api-key'];
     if (typeof key === 'string') {
@@ -114,21 +114,16 @@ rateLimit({
 });
 ```
 
-The default memory store can be imported explicitly from `@aomex/rate-limit/memory`; in-process counts clear on shutdown.
+You can also import the default memory store explicitly from `@aomex/rate-limit/memory`; shutdown clears in-process counts. Custom stores implement atomic `getAndSet` on `RateLimitStore`; override `onInit` / `onDestroy` when you need connect / disconnect (`rateLimit()` registers them). Follow the type definitions.
 
-| Environment | Recommendation |
-| --- | --- |
-| Local direct access | App rate limit OK; keep limits loose so dev does not lock you out |
-| Production with Nginx | **Prefer** `limit_req` for IP / connection limits; app layer for login, SMS, per-key quotas |
-| Production multi-pod + in-app counts | **Must** use shared `store` (Redis); do not stack tight IP limits from the gateway on top |
+::: tip
+With Nginx in production: **prefer** `limit_req` (and similar) for IP / connection limits; leave the app layer for login, SMS, and per-key quotas. Do not stack the same tight IP cap on both gateway and app until you false-positive yourself.
+:::
 
-Custom stores implement atomic `getAndSet` on the package’s `RateLimitStore`; override `onInit` / `onDestroy` when you need connect/teardown (`rateLimit()` registers automatically). Follow the type definitions.
-
-IP-only limits behind NAT share one key for a whole office—easy false positives; login routes suit user or API Key keys better. When global limits are tight, per-route `mount` is more common.
-
-## Next steps
+## Next
 
 - Honeypot / error tallies / IP blocks: [Abuse protection](/en/plugins/abuse)
+- WebSocket inbound message limits: [Rate limiting (WebSocket)](/en/websocket/rate-limit)
 - Real client IP (rate-limit key): `proxyIP` on [Web entry](/en/web/)
-- Identity dimension: [Auth](/en/plugins/auth)
+- Identity: [Auth](/en/plugins/auth)
 - Error shape: [Error format](/en/web/errors)

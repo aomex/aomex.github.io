@@ -4,15 +4,15 @@ outline: deep
 
 # Pretty JSON
 
-In development, serve **indented JSON** in the browser instead of one long line. Production should stay off—response size balloons (especially on mobile), and public APIs should not depend on a query knob to inflate bodies.
+In development, view **indented JSON** in the browser instead of hunting fields in one long line. Off by default in production—otherwise response size grows a lot (especially costly on mobile), and public APIs shouldn’t grow the body via a query flag.
 
 ```bash
 pnpm add @aomex/pretty-json
 ```
 
-## Mount for development
+## Mount site-wide in development
 
-`prettyJson()` runs **after** `await next()` and reformats JSON responses as indented text—add it to `WebApp.mount`. In production use `enable: false` or rely on `?pretty` only.
+`prettyJson()` rewrites JSON responses to indented text **after** `await next()`; mount it on `WebApp.mount`. Turn it on locally by environment; use `enable: false` in production.
 
 ```typescript
 import { prettyJson } from '@aomex/pretty-json';
@@ -33,39 +33,28 @@ const app = new WebApp({
 });
 ```
 
-Plain `WebMiddleware`; no extra `ctx` fields. While `Content-Type` stays JSON, the body becomes readable `JSON.stringify(..., null, spaces)` text; object-mode readable streams use streaming stringify.
+Ordinary WebMiddleware; no extra fields on ctx. When Content-Type is still JSON, the body becomes readable text from `JSON.stringify(..., null, spaces)`; object-mode readable streams use streaming stringify. Add `spaces: 4` if the team prefers 4 spaces (default `2`).
 
-## `enable` and `query` switches
+## Production on demand: only ?pretty
 
-| Option | When to use | Default |
-| --- | --- | --- |
-| `enable` | Production must be `false`; internal debug tools may opt in | `true` |
-| `query` | No site-wide pretty; only when `?pretty` is present | — |
-| `spaces` | Team preference for 2 vs 4 spaces | `2` |
-
-```typescript
-prettyJson({ spaces: 4 });
-```
-
-### Internal / on demand only
+When site-wide pretty can’t go to production, turn `enable` off and leave only the query switch: visit `/internal/debug/state?pretty` to indent. Don’t rely on this to inflate public routes.
 
 ```typescript
 prettyJson({
   enable: false,
   query: 'pretty', // [!code highlight]
 });
-// GET /internal/debug/state?pretty
 ```
 
-| Environment | Guidance |
+| Environment | Recommendation |
 | --- | --- |
-| Local | `enable: true` or `?pretty` only |
-| Production | `enable: false`; do not let public routes grow bodies via query |
+| Local | `enable: true`, or only `?pretty` |
+| Production | `enable: false`; don’t let public routes grow responses via query |
 
-Prettying large lists can be several times the compact JSON size—Postman will choke too. With [Compress](/en/plugins/compress) you recover some bytes, but pretty still lengthens the body.
+Pretty-printing large lists can make the body several times the compact JSON size and slow Postman too. Stacking with [Compress](/en/plugins/compress) saves a bit, but the root cause is still that pretty lengthened the body.
 
 ## Next steps
 
-- JSON response shape: [Response constraints](/en/web/response)
-- Shrink payloads: [Compress](/en/plugins/compress)
-- Dev API UI: [Swagger UI](/en/openapi/swagger-ui)
+- JSON response shape: [Constrain response](/en/web/response)
+- Shrink size: [Compress](/en/plugins/compress)
+- Dev docs UI: [Swagger UI](/en/openapi/swagger-ui)

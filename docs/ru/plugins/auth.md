@@ -4,31 +4,31 @@ outline: deep
 
 # Аутентификация
 
-Две идеи: **кто вы** (аутентификация) и **что можно делать** (авторизация). `@aomex/auth` собирает стратегии в одном `Auth`: провал идентичности обычно **401**, недостаточно прав — **403**. Фронт и мониторинг различают «залогиниться» и «другой аккаунт / нужна роль».
+Сначала разделите два вопроса: **кто это** (аутентификация) и **можно ли делать это** (авторизация). `@aomex/auth` собирает несколько стратегий в один экземпляр Auth: не прошедшая личность обычно **401**, личность есть, но прав не хватает — **403**. Фронт и мониторинг по коду решают «идти логиниться» или «сменить аккаунт / поднять права».
 
-Для группы маршрутов «сначала логин», на части — выше роль; login без auth; после входа идентичность в `ctx.auth`.
+На группу бизнес-API вешается «сначала войти»; у части интерфейсов — ещё выше роль; сам логин без authenticate; после входа личность читается из `ctx.auth`.
 
 ## Установка
 
-Ставьте пакеты под стратегии; до появления login эта страница — дорожная карта.
+Ставьте пакеты под реальные стратегии; пока логина нет, эту страницу можно читать как дорожную карту.
 
 ```bash
 pnpm add @aomex/auth
-# JWT также: pnpm add @aomex/auth-jwt-strategy
-# Session также: pnpm add @aomex/cache (для cross-origin ещё @aomex/cors @aomex/csrf)
+# JWT отдельно: pnpm add @aomex/auth-jwt-strategy
+# Session ещё: pnpm add @aomex/cache (кросс-домен — @aomex/cors @aomex/csrf)
 ```
 
 | Пакет стратегии | Типичный сценарий |
 | --- | --- |
-| [`@aomex/auth/bearer`](/ru/plugins/auth-bearer-strategy) | Непрозрачный token, сессия на сервере |
-| [`@aomex/auth/session`](/ru/plugins/auth-session-strategy) | Cookie-логин в браузере; вместе с CORS + CSRF |
-| [`@aomex/auth/api-key`](/ru/plugins/auth-api-key-strategy) | Machine-to-machine, открытая платформа |
-| [`@aomex/auth-jwt-strategy`](/ru/plugins/auth-jwt-strategy) | Самодостаточный JWT, меньше обращений к БД |
-| [`@aomex/oauth2-client`](/ru/plugins/oauth2-client) | Сторонний authorization-code логин; частые вендоры — пресеты [aomex-contrib](https://github.com/aomex/aomex-contrib) (не стратегия Auth; после callback выдаёте одну из выше) |
+| [`@aomex/auth/bearer`](/ru/plugins/auth-bearer-strategy) | непрозрачный token, сессия на сервере |
+| [`@aomex/auth/session`](/ru/plugins/auth-session-strategy) | Cookie в браузере; вместе с CORS + CSRF |
+| [`@aomex/auth/api-key`](/ru/plugins/auth-api-key-strategy) | машина–машина, открытая платформа |
+| [`@aomex/auth-jwt-strategy`](/ru/plugins/auth-jwt-strategy) | самодостаточный JWT, меньше ходов в БД |
+| [`@aomex/oauth2-client`](/ru/plugins/oauth2-client) | сторонний authorization code; частые вендоры — пресеты [aomex-contrib](https://github.com/aomex/aomex-contrib) (не стратегия Auth; после колбэка выдаёте одну из стратегий выше) |
 
-## authenticate на Router
+## Группа приватного API: authenticate на Router
 
-Стратегии в `Auth` (Bearer / Session / API Key / JWT); `authenticate(name)` — middleware идентичности на Router или маршрут. После успеха `ctx.auth[name]`; на маршруте `authorize` для детальных прав.
+В экземпляре `Auth` регистрируют стратегии (Bearer / Session / API Key / JWT); `authenticate(name)` возвращает middleware «сначала личность». Когда вся группа интерфейсов требует входа — вешайте на `Router.mount`; после успеха `ctx.auth[name]` читает личность.
 
 ```typescript
 import { Auth } from '@aomex/auth';
@@ -68,7 +68,10 @@ router.delete('/posts/:id', {
 });
 ```
 
-Цепочка на одном маршруте:
+- `ctx.auth.bearer` имеет смысл только после `authenticate('bearer')` и успеха; в типах появится поле с именем стратегии.
+- Тип второго аргумента `authorize('bearer', 10)` берётся из вашей сигнатуры `onAuthorize` (число, код права и т.д.). Неуспех обычно **403** — предполагается, что **уже** прошли authenticate соответствующей стратегии; только authorize без authenticate runtime не «подстрахует» как типы.
+
+Когда на одном маршруте нужно «сначала войти, потом права», можно цепочкой:
 
 ```typescript
 router.post('/admin/reboot', {
@@ -79,49 +82,32 @@ router.post('/admin/reboot', {
 });
 ```
 
-- `ctx.auth.bearer` имеет смысл после `authenticate('bearer')`; в типах есть имя стратегии.
-- Второй аргумент `authorize('bearer', 10)` следует сигнатуре `onAuthorize` (число, код права и т.д.).
-- `auth.strategy('bearer').signature(...)` — на **login action** для выдачи token, не в auth-middleware.
+## Как выдавать при логине
+
+При логине и обновлении токена в бизнес-коде вызывайте `auth.strategy(name)` для выдачи (случайная строка Bearer, JWT payload и т.д.). **На маршрут логина не вешайте authenticate**, иначе без token никогда не войдёте.
 
 ```typescript
-// 登录成功后签发（示例）
+// после успешного логина (пример)
 const token = auth.strategy('bearer').signature('sha256', user.id);
 ```
 
-## authenticate(name)
+## Публичные интерфейсы не впихивайте в уже аутентифицированный Router
 
-| Когда | Куда |
+| Место | Подходит |
 | --- | --- |
-| Вся группа — только после логина | `Router.mount` |
-| Публичные и приватные в одном файле | `mount` на маршруте или два Router |
+| `Router.mount` | вся группа приватного API |
+| mount одного маршрута | отдельные публичные / более жёсткая авторизация; когда в одном файле с публичными |
+| `WebApp.mount` | почти весь сайт приватный; health-check — отдельный Router |
 
-Провал стратегии → **401**; успех пишет `ctx.auth[name]`. У middleware есть `.authorize(...)` для цепочки. **401** — нет/битый token; **403** — вошли, но нельзя; не смешивайте смысл.
+Публичные маршруты лучше не втискивать в уже аутентифицированный Router: отдельный Router без authenticate проще, чем skip повсюду. Повторяющиеся `authorize(...)` выносите в константы.
 
-### authorize(name, ...args)
-
-Предполагает **уже** пройденную аутентификацию этой стратегии. Только `authorize` без `authenticate` в рантайме не спасёт — смотрите порядок mount. Обычно **403**.
-
-### strategy(name)
-
-Выдача credentials при login/refresh (случайный Bearer, JWT payload и т.д.). **Не вешайте authenticate на login** — без token клиент не зайдёт.
-
-### Куда монтировать
-
-| Место | Подходит | Заметка |
-| --- | --- | --- |
-| `Router.mount` | Вся приватная API-группа | Не смешивайте публичные маршруты в том же файле |
-| `mount` на маршруте | Отдельные публичные / жёстче auth | Повторы — в константу |
-| `WebApp.mount` | Почти весь сайт приватный | Health check — отдельный Router |
-
-Публичные API — отдельный Router без `authenticate`, а не `skip` повсюду.
-
-В `generateOpenapi` передайте тот же `app`, что в проде — `security` в доке совпадёт с реальностью. При нескольких стратегиях имена `authenticate('jwt')` = ключи в `strategies`.
+Не вошли / невалидный token — **401**; вошли, но роли мало — **403**, не смешивайте смыслы. При генерации OpenAPI передайте в `generateOpenapi` тот же `app`, что в проде — тогда security в доке совпадёт с реальной аутентификацией. При нескольких стратегиях имена вроде `authenticate('jwt')` должны совпадать с ключами strategies.
 
 ## Связанное
 
-- [Bearer](/ru/plugins/auth-bearer-strategy)
+- [Стратегия Bearer](/ru/plugins/auth-bearer-strategy)
 - [Стратегия Session](/ru/plugins/auth-session-strategy)
- [API Key](/ru/plugins/auth-api-key-strategy)
-- [JWT](/ru/plugins/auth-jwt-strategy)
-- Сторонний authorization-code логин: [OAuth2-клиент](/ru/plugins/oauth2-client)
-- Нестандартный протокол: [Своя стратегия auth](/ru/advanced/auth-strategy)
+- [Стратегия API Key](/ru/plugins/auth-api-key-strategy)
+- [Стратегия JWT](/ru/plugins/auth-jwt-strategy)
+- Сторонний authorization code: [OAuth2-клиент](/ru/plugins/oauth2-client)
+- Особый протокол: [Продвинутое: своя стратегия аутентификации](/ru/advanced/auth-strategy)

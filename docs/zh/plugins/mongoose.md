@@ -66,17 +66,11 @@ defineMongooseModel 返回标准 Mongoose Model，并带上**输入/输出**相�
 
 ## 模型字段与对外 DTO
 
-| 字段 / 选项 | 什么时候用 |
-| --- | --- |
-| `schemas` | 字段 → Validator，或嵌套对象 |
-| `indexes` | `{ fields, ...IndexOptions }[]` |
-| `timestamps` / `versionKey` | 与 Mongoose SchemaOptions 一致 |
-| 其它 SchemaOptions | 透传给 Mongoose |
-| 路由 `response({ content })` | 对外 DTO；仅 DB 字段不要默认进 API |
+`schemas` 里写字段 → Validator（嵌套裸对象会自动收成对象校验）。`indexes`、`timestamps`、`versionKey` 以及其它 SchemaOptions 透传给 Mongoose——唯一复合索引、pre hook 等校验器盖不住的，仍在模型层配。
 
-和 [Prisma](/zh/plugins/prisma) 场景不同：这里是 Mongoose + Mongo，不是 definePrismaSchema。
+对外别把 Mongoose 文档原样 `ctx.send`：敏感或仅 DB 字段会泄露。路由上用 `response({ content })` 或显式 pick 收成 DTO。
 
-只定义模型、路由仍手写另一套 shape 时，改字段仍要改两处，违背「共用 rule」的初衷。别把 Mongoose 文档原样 ctx.send——敏感或仅 DB 字段会泄露；用 response 或显式 pick。校验器盖不住唯一复合索引、pre hook 等，仍在模型层配置。
+和 [Prisma](/zh/plugins/prisma) 场景不同：这里是 Mongoose + Mongo，不是 definePrismaSchema。只定义模型、路由仍手写另一套 shape 时，改字段仍要改两处，违背「共用 rule」的初衷。
 
 ## 相关
 

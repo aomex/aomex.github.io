@@ -15,6 +15,7 @@ const withPrefix = (prefix: string, path: string) => {
 const makeNav = (prefix: string): DefaultTheme.NavItem[] => {
   return [
     { text: 'Web', link: withPrefix(prefix, '/web/') },
+    { text: 'WebSocket', link: withPrefix(prefix, '/websocket/') },
     { text: 'Console', link: withPrefix(prefix, '/console/') },
     { text: 'GitHub', link: github },
   ];
@@ -67,6 +68,18 @@ type SidebarLabels = {
   commander: string;
   options: string;
   cron: string;
+  websocketApp: string;
+  websocketEntry: string;
+  websocketChannel: string;
+  websocketIo: string;
+  websocketPayload: string;
+  websocketEmit: string;
+  websocketTransport: string;
+  websocketHub: string;
+  websocketMiddlewares: string;
+  websocketDocs: string;
+  asyncapi: string;
+  asyncapiUi: string;
   common: string;
   middleware: string;
   service: string;
@@ -137,6 +150,18 @@ const zhLabels: SidebarLabels = {
   commander: '指令路由',
   options: '输入参数',
   cron: '定时任务 Cron',
+  websocketApp: 'WebSocket 应用',
+  websocketEntry: '应用入口',
+  websocketChannel: '事件路由',
+  websocketIo: '输入输出',
+  websocketPayload: '入站 payload',
+  websocketEmit: '出站 emit',
+  websocketTransport: '传输层',
+  websocketHub: '多机 Hub',
+  websocketMiddlewares: '常用中间件',
+  websocketDocs: '业务文档',
+  asyncapi: '生成 AsyncAPI',
+  asyncapiUi: 'AsyncAPI UI',
   common: '通用模块',
   middleware: '中间件',
   service: '服务层',
@@ -207,6 +232,18 @@ const zhTWLabels: SidebarLabels = {
   commander: '指令路由',
   options: '輸入引數',
   cron: '定時任務 Cron',
+  websocketApp: 'WebSocket 應用',
+  websocketEntry: '應用入口',
+  websocketChannel: '事件路由',
+  websocketIo: '輸入輸出',
+  websocketPayload: '入站 payload',
+  websocketEmit: '出站 emit',
+  websocketTransport: '傳輸層',
+  websocketHub: '多機 Hub',
+  websocketMiddlewares: '常用中介軟體',
+  websocketDocs: '業務文件',
+  asyncapi: '生成 AsyncAPI',
+  asyncapiUi: 'AsyncAPI UI',
   common: '通用模組',
   middleware: '中介軟體',
   service: '服務層',
@@ -277,6 +314,18 @@ const enLabels: SidebarLabels = {
   commander: 'Commands',
   options: 'CLI options',
   cron: 'Cron jobs',
+  websocketApp: 'WebSocket app',
+  websocketEntry: 'App entry',
+  websocketChannel: 'Event channels',
+  websocketIo: 'Input / output',
+  websocketPayload: 'Inbound payload',
+  websocketEmit: 'Outbound emit',
+  websocketTransport: 'Transport',
+  websocketHub: 'Multi-node Hub',
+  websocketMiddlewares: 'Common middleware',
+  websocketDocs: 'Business docs',
+  asyncapi: 'Generate AsyncAPI',
+  asyncapiUi: 'AsyncAPI UI',
   common: 'Common modules',
   middleware: 'Middleware',
   service: 'Services',
@@ -347,6 +396,18 @@ const jaLabels: SidebarLabels = {
   commander: "コマンドルート",
   options: "オプション",
   cron: "Cron",
+  websocketApp: "WebSocket アプリ",
+  websocketEntry: "アプリのエントリ",
+  websocketChannel: "イベントルーティング",
+  websocketIo: "入出力",
+  websocketPayload: "受信 payload",
+  websocketEmit: "送信 emit",
+  websocketTransport: "トランスポート",
+  websocketHub: "マルチノード Hub",
+  websocketMiddlewares: "よく使うミドルウェア",
+  websocketDocs: "業務ドキュメント",
+  asyncapi: "AsyncAPI を生成",
+  asyncapiUi: "AsyncAPI UI",
   common: "共通モジュール",
   middleware: "ミドルウェア",
   service: "サービス層",
@@ -417,6 +478,18 @@ const ruLabels: SidebarLabels = {
   commander: "Маршруты команд",
   options: "Параметры ввода",
   cron: "Cron",
+  websocketApp: "WebSocket-приложение",
+  websocketEntry: "Точка входа",
+  websocketChannel: "Маршруты событий",
+  websocketIo: "Ввод и вывод",
+  websocketPayload: "Входящий payload",
+  websocketEmit: "Исходящий emit",
+  websocketTransport: "Транспорт",
+  websocketHub: "Hub для нескольких узлов",
+  websocketMiddlewares: "Частые middleware",
+  websocketDocs: "Бизнес-документация",
+  asyncapi: "Генерация AsyncAPI",
+  asyncapiUi: "AsyncAPI UI",
   common: "Общие модули",
   middleware: "Middleware",
   service: "Сервисный слой",
@@ -535,6 +608,41 @@ const makeSidebar = (
       ],
     },
     {
+      text: t.websocketApp,
+      collapsed: false,
+      items: [
+        { text: t.websocketEntry, link: p('/websocket/') },
+        { text: t.websocketChannel, link: p('/websocket/channel') },
+        {
+          text: t.websocketIo,
+          collapsed: true,
+          items: [
+            { text: t.websocketPayload, link: p('/websocket/payload') },
+            { text: t.websocketEmit, link: p('/websocket/emit') },
+          ],
+        },
+        { text: t.websocketTransport, link: p('/websocket/transport') },
+        { text: t.websocketHub, link: p('/websocket/hub') },
+        {
+          text: t.websocketMiddlewares,
+          collapsed: true,
+          items: [
+            { text: t.accessLog, link: p('/websocket/access-log') },
+            { text: t.rateLimit, link: p('/websocket/rate-limit') },
+            { text: t.abuse, link: p('/websocket/abuse') },
+          ],
+        },
+        {
+          text: t.websocketDocs,
+          collapsed: true,
+          items: [
+            { text: t.asyncapiUi, link: p('/asyncapi/asyncapi-ui') },
+            { text: t.asyncapi, link: p('/asyncapi/') },
+          ],
+        },
+      ],
+    },
+    {
       text: t.common,
       collapsed: false,
       items: [
@@ -631,7 +739,7 @@ export default defineConfig({
       lang: 'en-US',
       link: '/en/',
       description:
-        'Type-safe Node.js framework: one middleware model for both Web and Console',
+        'Type-safe Node.js framework: one middleware model for Web, WebSocket, and Console',
       themeConfig: {
         editLink: {
           pattern: editPattern,
@@ -662,7 +770,7 @@ export default defineConfig({
       label: '简体中文',
       lang: 'zh-CN',
       link: '/zh/',
-      description: '类型安全的 Node.js 框架：同一套中间件，同时写 Web 与 Console',
+      description: '类型安全的 Node.js 框架：同一套中间件，同时写 Web、WebSocket 与 Console',
       themeConfig: {
         editLink: {
           pattern: editPattern,
@@ -693,7 +801,7 @@ export default defineConfig({
       label: '繁體中文',
       lang: 'zh-TW',
       link: '/zh-TW/',
-      description: '型別安全的 Node.js 框架：同一套中介軟體，同時寫 Web 與 Console',
+      description: '型別安全的 Node.js 框架：同一套中介軟體，同時寫 Web、WebSocket 與 Console',
       themeConfig: {
         editLink: {
           pattern: editPattern,
@@ -724,7 +832,7 @@ export default defineConfig({
       label: "日本語",
       lang: "ja-JP",
       link: "/ja/",
-      description: "型安全な Node.js フレームワーク — Web と Console で同じミドルウェアを共有",
+      description: "型安全な Node.js フレームワーク — Web・WebSocket・Console で同じミドルウェアを共有",
       themeConfig: {
         editLink: {
           pattern: editPattern,
@@ -755,7 +863,7 @@ export default defineConfig({
       label: "Русский",
       lang: "ru-RU",
       link: "/ru/",
-      description: "Type-safe фреймворк Node.js: одни middleware для Web и Console",
+      description: "Type-safe фреймворк Node.js: одни middleware для Web, WebSocket и Console",
       themeConfig: {
         editLink: {
           pattern: editPattern,

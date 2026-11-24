@@ -2,28 +2,28 @@
 outline: deep
 ---
 
-# HTTP access log
+# Access log
 
-One access line per finished request: method, URL, status, duration—for traffic and slow-endpoint views.
+Want to see “who hit which HTTP route and how long it took” inside the app? Use `httpAccessLog()` from `@aomex/access-log`. One line when the request finishes.
 
-**Prefer Nginx `access_log` in production** (or gateway/LB built-in logs): consistent format, less Node event-loop load, easier ingestion. `@aomex/http-access-log` fits local dev, no reverse proxy, or when logs need **userId / tenant / traceId** only available inside the app.
+**Prefer Nginx `access_log` in production** (or the gateway’s built-in log). This package fits local development, no reverse proxy, and cases where the line must include **userId / tenant / traceId**—fields you only have after entering Node.
 
 ```bash
-pnpm add @aomex/http-access-log
+pnpm add @aomex/access-log
 ```
 
-## Mount early site-wide
+## Mount before routers
 
-Put `httpAccessLog()` **before** `routers` when you want in-app access logs: combined-style line after the request; 404 and validation 400 still count. Mounting later skews full-chain duration.
+Put `httpAccessLog()` **before** `routers`. After the onion finishes, one line is written; 404 and validation 400 still count. Mount too late and duration / early exits will not match the “full site audit” you want.
 
 ```typescript
-import { httpAccessLog } from '@aomex/http-access-log';
+import { httpAccessLog } from '@aomex/access-log';
 import { routers, WebApp } from '@aomex/web';
 
 const app = new WebApp({
   services,
   logger: services.logger,
-  language: { mode: 'fixed', language: 'zh-CN' },
+  language: { mode: 'fixed', language: 'en-US' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:4]
     httpAccessLog(), // [!code highlight]
@@ -32,27 +32,18 @@ const app = new WebApp({
 });
 ```
 
-Default is combined-like one-liner via logger (often console). Fields roughly: ip, method, url, statusCode, duration, contentLength.
+With no options, lines go to the console in a combined-ish style: ip, method, url, statusCode, duration, contentLength. Mount it for local direct access; add [Response time](/en/plugins/response-time) when you chase slow routes.
 
 ::: warning
-After `routers`, chain duration and early 404 may not match “full site audit” intent.
+Mounted **after** routers, full-chain duration and early-exit 404s may not match a “full site audit.”
 :::
 
-`customTokens` receive `WebContext`: `ctx.auth` etc. need **inner auth** to finish—access log writes after `await next()`, usually seeing onion inner props. If `customTokens` always read `-` for `ctx.auth`, check order: auth on routes with log outside may need auth lifted to `Router.mount`.
+## Format and write to a file
 
-## Format and sinks
-
-| Capability | When to use | Default |
-| --- | --- | --- |
-| `format` | Align ELK/Loki field order in prod | built-in combined style |
-| `transports` | File, remote collectors | console (via `logger`) |
-| `customTokens` | userId, tenant, traceId | — |
-| `HttpAccessLogToken.*` | Compose `ip` / `method` / `duration` etc. | exported by package |
-
-### Production: file
+To align field order with ELK / Loki, or write to a file, use `format` + `transports`. Prefer composing `format` from `HttpAccessLogToken` instead of hand-typed placeholders that are easy to mistype.
 
 ```typescript
-import { HttpAccessLogToken, httpAccessLog } from '@aomex/http-access-log';
+import { HttpAccessLogToken, httpAccessLog } from '@aomex/access-log';
 import { FileTransport } from '@aomex/logger';
 
 httpAccessLog({
@@ -68,7 +59,11 @@ httpAccessLog({
 });
 ```
 
-### userId after auth
+Empty `transports` or `disabled: true` turns access logging off. With Nginx in production, **prefer** the gateway `access_log`; only open app-layer disk / collectors when you need custom tokens or there is no reverse proxy—and keep them separate from business logs.
+
+## Add userId
+
+The line is written **after** `await next()`, so `ctx.auth` hung by inner auth is usually readable. Use `customTokens` to inject business fields into `format`; the callback receives the full `WebContext`.
 
 ```typescript
 httpAccessLog({
@@ -81,17 +76,12 @@ httpAccessLog({
 });
 ```
 
-Often paired with [Response time](/en/plugins/response-time): header for client/gateway, `duration` in logs for the platform.
+Often paired with [Response time](/en/plugins/response-time): `X-Response-Time` for clients / gateways, duration in the log for collectors.
 
-| Environment | Guidance |
-| --- | --- |
-| Local direct | This plugin to console; add `responseTime()` for slow-route debugging |
-| Production with Nginx | **Prefer** `access_log`; enable app layer only for custom tokens |
-| Production no proxy | File or ship to collector; keep separate from business logs |
+Access logs are for traffic and latency—**not** the only audit for sensitive actions. Orders and permission changes still belong in business logs or an audit table.
 
-Access logs suit traffic and latency—not the sole audit trail for sensitive actions; add business logs or audit tables. Nginx and in-app logs can coexist—avoid two conflicting field schemas.
+## Next
 
-## Next steps
-
-- Header timing: [Response time](/en/plugins/response-time)
-- Levels and requestId: [Logger · withBindings](/en/core/logger#request-scoped-context-withbindings)
+- Response header timing: [Response time](/en/plugins/response-time)
+- WebSocket connection / message access logs: [Access log (WebSocket)](/en/websocket/access-log)
+- Levelled sinks / requestId: [Logger](/en/core/logger)

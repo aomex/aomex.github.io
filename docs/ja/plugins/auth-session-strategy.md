@@ -4,18 +4,18 @@ outline: deep
 
 # Session ストラテジー
 
-ブラウザ側のログイン状態を **HttpOnly Cookie** に置く。Cookie には不透明な `sessionId` だけを入れ、ユーザーデータは `@aomex/cache` アダプター（memory / Redis）に置く。SPA がクロスオリジンのときは [CORS](/ja/plugins/cors)（Cookie 送信）と [CSRF](/ja/plugins/csrf)（クロスサイト書き込み防止）もセットで要る——どちらか欠けると、ログイン状態が届かないか、第三者サイトに悪用されやすい。
+ブラウザ側のログイン状態を **HttpOnly Cookie** に置く。Cookie には不透明な `sessionId` だけ。ユーザーデータは `@aomex/cache` アダプタ（memory / Redis）にある。SPA がクロスオリジンのときは [CORS](/ja/plugins/cors)（Cookie 付き）と [CSRF](/ja/plugins/csrf)（クロスサイト書き込み防止）も同時に揃える——どちらか欠けると、ログイン状態が渡らないか、第三者サイトに悪用されやすい。
 
-「同一オリジンまたは信頼できるフロント + サーバー側でいつでもセッション破棄」向け。モバイル単体やマシン間呼び出しなら [Bearer](/ja/plugins/auth-bearer-strategy) や [JWT](/ja/plugins/auth-jwt-strategy) の方が多い。
+「同一サイトまたは信頼できるフロント + サーバー側でいつでもセッションを無効にできる」向け。純粋なモバイル / マシン呼び出しでは [Bearer](/ja/plugins/auth-bearer-strategy) や [JWT](/ja/plugins/auth-jwt-strategy) の方が多い。
 
 ## インストール
 
-Session ストラテジーは `@aomex/auth` 本体に含まれる。セッション保存には `@aomex/cache`（本番の Redis アダプターも）が要る。クロスオリジン Cookie なら CORS / CSRF も追加。
+Session ストラテジーは `@aomex/auth` 本体に含まれる。セッション保存には `@aomex/cache`（と本番用 Redis アダプタ）も要る。クロスオリジン Cookie ならさらに CORS / CSRF。
 
 ```bash
 pnpm add @aomex/auth @aomex/cache
-# クロスオリジン Cookie：pnpm add @aomex/cors @aomex/csrf
-# 複数インスタンスでセッション共有：pnpm add @aomex/cache-redis-adapter
+# 跨域 Cookie：pnpm add @aomex/cors @aomex/csrf
+# 多实例共享会话：pnpm add @aomex/cache-redis-adapter
 ```
 
 ```typescript
@@ -24,13 +24,13 @@ import { AuthSessionStrategy } from '@aomex/auth/session';
 
 ## 先に CORS と CSRF を載せる
 
-クロスオリジンのフロントが Cookie を送るとき、ブラウザは次を要求する：
+クロスオリジンのフロントが Cookie を付けるには、ブラウザの要件として：
 
 1. リクエストに `credentials: 'include'`（または XHR `withCredentials`）
-2. 応答に `Access-Control-Allow-Credentials: true`、かつ `Access-Control-Allow-Origin` が**具体的なドメイン**（`*` 不可）
-3. 書き込みに CSRF ヘッダー。無いと他人のページがあなたの Cookie を「借りて」POST できる
+2. 応答に `Access-Control-Allow-Credentials: true`、かつ `Access-Control-Allow-Origin` が**具体ドメイン**（`*` 不可）
+3. 書き込みに CSRF ヘッダー。さもないと他人のページがあなたの Cookie を「借りて」POST できる
 
-`credentials: true` のときは **`origin` を明示必須**。無引数 cors() のデフォルト反射には頼れない——起動時に例外になる。CSRF はダブルサブミット Cookie：読める Cookie `csrfToken` とヘッダー `x-csrf-token` が一致したときだけ通す。
+`credentials: true` のときは **必ず `origin` を明示**する。無引数 cors() のデフォルト反射に頼らない——起動時に例外になる。CSRF はダブルサブミット Cookie：読める Cookie `csrfToken` とリクエストヘッダー `x-csrf-token` が一致したときだけ通す。
 
 ```typescript
 import { cors } from '@aomex/cors';
@@ -40,7 +40,7 @@ import { routers, WebApp } from '@aomex/web';
 const app = new WebApp({
   services,
   logger: services.logger,
-  language: { mode: 'fixed', language: 'ja-JP' },
+  language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:8]
     cors({
@@ -55,12 +55,12 @@ const app = new WebApp({
 ```
 
 ::: tip
-ローカルでポートが分かれているときは origin を `http://localhost:5173`（またはフロントの URL）に。`*` は使わない。同一オリジン配備なら cors() は省略できるが、CSRF は載せたままがよい。
+ローカルでポートが分かれているときは、origin を `http://localhost:5173`（またはフロントのアドレス）にする。`*` は使わない。同一サイト配備（フロントと API が同じ origin）なら cors() は省略できるが、CSRF は載せておくのがよい。
 :::
 
-マウント順：cors → csrf → routers。どちらも routers の**前**に置く。そうしないとエラー応答に CORS / 発行直後の CSRF Cookie が付かない。
+マウント順：cors → csrf → routers。どちらも routers の**前**。エラー応答にも CORS / 発行直後の CSRF Cookie が付く。
 
-フロントの更新系リクエストの例：
+フロントがデータを変えるリクエストのおおよそは：
 
 ```typescript
 const csrfToken = document.cookie
@@ -79,11 +79,11 @@ await fetch('https://api.example.com/api/posts', {
 });
 ```
 
-GET など安全なメソッドはデフォルトで CSRF を検証しない。初回アクセスで `csrfToken` Cookie を発行する（`HttpOnly=false`、JS から読める）。詳細は [CSRF](/ja/plugins/csrf)。
+GET など安全メソッドはデフォルトで CSRF を検証しない。初回アクセスで `csrfToken` Cookie が発行される（`HttpOnly=false`、JS から読める）。詳細は [CSRF](/ja/plugins/csrf)。
 
 ## store、cookie、onLoaded
 
-`cookie.maxAge`（秒）は必須で、キャッシュ TTL にもなる。`onLoaded` は cache に入れた Stored を業務身元に変換する。退会済みなら `false` → **401**。
+`cookie.maxAge`（秒）は必須で、同時にキャッシュ TTL になる。`onLoaded` は cache に入れた Stored を業務身分にまとめる。ユーザーがすでにログアウトなら `false` → **401**。
 
 ```typescript
 import { Auth } from '@aomex/auth';
@@ -98,7 +98,7 @@ const auth = new Auth({
       store: new CacheMemoryAdapter(), // [!code highlight]
       cookie: {
         maxAge: 7 * 24 * 3600,
-        // 本番のクロスサイトフロントではよく: sameSite: 'none', secure: true
+        // 生产跨站前端常见：sameSite: 'none', secure: true
       },
       onLoaded: async (data: { userId: number }) => {
         const user = await findActiveUser(data.userId);
@@ -112,21 +112,13 @@ const auth = new Auth({
 });
 ```
 
-本番や複数インスタンスでは Redis など外部アダプターに。[キャッシュ](/ja/core/cache) を参照。Cookie 名のデフォルトは `sessionId`。`setCookie` のデフォルトは `httpOnly: true`、`sameSite: Strict`（クロスサイトフロントは `'none'` と `secure`）。
+本番や複数インスタンスでは Redis など外付けアダプタに替える。[キャッシュ](/ja/core/cache) を参照。Cookie のデフォルト名は `sessionId`。`setCookie` のデフォルトは `httpOnly: true`、`sameSite: Strict`（クロスサイトフロントは `'none'` にして `secure` をオン）。`cookie.name` / `path` / `domain` はフロントのドメインに合わせる。
 
-| オプション | いつ使うか |
-| --- | --- |
-| `store` | セッションの置き場。ローカルは memory、複数レプリカは Redis |
-| `cookie.maxAge` | セッション有効秒数。**必須** |
-| `cookie.name` / `path` / `domain` / `sameSite` / `secure` | フロントドメイン・クロスサイト有無に合わせる |
-| `sliding` | 認証成功のたびに TTL + Cookie を延長。アクティブユーザーの強制ログアウトを減らす |
-| `generateCacheKey` | キー接頭辞のカスタム。デフォルト `auth:session:${sessionId}` |
-| `onLoaded` | Stored → 業務身元。DB 照会・失効 |
-| `onAuthorize` | `authorize(ロール)` が要るときだけ |
+活発なユーザーが強制ログアウトされにくいようにするなら `sliding`：認証成功のたびに TTL + Cookie を延長。カスタムキャッシュキー接頭辞は `generateCacheKey`（デフォルト `auth:session:${sessionId}`）。`authorize(ロール)` が要るときだけ `onAuthorize` を書く。
 
 ## ログイン、認証、ログアウト
 
-ログインルートに `authenticate` を**載せない**。`strategy.login(ctx, stored)` でキャッシュ書き込みと Cookie 設定（新しい `sessionId` を発行。リクエストに古い Cookie があれば、新セッション成功後に旧セッションを削除）。保護 API には `authenticate('session')`、読み取りは `ctx.auth.session`。
+ログインルートに `authenticate` を**載せない**。`strategy.login(ctx, stored)` でキャッシュを書き Cookie を付ける（新しい `sessionId` を発行。リクエストに古い Cookie があれば、書き込み成功後に旧セッションを削除）。プライベート API に `authenticate('session')` を載せ、`ctx.auth.session` を読む。
 
 ```typescript
 const session = auth.strategy('session');
@@ -171,10 +163,10 @@ privateRouter.get('/me', {
 ctx.auth.session // { sessionId: string; data: Loaded }
 ```
 
-`data` は `onLoaded` の戻り値。`logout` はキャッシュ削除と Cookie 削除。`touch` は TTL だけ延長。権限昇格や機微操作のあとに id を回すなら `regenerateSessionId(ctx)`（新しい Stored を渡してもよい）。
+`data` は `onLoaded` の戻り値。`logout` はキャッシュを消し Cookie をクリア。`touch` は延長だけで保存内容は変えない。昇格や機微操作のあと id を回すときは `regenerateSessionId(ctx)`（新しい Stored を渡してもよい）。
 
 ::: warning
-クロスオリジンではフロントが必ず `credentials: 'include'` を付ける。付けないとブラウザが `sessionId` Cookie を送らず、「ログイン成功なのにすぐ 401」に見える。
+クロスオリジンではフロントが必ず `credentials: 'include'`。さもないとブラウザが `sessionId` Cookie を付けず、「ログイン成功なのにすぐ 401」に見える。
 :::
 
 ## Bearer / JWT との選び方
@@ -183,15 +175,15 @@ ctx.auth.session // { sessionId: string; data: Loaded }
 | --- | --- | --- |
 | 資格情報の置き場 | HttpOnly Cookie | ヘッダー / ローカルストレージ |
 | クロスオリジン | CORS credentials + 多くの場合 CSRF | だいたい `Authorization` だけ |
-| 失効 | キャッシュ削除で足りる | Bearer はセッション削除；JWT は短い TTL / ブラックリスト |
+| 失効 | キャッシュを消すだけ | Bearer はセッション削除。JWT は短い TTL / ブラックリスト |
 | 典型クライアント | ブラウザ SPA / 管理画面 | App、オープンプラットフォーム、サービス間 |
 
-同一オリジンの管理画面は Session 優先。公開 API は Bearer か JWT。総入口は [認証](/ja/plugins/auth)。
+同一サイトの管理画面は Session 優先。公開 API は Bearer または JWT 優先。総入口は [認証](/ja/plugins/auth)。
 
 ## 関連
 
-- [CORS](/ja/plugins/cors)
+- [クロスオリジン CORS](/ja/plugins/cors)
 - [CSRF](/ja/plugins/csrf)
 - [認証](/ja/plugins/auth)
 - [キャッシュ](/ja/core/cache)
-- [Bearer 戦略](/ja/plugins/auth-bearer-strategy)
+- [Bearer ストラテジー](/ja/plugins/auth-bearer-strategy)

@@ -158,7 +158,7 @@ response({
 
 ## 跳過響應套殼
 
-全站配了 [envelope](/zh-TW/web/envelope) 時，某個狀態碼仍要**裸寫出**，在對應 `response()` 上加 `skipEnvelope: true`。只影響本條的 `statusCode`；同路由其它狀態碼照常套殼。執行時與 OpenAPI 一起登記。
+全站配了 [envelope](/zh-TW/web/envelope) 時，某個狀態碼仍要**裸寫出**，在對應 `response()` 上加 `skipEnvelope: true`。隻影響本條的 `statusCode`；同路由其它狀態碼照常套殼。執行時與 OpenAPI 一起登記。
 
 ```typescript
 router.get('/report.pdf', { // [!code focus:12]

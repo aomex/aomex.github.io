@@ -73,7 +73,7 @@ await services.logger.error(err, '结账失败');
 await services.logger.fatal(err, '数据库不可用，准备退出');
 ```
 
-## 出口列表
+## 先選出口
 
 | 出口 | 包 | 什麼時候用 |
 | --- | --- | --- |
@@ -85,13 +85,13 @@ await services.logger.fatal(err, '数据库不可用，准备退出');
 | [SentryTransport](#sentrytransport) | `@aomex/logger-sentry` | error 進 Sentry |
 | [TelegramTransport](#telegramtransport) | `@aomex/logger-telegram` | fatal 叫醒人 |
 
-生產常見組合：控制台 info + 檔案 warn + Sentry error + Telegram fatal。每個出口自己設 level，別一個通道扛全部噪音。
+生產常見組合：控制台 info + 檔案 warn + Sentry error + Telegram fatal。每個出口自己設 level，別一個通道扛全部噪音。下面按出口講怎麼配。
 
 ---
 
 ### ConsoleTransport
 
-打到終端。TTY 下 text 預設著色；採集管道可改 json。
+打到終端。TTY 下 text 預設著色；採集管道要 NDJSON 時改 `format: 'json'`，並關掉著色。
 
 ```typescript
 { transport: new ConsoleTransport(), level: 'debug' },
@@ -104,17 +104,11 @@ new ConsoleTransport({
 });
 ```
 
-| 選項 | 什麼時候用 | 預設 |
-| --- | --- | --- |
-| `format` | 採集要用 NDJSON 時設 `'json'` | `'text'` |
-| `colorize` | 強制開關著色 | text 且 TTY 時開 |
-| `colors` | 改等級配色 | 內建 |
-| `output` | 所有等級走同一流 | — |
-| `stderrLevels` | 未設 `output` 時哪些等級進 stderr | `error` / `fatal` |
+未設 `output` 時，error / fatal 預設進 stderr，其餘進 stdout；要全部進同一流時再設 `output`。`colors` 可改等級配色。
 
 ### FileTransport
 
-追加寫本地檔案；目錄不存在會自動建。
+追加寫本地檔案；目錄不存在會自動建。固定路徑夠用就一行；要按日 / 等級分檔案，用 `{year}` / `{month}` / `{day}` / `{level}` 佔位（也可 `(log) => path`）。
 
 ```typescript
 {
@@ -125,20 +119,16 @@ new ConsoleTransport({
 
 ```typescript
 new FileTransport({
-  file: './logs/{year}-{month}-{day}/{level}.log',
+  file: './logs/{year}-{month}-{day}/{level}.log', // [!code highlight]
   format: 'json',
 });
 ```
 
-| 選項 | 什麼時候用 | 預設 |
-| --- | --- | --- |
-| `file` | 固定路徑，或帶 `{year}`/`{level}` 佔位；也可 `(log) => path` | 按日+等級分檔案 |
-| `format` | 給 Fluent Bit 等時用 `'json'` | `'text'` |
-| `fileMode` / `dirMode` | 要收緊許可權時 | 系統預設 |
+給 Fluent Bit 等轉發時用 `format: 'json'`。要收緊許可權再動 `fileMode` / `dirMode`。
 
 ### StreamTransport
 
-寫任意 Writable（單元測試假流、程序管道）。
+寫任意 Writable（單元測試假流、程序管道）：
 
 ```typescript
 new StreamTransport({
@@ -147,14 +137,11 @@ new StreamTransport({
 });
 ```
 
-| 選項 | 什麼時候用 |
-| --- | --- |
-| `stream` | 必填，目標 Writable |
-| `format` | `'text'` / `'json'`，預設 text |
+`stream` 必填；`format` 預設 text。
 
 ### WebhookTransport
 
-HTTP 推到告警 / 自建收集端點。
+HTTP 推到告警 / 自建收集端點。慢鉤子可把 `timeoutMs` 調大（預設約 `30000`）；鑑權走 `headers`。
 
 ```typescript
 new WebhookTransport({
@@ -164,13 +151,7 @@ new WebhookTransport({
 });
 ```
 
-| 選項 | 什麼時候用 | 預設 |
-| --- | --- | --- |
-| `url` | 必填，鉤子地址 | — |
-| `method` | 非 POST 時 | `POST` |
-| `headers` | 鑑權、自定義頭 | — |
-| `format` | `'json'` / `'text'`，或函式拼 body | `'json'` |
-| `timeoutMs` | 慢鉤子調大 | `30000` |
+`format` 也可是函式，自己拼 body。method 預設 POST。
 
 ### CustomTransport
 
@@ -203,12 +184,7 @@ import { SentryTransport } from '@aomex/logger-sentry';
 },
 ```
 
-| 選項 | 什麼時候用 | 預設 |
-| --- | --- | --- |
-| `dsn` | 必填；構造時會 `Sentry.init` | — |
-| `flushTimeout` | 關停前等上報 | `2000` |
-
-DSN 走環境變數，別寫進倉庫。level 建議至少 error，別把 info 灌進 Sentry。
+DSN 走環境變數，別寫進倉庫。level 建議至少 error，別把 info 灌進 Sentry。關停前等上報可用 `flushTimeout`（預設約 `2000`）。
 
 ### TelegramTransport
 
@@ -228,16 +204,11 @@ import { TelegramTransport } from '@aomex/logger-telegram';
 },
 ```
 
-| 選項 | 什麼時候用 | 預設 |
-| --- | --- | --- |
-| `botToken` / `chatId` | 必填，來自 BotFather / 群 id | — |
-| `timeout` | 含自動重試的總超時 | `120000` |
-| `format` | 自定義訊息正文 | 內建 |
-| `dedupe` | 間隔內同指紋合併；`false` 關閉 | 開（約 30s） |
-
-適合「程序要掛了再叫人」；別綁一大堆 warn。
+適合「程序要掛了再叫人」；別綁一大堆 warn。間隔內同指紋會合並（`dedupe`，約 30s；設 `false` 關閉）。`timeout` 含自動重試，預設約 `120000`。
 
 ## 多出口組合
+
+把上面拼進一個 Service，按等級分流：
 
 ```typescript
 import { BaseLoggerService, ConsoleTransport, FileTransport } from '@aomex/logger';

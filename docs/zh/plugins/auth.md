@@ -26,9 +26,9 @@ pnpm add @aomex/auth
 | [`@aomex/auth-jwt-strategy`](/zh/plugins/auth-jwt-strategy) | 自包含 JWT，少查库 |
 | [`@aomex/oauth2-client`](/zh/plugins/oauth2-client) | 第三方授权码登录；常见厂商用 [aomex-contrib](https://github.com/aomex/aomex-contrib) 预设（非 Auth 策略；回调后再签发上面几套） |
 
-## Router 上挂 authenticate
+## 一组私有 API：Router 挂 authenticate
 
-`Auth` 实例里注册各策略（Bearer / Session / API Key / JWT）；`authenticate(name)` 返回「先验身份」的中间件，挂到 Router 或单条路由。验过以后 `ctx.auth[name]` 可读身份；再在单条路由上 `authorize` 做细粒度权限。
+`Auth` 实例里注册各策略（Bearer / Session / API Key / JWT）；`authenticate(name)` 返回「先验身份」的中间件。一整组接口都要先登录时，挂到 `Router.mount`；验过以后 `ctx.auth[name]` 可读身份。
 
 ```typescript
 import { Auth } from '@aomex/auth';
@@ -68,6 +68,9 @@ router.delete('/posts/:id', {
 });
 ```
 
+- `ctx.auth.bearer` 在挂上 `authenticate('bearer')` 且通过后才有意义；类型里会带上策略名对应的字段。
+- `authorize('bearer', 10)` 里第二个参数的类型，来自你在策略里写的 `onAuthorize` 签名（数字、权限码等）。失败一般是 **403**——假定**已经**走过对应策略的认证；只挂 authorize、忘了先 authenticate，运行时不会像类型那样帮你兜底。
+
 同一条路由要「先登录再卡权限」时，可以链式写：
 
 ```typescript
@@ -79,43 +82,26 @@ router.post('/admin/reboot', {
 });
 ```
 
-- ctx.auth.bearer 在挂上 authenticate('bearer') 且通过后才有意义；类型里会带上策略名对应的字段。
-- authorize('bearer', 10) 里第二个参数的类型，来自你在策略里写的 onAuthorize 签名（数字、权限码等）。
-- auth.strategy('bearer').signature(...) 用在**登录 action**里签发 token，不要塞进鉴权中间件——那是另一条 API 线。
+## 登录怎么签发
+
+登录、刷新令牌时在业务代码里用 `auth.strategy(name)` 签发凭证（Bearer 随机串、JWT payload 等）。**登录路由不要挂 authenticate**，否则没 token 永远进不来。
 
 ```typescript
 // 登录成功后签发（示例）
 const token = auth.strategy('bearer').signature('sha256', user.id);
 ```
 
-## authenticate(name)
+## 公开接口别硬挤进已鉴权 Router
 
-| 什么时候用 | 挂哪儿 |
+| 位置 | 适合 |
 | --- | --- |
-| 一整组接口都要先登录 | `Router.mount` |
-| 和公开接口混在同一文件 | 单路由 `mount`，或拆成两个 Router |
+| `Router.mount` | 整组私有 API |
+| 单路由 `mount` | 个别公开 / 更严授权；和公开接口混在同一文件时 |
+| `WebApp.mount` | 几乎整站私有；健康检查等要另开 Router |
 
-流程上：策略验不过 → **401**；成功则写入 ctx.auth[name]。返回的中间件还带 .authorize(...)，可继续链式收紧。未登录 / token 无效用 **401**；已登录但角色不够再用 **403**，别混在同一语义里。
+公开接口别硬挤进已鉴权 Router：单独一个不带 authenticate 的 Router，比到处 skip 好维护。重复多的 `authorize(...)` 可抽成常量。
 
-### authorize(name, ...args)
-
-假定**已经**走过对应策略的认证。只挂 authorize、忘了先 authenticate，运行时不会像类型那样帮你兜底——挂载顺序别反。失败一般是 **403**。
-
-### strategy(name)
-
-登录、刷新令牌时在业务代码里签发凭证（Bearer 随机串、JWT payload 等）。**登录路由不要挂 authenticate**，否则没 token 永远进不来。
-
-### 挂载位置怎么选
-
-| 位置 | 适合 | 注意 |
-| --- | --- | --- |
-| `Router.mount` | 整组私有 API | 同文件别塞公开路由 |
-| 单路由 `mount` | 个别公开 / 更严授权 | 重复多时可抽常量 |
-| `WebApp.mount` | 几乎整站私有 | 健康检查等要另开 Router |
-
-公开接口别硬挤进已鉴权 Router：单独一个不带 authenticate 的 Router，比到处 skip 好维护。
-
-生成 OpenAPI 时，给 `generateOpenapi` 传入与线上同一份 `app`，文档里的 security 才会对得上真实鉴权。多策略时 `authenticate('jwt')` 等名字要与 strategies 键名对齐。
+未登录 / token 无效用 **401**；已登录但角色不够再用 **403**，别混在同一语义里。生成 OpenAPI 时，给 `generateOpenapi` 传入与线上同一份 `app`，文档里的 security 才会对得上真实鉴权。多策略时 `authenticate('jwt')` 等名字要与 strategies 键名对齐。
 
 ## 相关
 

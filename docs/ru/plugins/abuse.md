@@ -4,18 +4,20 @@ outline: deep
 
 # Защита от злоупотреблений
 
-Скан каталогов, срабатывание honeypot, всплеск 404, фальшивые token при logout — это часто не «обычный перегруз», а разведка границ. `@aomex/abuse` **считает** по стратегиям и при лимите **блокирует IP** (или зовёт вас забанить аккаунт). Дополняет [ограничение частоты](/ru/plugins/rate-limit): лимит гасит всплески QPS, abuse — зондирование и злой умысел с бизнес-стороны.
+Сканирование каталогов, удары по honeypot, короткие всплески 404, фейковые token на logout — это чаще разведка границ, а не «обычное превышение». `@aomex/abuse` **считает** по стратегиям и при лимите **блокирует IP** (или вызывает вас, чтобы забанить аккаунт). Дополняет [ограничение частоты](/ru/plugins/rate-limit): лимит гасит всплески QPS, abuse ловит зонды и злоупотребления, о которых сообщает бизнес.
 
-Счётчики и блокировки лежат на адаптере `@aomex/cache` (memory / Redis и т.д.). В кластере — общий Redis. Опирается на `ctx.request.ip`; в проде задай `proxyIP: { mode: 'detect' }` (или доверенную цепочку), иначе все запросы могут выглядеть как IP прокси.
+Счётчики и состояние блокировки живут на адаптере `@aomex/cache` (memory / Redis и т.д.). Для нескольких инстансов — Redis. Зависит от `ctx.request.ip`: в проде задайте `proxyIP: { mode: 'detect' }` (или фиксированную цепочку доверия), иначе весь сайт может видеть только IP обратного прокси.
 
 ```bash
 pnpm add @aomex/abuse
-# также нужен @aomex/cache (в проде — Redis-адаптер)
+# нужен уже имеющийся @aomex/cache (и Redis-адаптер в проде)
 ```
 
-## Подключить middleware
+## Создать и повесить `.web()`
 
-`createAbuse` возвращает объект, который **одновременно middleware и API** (`userAbuse` / `ipAbuse` / `blockIP` …) — **не** вешается на `ctx`. Создай экземпляр, смонтируй, вызывай тот же объект из маршрутов и сервисов.
+`createAbuse` возвращает **сервис** (API вроде `ipAbuse` / `blockIP`), а не middleware, который сразу кладут в `mount`. На HTTP используйте `.web()` в `WebApp.mount`. В бизнес-коде вызывайте API того же объекта `abuse` — на **`ctx` он не появляется**.
+
+Ниже сначала две частые стратегии: honeypot-пути (один удар → блок) и накопление кодов ошибок (короткий всплеск 401 / 404 → блок).
 
 ```typescript
 import { createAbuse } from '@aomex/abuse';
@@ -45,36 +47,21 @@ const abuse = createAbuse({ // [!code focus:18]
 const app = new WebApp({
   services,
   logger: services.logger,
-  language: { mode: 'fixed', language: 'zh-CN' },
+  language: { mode: 'fixed', language: 'ru-RU' },
   proxyIP: { mode: 'detect' },
-  mount: [abuse, routers('./src/routers')], // [!code highlight]
+  mount: [abuse.web(), routers('./src/routers')], // [!code highlight]
 });
 ```
 
-Локально / в тестах — memory; в проде с несколькими репликами подставь Redis-адаптер в `store`, иначе блок только на одной ноде. `window` / `blockFor` и прочие интервалы — миллисекунды или строки вроде `'1 hour'`, `'30m'` — тот же `DurationInput`, что в [кэше](/ru/core/cache#длительность-durationinput).
+Локально / в тестах — memory; в проде с несколькими репликами передайте Redis-адаптер как `store`, иначе блокировка останется на одной машине. `window` / `blockFor` принимают миллисекунды или читаемые строки (`'1 hour'`, `'30m'`) — тот же `DurationInput`, что у [кэша](/ru/core/cache#длительность-durationinput).
 
-На запрос: IP уже заблокирован → по умолчанию **403**; honeypot достиг лимита → блок и 403 сразу. `http-error` считает после ответа — **запрос, перешагнувший лимит, ещё отдаёт исходный статус**, 403 только со следующего.
+При запросе: IP уже заблокирован → по умолчанию **403**; honeypot на лимите → блок и 403 сразу. `http-error` считает после ответа — **тот запрос всё ещё возвращает исходный статус**; следующий уже получит 403.
 
-## Четыре стратегии
+На WebSocket тот же `abuse` вешают через `.socket()` (event-honeypot и т.д.) — см. [Защита от злоупотреблений (WebSocket)](/ru/websocket/abuse); эта страница не повторяет.
 
-| Стратегия | Что накапливается | При лимите |
-| --- | --- | --- |
-| `honeypot` | Заход на приманочные пути | Блок IP |
-| `http-error` | Ответы с указанными кодами (`throw` или `send`) | Блок IP |
-| `ip-abuse` | Вызов `abuse.ipAbuse(ip, reason)` из бизнеса | Блок IP |
-| `user-abuse` | Вызов `abuse.userAbuse(id, reason)` | Только `onBanUser`, **без** авто-блока IP |
+## Honeypot-пути
 
-### Honeypot-пути
-
-Строки путей: точное совпадение, простые glob; можно `RegExp`. Regex смотрит `pathname + search`. `methods` опционален.
-
-| Форма | Что матчится |
-| --- | --- |
-| Точная строка (без `*`) | Полное равенство pathname — `'/.env'` не бьёт `'/.env.local'` |
-| `*` | Любые символы **в одном сегменте**, без `/`. `'/wp-*.php'` — да для `/wp-login.php`, нет для `/wp/admin.php` |
-| `**` | **Через сегменты**. `'/a/**/c'` — да для `/a/b/d/c`, нет для `/a/c` |
-| Хвост `/**` | Сам каталог и любая вложенность. `'/.git/**'` — `/.git`, `/.git/config`, не `/.github` |
-| `RegExp` | `pathname + search`, напр. `/^\/admin\?.*dump=/` |
+Намеренно оставьте пути, которые обычный пользователь не трогает (`/.env`, `/wp-admin/**` и т.д.). Попадания считают по IP; на лимите IP блокируется. Строки путей — точное совпадение и простой glob; можно передать regex. Regex проверяет `pathname + search`, удобно ловить зонды с странным query. `methods` необязателен; без него метод не важен.
 
 ```typescript
 {
@@ -87,11 +74,21 @@ const app = new WebApp({
 }
 ```
 
-Glob только по pathname; для query — regex. `paths` не пустой; проверка при создании.
+Справка по шаблонам:
 
-### Накопление по кодам ошибок
+| Запись | Что совпадает |
+| --- | --- |
+| Точная строка (без `*`) | Полное равенство pathname — `'/.env'` не ловит `'/.env.local'` |
+| `*` | Любые символы **внутри одного сегмента**, **без** `/`. `'/wp-*.php'` ловит `/wp-login.php`, не `/wp/admin.php` |
+| `**` | **Через сегменты**. `'/a/**/c'` ловит `/a/b/d/c`, не `/a/c` (между ними хотя бы один сегмент) |
+| Хвост `/**` | Сама директория + любая глубина детей. `'/.git/**'` ловит `/.git` и `/.git/config`, не `/.github` |
+| `RegExp` | Тестирует `pathname + search`, например `/^\/admin\?.*dump=/` |
 
-Несколько `statusCodes` в одной стратегии **в одном ведре**. Сузь `paths` / `methods` при необходимости.
+Glob смотрит только pathname — query не влияет; query вместе нужны — берите regex. `paths` не может быть пустым; это проверяется при создании. Brace-расширения и т.п. нет — матчятся как литералы.
+
+## Накопление кодов ошибок
+
+Короткий шквал 404 / 401 часто значит сканирование API или подбор учётных данных. Используйте `http-error`: несколько `statusCodes` в одной стратегии **делят один счётчик**. Можно сузить `paths` / `methods`; без них считается этот статус по всему сайту.
 
 ```typescript
 {
@@ -104,9 +101,11 @@ Glob только по pathname; для query — regex. `paths` не пусто
 }
 ```
 
-### Отчёты бизнеса: IP
+Хорошо против сканеров API. Если 401 на логине тоже хотите жёстко контролировать — повесьте отдельную стратегию с `paths`, не смешивайте с общесайтовым 404 в одном бакете.
 
-Когда ответ успешен (logout всегда 204), но нужно считать подозрительные попытки по IP — `ip-abuse` и вызов в маршруте. `reason` — строка, должна совпасть со стратегией; неизвестный `reason` — исключение. Одна стратегия на `reason`.
+## Бизнес-отчёт: зонды с фейковым token
+
+Ответ сам по себе может быть успехом (например logout всегда 204, есть token или нет), но по IP всё равно нужно считать «подозрительные попытки». Тогда `ip-abuse` + вызов из маршрута. `reason` — строка; должна совпадать с объявлением в стратегии; неизвестный reason бросает в рантайме. Один reason — одна стратегия.
 
 ```typescript
 const abuse = createAbuse({
@@ -133,7 +132,7 @@ router.post('/logout', {
 });
 ```
 
-Для множества reason удобен TypeScript `enum`; второй аргумент `ipAbuse` сужается до членов из стратегий.
+Когда reason’ов становится много, TypeScript `enum` (строковые или числовые члены) собирает магические строки. Передавайте члены enum и в стратегиях, и в `ipAbuse`; второй аргумент сужается до членов, встречающихся в стратегиях — незаявленные члены и голый `'logout-miss'` режет тип.
 
 ```typescript
 enum IpAbuseReason {
@@ -141,13 +140,13 @@ enum IpAbuseReason {
   TokenProbe = 'token-probe',
 }
 
-// strategies: reason: IpAbuseReason.LogoutMiss
+// в strategies: reason: IpAbuseReason.LogoutMiss
 await abuse.ipAbuse(ctx.request.ip, IpAbuseReason.LogoutMiss);
 ```
 
-### Отчёты бизнеса: пользователь
+## Бизнес-отчёт: измерение аккаунта
 
-Злоупотребление на уровне аккаунта — `user-abuse`. Пакет **не пишет в вашу БД** — при лимите только `onBanUser`. При любой `user-abuse` **`onBanUser` обязателен**.
+Злоупотребления на уровне аккаунта (фарм купонов, пользовательское измерение после брутфорса) — `user-abuse`. Пакет **не пишет в вашу пользовательскую БД**: на лимите только вызывает `onBanUser`; в колбэке вы обновляете БД и сбрасываете session. Если есть хоть одна стратегия `user-abuse`, **`onBanUser` обязателен** и проверяется при создании. `reason` — строка или enum.
 
 ```typescript
 const abuse = createAbuse({
@@ -158,7 +157,7 @@ const abuse = createAbuse({
       reason: 'order-probe',
       limit: 10,
       window: '1 day',
-      banFor: '7 days',
+      banFor: '7 days', // рекомендуемая длительность бана, уходит через колбэк
     },
   ],
   onBanUser: async (id, reason, detail) => { // [!code focus:6]
@@ -172,44 +171,48 @@ const abuse = createAbuse({
 await abuse.userAbuse(userId, 'order-probe');
 ```
 
-`detail`: `count` / `limit`, `banFor` в миллисекундах. `onBanUser` не чаще одного раза на пользователя и reason в окне.
+С enum паттерн как у IP: в стратегиях `UserAbuseReason.OrderProbe`; отчёт и `reason` у `onBanUser` сужаются до этих членов. Числовой enum (`OrderProbe = 1`) тоже можно; перед сохранением вызывается `String(reason)`, ключи бакетов — строковые формы.
 
-## Ручная блокировка и хуки
+В `detail` есть `count` / `limit` и `banFor` в миллисекундах (`undefined`, если стратегия не задала). Для одного пользователя + reason `onBanUser` успешно срабатывает не чаще одного раза в окне (кэш-плейсхолдер гасит гонки); если колбэк бросает, плейсхолдер снимается и окно можно повторить.
 
-| API | Назначение |
-| --- | --- |
-| `blockIP(ip, duration)` | Ручной блок IP; если уже заблокирован — пропуск |
-| `unblockIP(ip)` | Снять блок |
-| `isIPBlocked(ip)` | Заблокирован ли |
-| `onBlockIP` | Лимит стратегии, `ipAbuse`, ручной `blockIP` |
-| `bypass` | Пропустить зондирование и проверку блока |
-| `blockedError` | Свой `HttpError` при блоке (по умолчанию 403) |
+## Обход health-check и ручные блокировки
+
+Пути зондов не должны упираться в логику блокировки: передайте `bypass` в `.web()`. Временно заблокировать / разблокировать IP — `blockIP` / `unblockIP`; запрос статуса — `isIPBlocked`. Для аудита повесьте `onBlockIP` — срабатывание стратегии, лимит `ipAbuse` и ручной `blockIP` все заходят в колбэк.
+
+При блоке по умолчанию **403**; чтобы выровнять семантику с rate-limit (например 429), передайте `blockedError`.
 
 ```typescript
 const abuse = createAbuse({
   store,
   strategies: [/* ... */],
-  bypass: (ctx) => {
-    return ctx.request.pathname === '/health';
-  },
-  blockedError: new HttpError(429, 'blocked', { code: 'ABUSE_BLOCKED' }),
   onBlockIP: async (ip, reason, detail) => {
     services.logger.warn('abuse.block', { ip, reason, ...detail });
   },
 });
 
+mount: [
+  abuse.web({ // [!code focus:6]
+    bypass: (ctx) => {
+      return ctx.request.pathname === '/health';
+    },
+    blockedError: new HttpError(429, 'blocked', { code: 'ABUSE_BLOCKED' }),
+  }),
+  routers('./src/routers'),
+],
+
 await abuse.blockIP('203.0.113.8', '1 day');
 await abuse.unblockIP('203.0.113.8');
 ```
 
-`onBlockIP`: `reason` — `'honeypot' | 'http-error' | 'ip-abuse' | 'manual'`; `detail.blockFor` — миллисекунды.
+На HTTP стороне `reason` у `onBlockIP` часто `'honeypot' | 'http-error' | 'ip-abuse' | 'manual'`; если на том же инстансе висит WebSocket event-honeypot, появится и `'socket-events'` (см. [Защита от злоупотреблений (WebSocket)](/ru/websocket/abuse)). `detail.blockFor` — миллисекунды; повторный `blockIP` на уже заблокированный IP пропускается (TTL не обновляется, колбэк не дублируется).
 
 ::: tip
-Блок abuse — «поймали и закрыли на время»; мягкий глобальный лимит — в [ограничении частоты](/ru/plugins/rate-limit). Можно повесить оба: лимит раньше гасит всплески, abuse банит по стратегиям.
+Блокировки abuse — скорее «поймали — посидите»; мягкий общесайтовый throttle всё ещё в [ограничении частоты](/ru/plugins/rate-limit). Можно вешать оба: лимит впереди гасит шипы, abuse копит по стратегиям и потом блокирует.
 :::
 
 ## Связанное
 
 - [Ограничение частоты](/ru/plugins/rate-limit)
-- [Кэш](/ru/core/cache) (`store` и `DurationInput`)
-- [CSRF](/ru/plugins/csrf)
+- [Защита от злоупотреблений (WebSocket)](/ru/websocket/abuse)
+- [Кэш](/ru/core/cache) (адаптеры `store` и `DurationInput`)
+- [Защита CSRF](/ru/plugins/csrf)

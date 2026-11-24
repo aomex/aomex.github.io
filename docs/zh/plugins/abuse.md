@@ -13,9 +13,11 @@ pnpm add @aomex/abuse
 # 还需已有的 @aomex/cache（及生产用的 Redis 适配器）
 ```
 
-## 挂上中间件
+## 创建并挂上 `.web()`
 
-`createAbuse` 返回值**既是中间件，也带 API**（`userAbuse` / `ipAbuse` / `blockIP` 等），**不挂到 ctx**。先建实例、再 `mount`，路由或 Service 里直接调同一个对象。
+`createAbuse` 返回的是一份**服务**（上面有 `ipAbuse` / `blockIP` 等 API），不是直接能塞进 mount 的中间件。HTTP 侧用 `.web()` 挂到 `WebApp.mount`。业务代码里继续拿同一个 `abuse` 对象调 API，**不要**指望它出现在 `ctx` 上。
+
+下面这份配置先挂两条常见策略：蜜罐路径（碰一下就封）和错误状态码累计（短时间刷 401 / 404 才封）。
 
 ```typescript
 import { createAbuse } from '@aomex/abuse';
@@ -47,7 +49,7 @@ const app = new WebApp({
   logger: services.logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
-  mount: [abuse, routers('./src/routers')], // [!code highlight]
+  mount: [abuse.web(), routers('./src/routers')], // [!code highlight]
 });
 ```
 
@@ -55,26 +57,11 @@ const app = new WebApp({
 
 请求进来时：若 IP 已封禁 → 默认 **403**；命中蜜罐且满额 → 当场封禁并 403。`http-error` 在响应结束后计数，**撞线当次仍返回原状态码**，下一请求才因封禁变 403。
 
-## 四种策略
+WebSocket 侧用同一份 `abuse` 挂 `.socket()`（事件蜜罐等），见 [滥用防护（WebSocket）](/zh/websocket/abuse)，本页不重复。
 
-| 策略 | 谁在计数 | 满额做什么 |
-| --- | --- | --- |
-| `honeypot` | 访问了你故意放的诱饵路径 | 封 IP |
-| `http-error` | 响应落在指定状态码（`throw` 或 `send`） | 封 IP |
-| `ip-abuse` | 业务主动 `abuse.ipAbuse(ip, reason)` | 封 IP |
-| `user-abuse` | 业务主动 `abuse.userAbuse(id, reason)` | 只回调 `onBanUser`，**不**自动封 IP |
+## 蜜罐路径
 
-### 蜜罐路径
-
-路径字符串支持精确匹配、简单 glob；也可以直接写正则。正则会对 `pathname + search` 检测，便于抓带奇怪 query 的探测。`methods` 可选，未配则不限方法。
-
-| 写法 | 匹配范围 |
-| --- | --- |
-| 精确串（无 `*`） | 整段 pathname 完全相等，如 `'/.env'` 不命中 `'/.env.local'` |
-| `*` | **单段内**任意字符，**不跨** `/`。`'/wp-*.php'` 命中 `/wp-login.php`，不命中 `/wp/admin.php` |
-| `**` | **可跨多段**。`'/a/**/c'` 命中 `/a/b/d/c`，不命中 `/a/c`（中间至少还要有一段） |
-| 末尾 `/**` | 目录自身 + 任意深层子路径。`'/.git/**'` 命中 `/.git`、`/.git/config`，不误伤 `/.github` |
-| `RegExp` | 测 `pathname + search`，例如 `/^\/admin\?.*dump=/` |
+故意放一些「正常用户不会访问」的路径（`/.env`、`/wp-admin/**` 等）。有人扫到了就按 IP 计数，满额封禁。路径字符串支持精确匹配、简单 glob；也可以直接写正则。正则会对 `pathname + search` 检测，便于抓带奇怪 query 的探测。`methods` 可选，未配则不限方法。
 
 ```typescript
 {
@@ -87,11 +74,21 @@ const app = new WebApp({
 }
 ```
 
+写法对照：
+
+| 写法 | 匹配范围 |
+| --- | --- |
+| 精确串（无 `*`） | 整段 pathname 完全相等，如 `'/.env'` 不命中 `'/.env.local'` |
+| `*` | **单段内**任意字符，**不跨** `/`。`'/wp-*.php'` 命中 `/wp-login.php`，不命中 `/wp/admin.php` |
+| `**` | **可跨多段**。`'/a/**/c'` 命中 `/a/b/d/c`，不命中 `/a/c`（中间至少还要有一段） |
+| 末尾 `/**` | 目录自身 + 任意深层子路径。`'/.git/**'` 命中 `/.git`、`/.git/config`，不误伤 `/.github` |
+| `RegExp` | 测 `pathname + search`，例如 `/^\/admin\?.*dump=/` |
+
 glob 只看 pathname，query 不影响；要连 query 一起判用正则。`paths` 不能为空；创建时就会校验。花括号等不是扩展语法，按字面量匹配。
 
-### 按错误状态码累计
+## 按错误状态码累计
 
-同一策略内多个 `statusCodes` **混合累计**。可再限 `paths` / `methods`；未配则全站该状态码都算。
+短时间刷出大量 404 / 401，往往是在扫接口或撞凭证。用 `http-error`：同一策略内多个 `statusCodes` **混合累计**。可再限 `paths` / `methods`；未配则全站该状态码都算。
 
 ```typescript
 {
@@ -106,7 +103,7 @@ glob 只看 pathname，query 不影响；要连 query 一起判用正则。`path
 
 适合挡扫接口；登录接口上的 401 若也想严管，可单独再挂一条带 `paths` 的策略，别和全站 404 混在一个桶里。
 
-### 业务上报：IP
+## 业务上报：假 token 试探
 
 响应本身可能是成功（如 logout 无论 token 在不在都 204），但仍想按 IP 记「可疑试探」时，用 `ip-abuse` + 路由里调用。`reason` 用字符串即可；须与策略里声明的一致，未知 reason 运行时抛错。同一 reason 只能配一条。
 
@@ -147,7 +144,7 @@ enum IpAbuseReason {
 await abuse.ipAbuse(ctx.request.ip, IpAbuseReason.LogoutMiss);
 ```
 
-### 业务上报：用户
+## 业务上报：账号维度
 
 账号级滥用（刷优惠、撞库后的用户维度等）用 `user-abuse`。包内**不写用户库**——满额只调 `onBanUser`，你在回调里改库、踢 session。配置了任一 `user-abuse` 时 **`onBanUser` 必填**，创建阶段就会检查。`reason` 同样可以是字符串，也可以是 enum。
 
@@ -178,35 +175,36 @@ await abuse.userAbuse(userId, 'order-probe');
 
 `detail` 含 `count` / `limit`，以及解析成毫秒的 `banFor`（策略未配则为 `undefined`）。同一用户同一 reason 在窗口内只会成功触发一次 `onBanUser`（用缓存占位防并发重复）；回调抛错会放开占位，允许窗口内重试。
 
-## 手动封禁与钩子
+## 健康检查绕过与手动封禁
 
-| API | 做什么 |
-| --- | --- |
-| `blockIP(ip, duration)` | 手动封 IP；已封则跳过（不刷新 TTL、不重复回调） |
-| `unblockIP(ip)` | 解封 |
-| `isIPBlocked(ip)` | 是否在封禁中 |
-| `onBlockIP` | 策略撞线、`ipAbuse` 满额或手动 `blockIP` 时回调 |
-| `bypass` | 跳过探测与封禁检查（健康检查、内网） |
-| `blockedError` | 自定义被封时抛出的 `HttpError`（默认 403） |
+探针路径不该被封禁逻辑挡住：给 `.web()` 传 `bypass`。运维要临时封 / 解封某个 IP，直接调 `blockIP` / `unblockIP`；`isIPBlocked` 用来查询。想打审计日志，挂 `onBlockIP`——策略撞线、`ipAbuse` 满额或手动 `blockIP` 时都会进回调。
+
+被封时默认抛 **403**；要对齐限速语义改成 429，传 `blockedError`。
 
 ```typescript
 const abuse = createAbuse({
   store,
   strategies: [/* ... */],
-  bypass: (ctx) => {
-    return ctx.request.pathname === '/health';
-  },
-  blockedError: new HttpError(429, 'blocked', { code: 'ABUSE_BLOCKED' }),
   onBlockIP: async (ip, reason, detail) => {
     services.logger.warn('abuse.block', { ip, reason, ...detail });
   },
 });
 
+mount: [
+  abuse.web({ // [!code focus:6]
+    bypass: (ctx) => {
+      return ctx.request.pathname === '/health';
+    },
+    blockedError: new HttpError(429, 'blocked', { code: 'ABUSE_BLOCKED' }),
+  }),
+  routers('./src/routers'),
+],
+
 await abuse.blockIP('203.0.113.8', '1 day');
 await abuse.unblockIP('203.0.113.8');
 ```
 
-`onBlockIP` 的 `reason` 为 `'honeypot' | 'http-error' | 'ip-abuse' | 'manual'`；`detail.blockFor` 单位是毫秒。
+`onBlockIP` 的 `reason` 在 HTTP 侧常见为 `'honeypot' | 'http-error' | 'ip-abuse' | 'manual'`；若同一实例还挂了 WebSocket 事件蜜罐，还会出现 `'socket-events'`（见 [滥用防护（WebSocket）](/zh/websocket/abuse)）。`detail.blockFor` 单位是毫秒；已封则再调 `blockIP` 会跳过（不刷新 TTL、不重复回调）。
 
 ::: tip
 滥用封禁偏「抓到了就关一阵」；全站软限流仍看 [请求限速](/zh/plugins/rate-limit)。两者可以同时挂：限速靠前挡毛刺，滥用按策略累计后再封。
@@ -215,5 +213,6 @@ await abuse.unblockIP('203.0.113.8');
 ## 相关
 
 - [请求限速](/zh/plugins/rate-limit)
+- [滥用防护（WebSocket）](/zh/websocket/abuse)
 - [缓存](/zh/core/cache)（`store` 适配器与 `DurationInput`）
 - [CSRF 防护](/zh/plugins/csrf)

@@ -2,9 +2,9 @@
 outline: deep
 ---
 
-# CORS
+# Кросс-домен CORS
 
-Чтобы фронт в браузере мог легально вызывать API: в разработке часто разные порты и preflight; в проде сужают разрешённые origin; для Cookie настраивают credentials.
+Позволяет странице фронта в браузере легально ходить в ваше API: в разработке разные порты проходят preflight; в проде сужают «какие origin разрешены», а при Cookie ещё настраивают credentials.
 
 ```bash
 pnpm add @aomex/cors
@@ -12,7 +12,7 @@ pnpm add @aomex/cors
 
 ## До routers
 
-`cors()` пишет заголовки Access-Control-* на этапе middleware, чтобы браузер мог читать кросс-origin тело. Ставьте **перед** `routers`, иначе 4xx/5xx могут остаться без заголовков — preflight пройдёт, а ошибку фронт не прочитает.
+`cors()` на этапе middleware пишет заголовки Access-Control-* в ответ, чтобы браузер разрешил читать тело ответа с другого origin. Ставьте **перед** `routers`, иначе заголовки будут не на всех ответах (включая 4xx/5xx): preflight пройдёт, а при бизнес-ошибке фронт не увидит тело ошибки.
 
 ```typescript
 import { cors } from '@aomex/cors';
@@ -21,7 +21,7 @@ import { routers, WebApp } from '@aomex/web';
 const app = new WebApp({
   services,
   logger: services.logger,
-  language: { mode: 'fixed', language: 'ru-RU' },
+  language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:4]
     cors(), // [!code highlight]
@@ -31,32 +31,22 @@ const app = new WebApp({
 ```
 
 ::: warning
-CORS **после** routers может оставить 404 и validation 400 без заголовков — браузер покажет «ошибку CORS» и скроет причину.
+Если CORS висит **после** routers, у 404 и валидационных 400 может не быть заголовков — браузер сообщит «CORS», и настоящая причина скроется.
 :::
 
-Локально при разных портах и **без Cookie** «голый» cors() отражает Origin запроса — обычно хватает. Как только Cookie идут cross-origin ([Session](/ru/plugins/auth-session-strategy)), origin нужно задать явно — см. ниже.
+Локально фронт и API на разных портах и **без Cookie** — безаргументный `cors()` отражает Origin из запроса и обычно хватает. Как только нужен кросс-доменный Cookie ([Session](/ru/plugins/auth-session-strategy)), origin нужно задать явно — см. следующий раздел.
 
-cors() — обычный WebMiddleware, новых полей в ctx нет. При успехе виден Access-Control-Allow-Origin; с Cookie нужны Access-Control-Allow-Credentials: true и **нельзя** `origin: '*'`.
+`cors()` возвращает обычный WebMiddleware и не вешает новые поля на ctx; в business action пишете как обычно, кросс-домен решается заголовками. При успехе в браузере видно Access-Control-Allow-Origin; со сценарием Cookie ещё нужен Access-Control-Allow-Credentials: true, и **нельзя** `origin: '*'`.
 
-## Сужение Origin и credentials
+## Cookie-вход: origin обязателен явно
 
-| Опция | Когда | По умолчанию |
-| --- | --- | --- |
-| `origin` | Фиксированный фронт в проде или whitelist / функция | Без credentials — отражать `Origin`; **с credentials — обязательно** |
-| `credentials` | Cookie / клиентские сертификаты cross-origin | `false` |
-| `allowHeaders` | `Authorization`, `x-csrf-token` и т.п. | — |
-| `exposeHeaders` | Фронт читает `X-Request-Id` и т.п. | — |
-| `maxAge` | Меньше OPTIONS; `-1` без кэша при отладке | `3600` |
-| `allowMethods` | Только GET/POST | обычный набор глаголов |
-| `secureContext` / `privateNetworkAccess` | Isolated pages, публичный сайт → private API (Chrome PNA) | `false` |
+При `credentials: true` (или функция возвращает `true`):
 
-### Cookie-логин: явный origin обязателен
+- **Обязательно** явно задать `origin` (конкретный домен, массив allowlist или функция, возвращающая конкретный источник)
+- **Нельзя** полагаться на дефолтное отражение безаргументного cors() — без настройки упадёт на старте или при запросе
+- **Нельзя** `origin: '*'` (браузер такую пару тоже не примет)
 
-При `credentials: true` (или функция вернула `true`):
-
-- **Нужно** явно задать `origin` (конкретный домен, массив whitelist или функция с конкретным origin)
-- **Нельзя** полагаться на отражение у «голого» cors() — исключение при создании или на запросе
-- **Нельзя** `origin: '*'` (браузеры тоже отвергают эту пару)
+Если фронт ещё шлёт `Authorization`, `x-csrf-token`, пропустите их через `allowHeaders`; чтобы скрипт фронта читал кастомные заголовки вроде `X-Request-Id`, используйте `exposeHeaders`.
 
 ```typescript
 cors({
@@ -68,12 +58,14 @@ cors({
 ```
 
 ::: warning
-Credentials без явного origin или с `*` — приложение не стартует или падает на запросе. Так намеренно блокируется опасный дефолт «отражать любой Origin + Cookie».
+Включили credentials, но не указали origin или написали `*` — приложение не стартует или падает на запросе. Так намеренно блокируется опасный дефолт «отражать любой Origin + Cookie».
 :::
 
-Для Session добавьте [CSRF](/ru/plugins/csrf), а на фронте — `credentials: 'include'`. Полный путь: [стратегия Session](/ru/plugins/auth-session-strategy).
+Для Session ещё нужен [CSRF](/ru/plugins/csrf), а фронтовый `fetch` — с `credentials: 'include'`. Полная цепочка: [стратегия Session](/ru/plugins/auth-session-strategy).
 
-### Несколько фронтов: whitelist
+## Allowlist нескольких фронтов
+
+Если App и админка на разных доменах, `origin` можно передать массивом; заголовок пишется только при совпадении, иначе CORS как будто выключен.
 
 ```typescript
 const allowlist = [
@@ -88,7 +80,7 @@ cors({
 });
 ```
 
-Или функция, возвращающая конкретный origin (только при попадании в список; иначе `undefined` — CORS выключен для запроса):
+Можно функцией вернуть конкретный origin по запросу (только при попадании в allowlist; `undefined` — CORS не включать):
 
 ```typescript
 cors({
@@ -103,18 +95,20 @@ cors({
 });
 ```
 
+Кеш preflight по умолчанию около часа (`maxAge: 3600`); локально можно `-1`, чтобы каждый OPTIONS шёл заново. Если открываете только GET/POST, сузьте через `allowMethods`. `secureContext` / `privateNetworkAccess` нужны только для изоляции страниц / публичных страниц к внутреннему API (Chrome PNA).
+
 | Среда | Рекомендация |
 | --- | --- |
-| Локально (без Cookie) | «Голый» `cors()` |
+| Локально (без Cookie) | безаргументный `cors()` |
 | Локально (Session) | `origin: 'http://localhost:5173'` + `credentials: true` |
-| Прод | Явный домен или whitelist; с credentials без дефолтного отражения |
+| Прод | явный домен или allowlist; с credentials никогда не используйте дефолтное отражение |
 
-Если поправить только Web API и забыть origin доков / Swagger / админки — preflight на этих доменах упадёт.
+Если поправили только Web API и забыли origin док-сайта / Swagger / админки, preflight на этих доменах упадёт.
 
 ## Дальше
 
-- Цепочка Cookie-логина: [стратегия Session](/ru/plugins/auth-session-strategy)
-- Защита записей: [CSRF](/ru/plugins/csrf)
-- Порядок mount и onion: [Middleware](/ru/core/middleware)
+- Вся цепочка Cookie-входа: [стратегия Session](/ru/plugins/auth-session-strategy)
+- Защита запросов записи от подделки: [CSRF](/ru/plugins/csrf)
+- Порядок монтирования и onion-модель: [Middleware](/ru/core/middleware)
 - Security-заголовки (часто рядом с CORS): [Helmet](/ru/plugins/helmet)
-- Наблюдаемость: [HTTP access log](/ru/plugins/http-access-log)
+- Наблюдаемость на всём сайте: [HTTP access log](/ru/plugins/http-access-log)

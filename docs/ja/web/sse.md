@@ -4,7 +4,7 @@ outline: deep
 
 # サーバープッシュ SSE
 
-「サーバーが継続 push、ブラウザは EventSource で受信」する GET API：action で `ctx.sse()`、`stream` または `send` でイベント送出。通知、進捗、相場更新向け。双方向の雑多フレームは WebSocket を検討。
+「サーバーが継続的に押し、ブラウザが EventSource で聴く」GET API を一本作る。action で ctx.sse() を呼び、stream または send でイベントを出す。通知、進捗バー、相場更新向け。双方向で雑多なフレームなら WebSocket を検討。
 
 ```typescript
 import { Router } from '@aomex/web';
@@ -25,15 +25,14 @@ router.get('/events', { // [!code focus:13]
   },
 });
 ```
-`stream` 優先：クライアント切断で signal が abort、イテレーション終了で自動後片付け。close / タイマー掃除を手書きしにくくする。
 
-`ctx.sse()` と `ctx.response.sse()` は同等。**レスポンスヘッダ未送出前**に呼ぶこと。後だと throw。SSE はレスポンス全体を占有。同じルート末尾で JSON send しない。開始後 200、Content-Type: text/event-stream。emit/send の data がオブジェクトなら JSON 化。lastEventId はリクエストヘッダから。初回接続はだいたい undefined。
+優先は stream：クライアント切断で signal が abort し、反復終了で自動後始末。close / タイマー掃除を大量に書かなくてよい。
+
+`ctx.sse()` と `ctx.response.sse()` は等価。**まだ応答ヘッダーを書いていない**ときに呼ぶ。さもないとすぐ例外。SSE は応答全体を占有する。同じルート末尾でさらに ctx.send JSON しない。開いたあとステータス 200、Content-Type: text/event-stream。emit / send の data にオブジェクトを渡すと JSON シリアライズ。lastEventId はリクエストヘッダー由来で、初回接続はだいたい undefined。
 
 ## heartbeat と retry
 
-長接続はリバプロにアイドル切断されやすい。**heartbeat** でコメント行を定期送出。**retry** はクライアントの再接続間隔（接続確立時の SSE オプション）。ローカル短時間テストは heartbeat OFF 可。Nginx/CDN 経由本番は両方要確認。
-
-Nginx/CDN 経由で保活。ローカル短テストは heartbeat オフ可：
+ブラウザの長接続は反代にアイドルと判断され切られやすい。`heartbeat` は周期的にコメント行を押し保活する（よくあるのは約 15s。ローカルの短い試験は `heartbeat: false`）。`retry` はクライアントに、切断後何ミリ秒で再接続するかを勧める（通知ストリームはよく `3000`）。Nginx、CDN 経由の本番ストリームでは両方を確認する。
 
 ```typescript
 const sse = ctx.sse({
@@ -41,21 +40,10 @@ const sse = ctx.sse({
   retry: 3_000,
 });
 ```
-| オプション | デフォルト/習慣 | いつ |
-| --- | --- | --- |
-| `heartbeat` | だいたい15s | Nginx/CDN 長接続。ローカル短テスト `heartbeat: false` |
-| `retry` | 未設定 | ブラウザ再接続 ms（通知で `3000` など） |
 
-## 単一イベントフィールド
+## 単一イベントのフィールド
 
-各 `send` / `emit` で event 名、id、任意 retry、data。オブジェクト data は自動 JSON。**id** 設定時、再接続は `Last-Event-ID` 付きで続き可能。
-
-| フィールド | いつ |
-| --- | --- |
-| `data` | ペイロード。オブジェクトは自動 JSON |
-| `event` | 複数イベント共存（`job` / `progress` / `ready`） |
-| `id` | 断線続き。再接続で `Last-Event-ID` |
-| `retry` | 1イベントだけ再接続間隔を変える |
+毎回の `send` / `emit` に event 名、id、任意の単発 retry、および data ペイロードを付けられる。オブジェクト型 data は自動 JSON シリアライズ。**id** を付けるとブラウザ再接続時に `Last-Event-ID` が付き、続きから押しやすい。複数イベントが同居するとき（`job` / `progress` / `ready`）はフロントが `event` 名で聴く。
 
 ```typescript
 sse.send({ data: { hello: 'world' } });
@@ -67,38 +55,33 @@ sse.send({
   data: 1,
 });
 ```
-## stream、続き、後片付け
 
-`stream` は「上流を読みながら emit」をライフサイクル化。クライアント切断で **signal** abort、終了時に後片付け。タイマーと close を手書きしなくてよい。`lastEventId` はヘッダ由来。その id 以降を再送。`onClose` で購読解放・監査。
+## stream、続き、後始末
 
-```typescript
-await sse.stream(async (emit, signal) => {
-  // emit 等同 sse.send；signal 断开即 abort
-});
-```
-| メンバー | 典型用法 |
-| --- | --- |
-| `lastEventId` | その id 以降を push |
-| `signal` | Redis 購読、キュー watch に渡す。クライアント離脱で上流も止める |
-| `onClose(fn)` | 購読解放、監査 |
-| `close()` | タスク完了で能動クローズ。`stream` 終了時は自動 |
+`stream` は「上流を読みながら emit」を一段のライフサイクルに包む。クライアント切断で **signal** が abort（Redis 購読やキュー watch に渡す）。反復終了で後始末し、タイマーと close を手書きしなくてよい。`lastEventId` はリクエストヘッダー由来。あるイベント以降から続きを押すのに使う。`onClose` で購読解放や監査。タスク終了で能動的に `close()` してもよい（`stream` 終了で自動呼び出し）。
 
 ```typescript
-const after = sse.lastEventId; // [!code highlight]
-sse.onClose(() => {
-  subscription.unsubscribe();
+await sse.stream(async (emit, signal) => { // [!code focus:8]
+  const after = sse.lastEventId;
+  sse.onClose(() => {
+    subscription.unsubscribe();
+  });
+  for await (const item of watchEvents({ after, signal })) {
+    emit({ id: String(item.id), event: 'item', data: item });
+  }
 });
-sse.close();
 ```
-接続済みで書けないとき send は黙って無視——「必ず届く」と思わない。断線続きには安定 id。なければ lastEventId が合わず先頭から。
+
+
+接続が閉じているか書けないとき、send は黙って無視する——「必ず届いた」と思わない。切断後の続きが要るならイベントに安定した id を付ける。さもないと lastEventId が合わず、再接続が先頭からになる。
 
 ::: warning
-Nginx 等の長接続ではフレームワークの X-Accel-Buffering: no 以外に heartbeat とリバプロバッファ/アイドルタイムアウトも要確認。アイドル切断されやすい。
+長接続が Nginx などの反代を通るとき、フレームワークの X-Accel-Buffering: no 以外に、心拍と反代のバッファタイムアウトも設定を合わせる。さもないとアイドルと判断され切られやすい。
 :::
 
-## response()、OpenAPI
+## response()、OpenAPI との関係
 
-OpenAPI はこの GET が `text/event-stream` であることを知る必要がある。mount に `response({ contentType: 'text/event-stream', ... })`。ドキュメントと型用。**action の `ctx.sse()` フレーム書き込みの代わりにはならない**。
+OpenAPI はこの GET 出口が `text/event-stream` だと知る必要があるので、mount に `response({ contentType: 'text/event-stream', ... })` を載せる。これはドキュメントと型のためのもの。action 内の `ctx.sse()` によるフレーム書き込みの**代わりにはならない**。
 
 ```typescript
 import { rule } from '@aomex/common';
@@ -111,12 +94,13 @@ response({
   description: 'SSE 事件流',
 });
 ```
-ドキュメントと型だけ。**`ctx.sse()` のフレームプロトコルは代替できない**。圧縮ミドルウェアはだいたい text/event-stream をスキップ。[Compress](/ja/plugins/compress)。
 
-EventSource は GET のみ。クロスサイト cookie なら [CORS](/ja/plugins/cors) を正しく。
+これはドキュメントと型ヒントを助けるだけで、`ctx.sse()` のフレームプロトコルの**代わりにはならない**。圧縮ミドルウェアは通常 text/event-stream をスキップする。[Compress](/ja/plugins/compress) を参照。
+
+EventSource は GET のみ。クロスサイトで cookie を付けるときは [CORS](/ja/plugins/cors) を正しく設定する。
 
 ## 次のステップ
 
-- [レスポンス制約](/ja/web/response)（ストリーム contentType）
-- [入出力概要](/ja/web/)（他 Web ミドルウェアと併用）
-- [Compress](/ja/plugins/compress)（イベント流を壊さない）
+- [制約付きレスポンス](/ja/web/response)（ストリーム出口の contentType 宣言）
+- [入出力の概観](/ja/web/)（ほかの Web ミドルウェアと一緒にマウント）
+- [Compress](/ja/plugins/compress)（イベントストリームを壊さない）

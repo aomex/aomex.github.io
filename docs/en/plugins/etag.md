@@ -4,7 +4,7 @@ outline: deep
 
 # ETag
 
-Computes entity tags for successful GET/HEAD responses: when the client sends `If-None-Match` and content is unchanged, respond **304** and save bandwidth. Good for semi-static config and version info; highly personalized lists rarely benefit.
+Compute an entity tag for successful GET/HEAD responses: when the client sends If-None-Match and the content has not changed, return **304** and save bandwidth. Good for semi-static config and version info; highly personalized lists usually gain little.
 
 ```bash
 pnpm add @aomex/etag
@@ -12,7 +12,7 @@ pnpm add @aomex/etag
 
 ## Mount on WebApp
 
-Add `etag()` to `WebApp.mount`; successful GET/HEAD responses get an ETag automatically. Matching `If-None-Match` on unchanged content yields 304. Handlers still use `ctx.send` as usual.
+Mount `etag()` in `WebApp.mount`; successful GET/HEAD responses get an ETag automatically. When the client sends If-None-Match and nothing changed, you get 304. Business code still `ctx.send` as usual.
 
 ```typescript
 import { etag } from '@aomex/etag';
@@ -21,7 +21,7 @@ import { routers, WebApp } from '@aomex/web';
 const app = new WebApp({
   services,
   logger: services.logger,
-  language: { mode: 'fixed', language: 'zh-CN' },
+  language: { mode: 'fixed', language: 'en-US' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:4]
     etag(), // [!code highlight]
@@ -30,25 +30,17 @@ const app = new WebApp({
 });
 ```
 
-Handlers still `ctx.send(data)`; when the tag matches and content is fresh, middleware returns 304 with an empty body.
+Business still `ctx.send(data)`; on a match that is still “fresh”, the middleware returns 304 with an empty body.
 
-Plain `WebMiddleware`—no new `ctx` fields. First response carries ETag; a repeat request with matching `If-None-Match` → **304**. Existing `Etag` header, non-2xx, or non GET/HEAD usually skip rewriting.
+Plain WebMiddleware—no new `ctx` fields. On the wire: first response carries ETag; a later request with a matching If-None-Match → **304**. Existing Etag header, non-2xx, or non-GET/HEAD usually leave the response alone.
 
 ::: tip
-With site-wide [response envelope](/en/web/envelope), wrapping rewrites the body and forces outer **200**; the framework **drops the original ETag** so the digest does not still match pre-wrap content. For conditional caching, ensure the tag reflects the wrapped body—or use `skipEnvelope` on that exit.
+With site-wide [response envelope](/en/web/envelope), the envelope rewrites the body and sets the outer status to 200; the framework **strips the original ETag** so the digest does not still describe the pre-envelope body. For endpoints that need conditional caching, make sure the digest is computed after the envelope, or `skipEnvelope` on that exit.
 :::
 
-## Weak validation and stacking
+## Semi-static APIs
 
-| Option | When to use | Default |
-| --- | --- | --- |
-| `weak` | Semantically equivalent content is enough for 304; strong wants byte identity | `false` (`ReadStream` often weak) |
-
-```typescript
-mount: [etag({ weak: true })];
-```
-
-### Semi-static API (often on in production)
+For public config, version info, and other GET responses that barely change for a while, mounting site-wide is enough; the action still loads from the DB and `send`s as usual:
 
 ```typescript
 router.get('/api/config', {
@@ -58,7 +50,11 @@ router.get('/api/config', {
 });
 ```
 
-### Static assets + compression
+When you build JSON dynamically but a semantic match should still 304, turn on weak validation: `etag({ weak: true })` (strong by default; `ReadStream` often uses weak). Highly personalized lists such as “user orders” do not need a site-wide hard enable.
+
+## Static + compression
+
+When static directories and compression sit next to each other, put ETag earlier so the digest sees content before the final write (confirm with real 304 / size behavior):
 
 ```typescript
 mount: [
@@ -69,10 +65,7 @@ mount: [
 ],
 ```
 
-| Environment | Guidance |
-| --- | --- |
-| Production | Enable for static and semi-static endpoints; skip forcing site-wide ETag on per-user “my orders” style APIs |
-| Local | If JSON debugging looks stuck, disable or hard-refresh; re-enable when testing conditional requests |
+When local JSON debugging is hidden by 304, leave it unmounted or hard-refresh; turn it back on when you test conditional requests:
 
 ```typescript
 mount: [
@@ -81,12 +74,15 @@ mount: [
 ],
 ```
 
-At high scale you may cache at the CDN; in-app ETag helps when you still control 304 semantics.
+| Environment | Recommendation |
+| --- | --- |
+| Production | Enable for static and semi-static endpoints; personalized APIs need not force site-wide |
+| Local | If debugging is blocked by 304, unmount or hard-refresh |
 
-If code changes do not show in the browser locally, suspect **304** before business logic. Site-wide strong ETag on every personalized response wastes CPU hashing. With [Compress](/en/plugins/compress), verify middleware and gateway order in deployment—trust real 304/size behavior.
+Under heavy traffic you can also hand caching to a CDN; in-app ETag fits when you still want to own 304 semantics. Forcing ETag site-wide on every personalized response wastes CPU on digests.
 
 ## Next steps
 
 - Compression: [Compress](/en/plugins/compress)
-- Static directories: [Serve static](/en/plugins/serve-static)
-- Response shaping: [Response constraints](/en/web/response)
+- Static directories: [Static files](/en/plugins/serve-static)
+- Shape responses: [Constrain response](/en/web/response)

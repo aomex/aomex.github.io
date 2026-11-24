@@ -63,23 +63,11 @@ ctx.auth.apiKey // { key: string; data: T }
 
 authorize('apiKey', …) 的額外引數型別，與 Bearer 一樣，來自你寫的 onAuthorize。沒寫 onAuthorize 時，一般只做「有沒有合法 key」這一層。
 
-## keyLoaders 與限流維度
+## 多來源取 Key 與限流維度
 
-| 選項 | 什麼時候用 | 預設 |
-| --- | --- | --- |
-| `keyLoaders` | 按序嘗試 header / query / cookie | `[{ type: 'header', key: 'x-api-key' }]` |
-| `onLoaded` | 校驗 key 並返回應用身份 | **必填** |
-| `onAuthorize` | 按 scope、套餐等再卡一層 | 可選 |
+`onLoaded` 必填：校驗 key 並返回應用身份。預設只認報頭 `x-api-key`；要按序嘗試 header / query / cookie 時再寫 `keyLoaders`。按 scope、套餐再卡一層時補 `onAuthorize`。
 
-支援的 loader：
-
-- header — 報頭裸值（key 名會轉小寫匹配）
-- query — 慎用，易進日誌
-- cookie — 按團隊約定
-
-**不支援從 body 讀 Key**，避免金鑰落進請求體日誌。query 裡的 key 會進訪問日誌，生產優先 header。
-
-多來源回退示例：
+支援的 loader：header（報頭裸值，key 名轉小寫匹配）、query（慎用，易進日誌）、cookie。**不支援從 body 讀 Key**，避免金鑰落進請求體日誌。生產優先 header。
 
 ```typescript
 new AuthApiKeyStrategy({
@@ -92,6 +80,7 @@ new AuthApiKeyStrategy({
   },
 });
 ```
+
 
 signature() 可用來生成隨機 Key 串（簽發新客戶端時），用法與 Bearer 策略類似。
 

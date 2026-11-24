@@ -12,7 +12,7 @@ pnpm add @aomex/cron
 
 ## ConsoleApp 挂 crons()
 
-`crons()` 在 Console 进程里起调度器：扫 `commanders` 目录里带了 `cron()` 的指令，到点用与 CLI 相同的路径执行 action。还提供本机 HTTP 管控口（默认可改 port）。**只挂 Console**，不要挂 WebApp。
+`crons()` 在 Console 进程里起调度器：扫 `commanders` 目录里带了 `cron()` 的指令，到点用与 CLI 相同的路径执行 action。还提供本机 HTTP 管控口（`port` 必填）。**只挂 Console**，不要挂 WebApp。
 
 ::: warning
 挂到 `WebApp.mount` 会把 HTTP 与计划任务入口混在一起，应分开。
@@ -36,6 +36,8 @@ const app = new ConsoleApp({
 });
 ```
 
+`commanders` 要和下面的 `commanders()` **同目录**，调度才能扫到 `cron()`。`port` 给本机查状态、停任务用（有效范围 1–65535）。
+
 在指令上声明计划（与 [指令路由](/zh/console/commander) 同文件即可）：
 
 ```typescript
@@ -52,7 +54,9 @@ commander.create('report:daily', { // [!code focus:6]
 });
 ```
 
-运行：进程常作为常驻服务；也可只靠 aomex CLI 手跑同一条指令做排障。
+字符串写法等价 `{ time: '...' }`（五段从分起，或六段含秒）。也可用字段组合：`minute` / `hour` / `dayOfMonth` 等。
+
+运行：进程常作为常驻服务；也可只靠 aomex CLI 手跑同一条指令做排障。`crons()` 还会注册管控类子命令（如 `cron:stats`、`cron:stop` 等，以包内 `--help` 为准）。
 
 ## 长任务里用 ctx.cron
 
@@ -61,8 +65,6 @@ commander.create('report:daily', { // [!code focus:6]
 - `scheduleTime` / `executionTime` / `nextScheduleTime`：打日志、审计用
 - `isAlive()`：响应运维叫停
 - `isCurrentEpoch()`：本轮时间窗是否还没过期
-
-`crons()` 还会注册管控类子命令（如 `cron:stats`、`cron:stop` 等，以包内 `--help` 为准）。
 
 ### isAlive()：半永久循环要听停
 
@@ -91,34 +93,36 @@ action: async (ctx) => {
 };
 ```
 
-## crons() 应用级字段
+## 防重叠与定时带参
 
-| 字段 | 什么时候用 | 默认 |
-| --- | --- | --- |
-| `commanders` | 与 `commanders()` 同目录，调度才能扫到 `cron()` | — |
-| `port` | 本机 HTTP 管控 / 状态 | 包内默认 |
-| `store` | **多机必换** Redis 等 | 内存（仅本进程） |
+长任务默认 `concurrent: 1`：上一轮还没跑完，新到点的触发会进等待池，超时（默认约 `10_000` ms，可用 `waitingTimeout` 调）后丢掉，避免叠车。需要不同时间点允许重叠时再把 `concurrent` 调大，或设 `'infinity'`。
 
-## cron() 单条指令字段
-
-| 字段 | 什么时候用 | 默认 |
-| --- | --- | --- |
-| `time` / `second`…`minute` | 五段/六段表达式或字段组合 | — |
-| `args` | 定时跑自动带 CLI 参数 | — |
-| `concurrent` | 防重叠；长任务常用 `1` | `1` |
-| `waitingTimeout` | 并发满时等槽位多久 | `10_000` |
-
-字符串写法等价 { time: '...' }：
+定时跑还要带 CLI 参数时，用 `args`——会再走一遍与手敲相同的 [options()](/zh/console/options) 校验，字段名必须对齐：
 
 ```typescript
-cron({
-  time: '0 9 * * *', // [!code highlight]
-  concurrent: 1,
-  args: ['--verbose'],
+import { cron } from '@aomex/cron';
+import { options } from '@aomex/console';
+import { rule } from '@aomex/common';
+
+commander.create('export', {
+  mount: [
+    cron({ // [!code focus:8]
+      time: '0 2 * * *',
+      concurrent: 1,
+      args: ['--out', '/data/nightly.csv', '--limit', '1000'],
+    }),
+    options({
+      out: rule.string(),
+      limit: rule.int().min(1).default(100),
+    }),
+  ],
+  action: async (ctx) => {
+    await exportCsv(ctx.options);
+  },
 });
 ```
 
-### 分布式任务
+## 多副本换共享 store
 
 默认 `store` 是**进程内内存**：单机 Console 够用。上了多 Pod / 多机后，每个进程各自到点都会跑一遍——日报发两封、对账跑两遍就从这儿来。
 
@@ -142,8 +146,6 @@ crons({
 | --- | --- |
 | 进程内 `@aomex/cron` | 与 `options()` 共用、要互斥与管控口 |
 | 系统 crontab 调 `aomex xxx` | 极简定时、可接受无进程内抢锁 |
-
-`cron()` 的 args 注入的是 argv，须与 [输入参数](/zh/console/options) 里 options() 字段对得上。
 
 ## 下一步
 

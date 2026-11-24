@@ -4,7 +4,7 @@ outline: deep
 
 # 定期実行 Cron
 
-Console プロセスで既存コマンドをスケジュール実行。手で aomex report:daily を叩くのと定期トリガーは**同じ** action と options()。crons() がスケジューラと管理口を起動。cron() は各コマンドの mount で計画を宣言。複数レプリカは共有 store が必要でないと重複実行。
+Console プロセスで既存の指令をスケジュール実行する。手打ちの aomex report:daily と定期トリガーは**同じ** action と options() を通る。crons() がスケジューラと管理口を起こし、cron() は具体指令の mount に計画を宣言する。複数レプリカでは共有 store が要る。さもないと重複トリガーになる。
 
 ```bash
 pnpm add @aomex/cron
@@ -12,11 +12,10 @@ pnpm add @aomex/cron
 
 ## ConsoleApp に crons()
 
-`crons()` は Console でスケジューラ起動：`commanders` ディレクトリの `cron()` 付きコマンドを走査し、時刻に CLI と同じ経路で action 実行。ローカル HTTP 管理口も提供（port 変更可）。**Console のみ**。**WebApp に載せない**。
+`crons()` は Console プロセスでスケジューラを起こす。`commanders` ディレクトリ内の `cron()` 付き指令を掃き、時刻になると CLI と同じ経路で action を実行する。本機 HTTP の管理口も提供する（`port` 必須）。**Console にだけ載せる**。WebApp には載せない。
 
 ::: warning
-`WebApp.mount` に載せると HTTP と定期タスク入口が混ざる。分離すること。
-
+`WebApp.mount` に載せると HTTP と定期タスク入口が混ざる。分けよ。
 :::
 
 ```typescript
@@ -37,7 +36,9 @@ const app = new ConsoleApp({
 });
 ```
 
-コマンドで計画宣言（[コマンドルーティング](/ja/console/commander) と同ファイルで可）：
+`commanders` は下の `commanders()` と**同じディレクトリ**にする。スケジューラが `cron()` を掃ける。`port` は本機の状態照会・停止用（有効範囲 1–65535）。
+
+指令に計画を宣言する（[指令ルート](/ja/console/commander) と同じファイルでよい）：
 
 ```typescript
 import { Commander } from '@aomex/console';
@@ -53,21 +54,21 @@ commander.create('report:daily', { // [!code focus:6]
 });
 ```
 
-運用：プロセスは常駐サービスが多い。aomex CLI で同コマンドを手実行して障害切り分けも可。
+文字列は `{ time: '...' }` と等価（5 段は分から、または 6 段で秒を含む）。フィールド組み合わせも可：`minute` / `hour` / `dayOfMonth` など。
+
+実行：プロセスは常駐サービスとして動かすことが多い。同じ指令を aomex CLI だけで手実行して障害切り分けもできる。`crons()` は管理系サブコマンドも登録する（`cron:stats`、`cron:stop` など。パッケージ内の `--help` を正とする）。
 
 ## 長いタスクでの ctx.cron
 
-定期トリガーの action と手 CLI は Console コンテキストを共有。長時間タスクでは **ctx.cron** が今回のスケジュール時刻と、用途の異なる二種類の生存判定——シーンごと**分けて**使い、一つのループ条件に無理にまとめない。
+定期トリガーの action と手実行 CLI は Console コンテキストを共有する。長く走るタスクでは **ctx.cron** が今回のスケジュール時刻と、用途の違う二種の生存判定を出す——場面ごとに**分けて使い**、一つのループ条件に無理に混ぜない。
 
-- `scheduleTime` / `executionTime` / `nextScheduleTime`：ログ・監査
-- `isAlive()`：運用停止に応答
-- `isCurrentEpoch()`：今回の時間窗がまだ有効か
-
-`crons()` は管理系サブコマンド（`cron:stats`、`cron:stop` 等、パッケージ `--help` 準拠）も登録。
+- `scheduleTime` / `executionTime` / `nextScheduleTime`：ログ・監査用
+- `isAlive()`：運用の停止指示に応じる
+- `isCurrentEpoch()`：今回の時間窓がまだ切れていないか
 
 ### isAlive()：半永久ループは停止を聞く
 
-キュー消費、外部状態ポーリングなど「止められるまで回す」ロジックは `while (ctx.cron.isAlive())`。運用が `cron:stop` すると false になりループ終了。見ないと子プロセスが手動 kill まで空転。
+キュー消費や外部状態のポーリングなど「誰かが止めるまで回る」ロジックは `while (ctx.cron.isAlive())`。運用が `cron:stop` を実行すると `false` になり、ループは抜けるべき。見ないと子プロセスが空回りし、手で殺すことになる。
 
 ```typescript
 action: async (ctx) => {
@@ -77,9 +78,9 @@ action: async (ctx) => {
 };
 ```
 
-### isCurrentEpoch()：今回の窗内で切り上げ
+### isCurrentEpoch()：今回の窓内で切り上げ
 
-「次の計画トリガー前に」終える仕事（照合、テーブルスキャン）は各ステップで `isCurrentEpoch()`。true なら次回スケジュール前。false なら切り上げ残りは次ラウンドへ。次の cron と重ならない。
+「次の計画トリガーまでに」終わらせたい一括処理（照合、表スキャン）は、各ステップの前に `isCurrentEpoch()` を見る。`true` の間は次のスケジュールがまだ来ていない。`false` になったら切り上げ、残りは次のラウンドへ。次の cron と重ならないようにする。
 
 ```typescript
 action: async (ctx) => {
@@ -92,38 +93,40 @@ action: async (ctx) => {
 };
 ```
 
-## crons() アプリレベルフィールド
+## 重なり防止と定期の引数
 
-| フィールド | いつ使う | デフォルト |
-| --- | --- | --- |
-| `commanders` | `commanders()` と同ディレクトリ。スケジューラが `cron()` を見つける | — |
-| `port` | ローカル HTTP 管理 / 状態 | パッケージ既定 |
-| `store` | **複数マシンでは必須** Redis 等 | メモリ（当該プロセスのみ） |
+長いタスクのデフォルトは `concurrent: 1`：前ラウンドが終わっていないと、新しい時刻のトリガーは待機プールに入り、タイムアウト（デフォルト約 `10_000` ms、`waitingTimeout` で調整可）後に捨て、重なりを防ぐ。異なる時刻で重なりを許すなら `concurrent` を上げるか `'infinity'`。
 
-## cron() 単一コマンドフィールド
-
-| フィールド | いつ使う | デフォルト |
-| --- | --- | --- |
-| `time` / `second`…`minute` | 5/6 フィールド式またはフィールド組み合わせ | — |
-| `args` | 定期実行時に自動付与する CLI 引数 | — |
-| `concurrent` | 重複防止。長いタスクは `1` が多い | `1` |
-| `waitingTimeout` | 並列満杯時にスロット待ち時間 | `10_000` |
-
-文字列書式は { time: '...' } と同等：
+定期実行で CLI 引数も付けるときは `args`——手打ちと同じ [options()](/ja/console/options) 検証をもう一度通る。フィールド名は揃える：
 
 ```typescript
-cron({
-  time: '0 9 * * *', // [!code highlight]
-  concurrent: 1,
-  args: ['--verbose'],
+import { cron } from '@aomex/cron';
+import { options } from '@aomex/console';
+import { rule } from '@aomex/common';
+
+commander.create('export', {
+  mount: [
+    cron({ // [!code focus:8]
+      time: '0 2 * * *',
+      concurrent: 1,
+      args: ['--out', '/data/nightly.csv', '--limit', '1000'],
+    }),
+    options({
+      out: rule.string(),
+      limit: rule.int().min(1).default(100),
+    }),
+  ],
+  action: async (ctx) => {
+    await exportCsv(ctx.options);
+  },
 });
 ```
 
-### 分散タスク
+## 複数レプリカは共有 store に替える
 
-既定 `store` は**プロセス内メモリ**：単一 Console で足りる。複数 Pod / 複数マシンでは各プロセスが同時刻に実行——日報が二通、照合が二回の原因。
+デフォルトの `store` は**プロセス内メモリ**：単機 Console なら足りる。複数 Pod / 複数マシンでは、各プロセスが時刻ごとに一度ずつ走る——日報が二通、照合が二回、はここから来る。
 
-複数レプリカで同一計画をクラスタ全体で `concurrent` スロット競争させるには `crons()` に**共有 store**（Redis が一般的）。スケジュールと排他は store が調整。業務 action に分散ロックは不要。
+複数レプリカで動かしつつ、同じ計画がクラスタ全体で `concurrent` に従ってスロットを取るには、`crons()` に**共有 store**（よく使うのは Redis）を渡す。スケジュールと排他は store が調整する。業務 action に分散ロックを自分で足す必要はない。
 
 ```typescript
 import { CacheRedisAdapter } from '@aomex/cache-redis-adapter';
@@ -136,19 +139,16 @@ crons({
 ```
 
 ::: warning
-複数レプリカで既定メモリ store のままだと、同一 cron が**各**レプリカで一度ずつ発火。ローカル単一プロセスなら Redis 不要。
-
+複数レプリカでデフォルトのメモリ store のままだと、同じ cron が**各**レプリカで一度ずつトリガーされる。ローカル単プロセスに Redis は不要。
 :::
 
 | 方式 | いつ使う |
 | --- | --- |
-| プロセス内 `@aomex/cron` | `options()` と共有、排他と管理口が要る |
-| システム crontab で `aomex xxx` | 極小の定期、プロセス内ロックなしでも可 |
-
-`cron()` の args は argv 注入。[入力パラメータ](/ja/console/options) の options() フィールドと一致させる。
+| プロセス内 `@aomex/cron` | `options()` と共用し、排他と管理口が要るとき |
+| システム crontab で `aomex xxx` | 極簡の定期、プロセス内ロックが無くてよいとき |
 
 ## 次のステップ
 
-- コマンドとエイリアス：[コマンドルーティング](/ja/console/commander)
+- 指令とエイリアス：[指令ルート](/ja/console/commander)
 - CLI 引数：[入力パラメータ](/ja/console/options)
 - Console 入口：[Console アプリ](/ja/console/)

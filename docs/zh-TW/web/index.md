@@ -159,7 +159,7 @@ proxyIP: {
 
 `mount` 是整站中介軟體佇列：每個請求都會按陣列順序走進來（洋蔥模型，可在 `await next()` 前後做事）。跨域、全站鑑權、訪問日誌、以及 `routers('./src/routers')` 掃出來的介面，都掛在這裡。
 
-只影響某一組 URL 的邏輯，請放到 [Router](/zh-TW/web/router) 或單條路由的 mount，別全塞進 WebApp。
+隻影響某一組 URL 的邏輯，請放到 [Router](/zh-TW/web/router) 或單條路由的 mount，別全塞進 WebApp。
 
 ```typescript
 import { middleware } from '@aomex/common';

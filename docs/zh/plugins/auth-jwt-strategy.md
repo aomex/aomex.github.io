@@ -76,15 +76,9 @@ authorize('jwt', level) 的参数类型跟着 onAuthorize 定义走。
 别把密码等敏感字段写进 JWT payload：载荷可被解码阅读，只放标识和角色即可。
 :::
 
-## verifyOptions 与吊销
+## 收紧验签与吊销
 
-| 选项 | 什么时候用 |
-| --- | --- |
-| `secret` | 对称密钥；单体 / 内网常见 |
-| `tokenLoaders` | 默认 `Authorization` Bearer；需要时可像 Bearer 一样加 cookie/query |
-| `verifyOptions` | 收紧算法、`audience` / `issuer` |
-| `onVerified` | 把 payload 收成业务身份；黑名单命中返回 `false` → 401 |
-| `onAuthorize` | 管理接口按角色拦截；实例方法里用 `this.getIdentity()` |
+生产常把算法和 audience 写死，避免接受意外算法。`onVerified` 里查黑名单：命中返回 `false` → **401**。token 默认从 `Authorization` Bearer 取；要像 Bearer 一样加 cookie/query 时再配 `tokenLoaders`。
 
 ```typescript
 new AuthJwtStrategy({
@@ -102,7 +96,7 @@ new AuthJwtStrategy({
 });
 ```
 
-非对称密钥、旧密钥轮换等进阶配法见 [高级：自定义鉴权策略](/zh/advanced/auth-strategy)。
+管理接口按角色拦截仍走 `onAuthorize`，实例方法里用 `this.getIdentity()`。非对称密钥、旧密钥轮换等进阶配法见 [高级：自定义鉴权策略](/zh/advanced/auth-strategy)。
 
 验签失败时先想服务器时钟是否同步。吊销没有银弹：短 expiresIn + 刷新接口是常见组合，黑名单要自己维护。
 

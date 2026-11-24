@@ -61,7 +61,7 @@ commander.create(commandName | string[], {
 
 `prefix` 是指令名字首：構造 `new Commander({ prefix: 'cache:' })` 後，`create('warm')` 對外就是 `aomex cache:warm`。按領域劃分（`cache:`、`user:`）可少跨檔案重名，也方便在 `--help` 裡一眼掃到一組相關命令。
 
-未匹配任何指令時，應用通常以**非零退出碼**結束並列印幫助——CI 裡要用退出碼斷言，別只看 stdout。忘了在 `ConsoleApp.mount` 掛 `commanders(...)` 時，檔案寫了指令 CLI 裡也找不到。
+未匹配任何指令時，應用通常以**非零退出碼**結束並列印幫助——CI 裡要用退出碼斷言，別隻看 stdout。忘了在 `ConsoleApp.mount` 掛 `commanders(...)` 時，檔案寫了指令 CLI 裡也找不到。
 
 ## commanders 註冊
 

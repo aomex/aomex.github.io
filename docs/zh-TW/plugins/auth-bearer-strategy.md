@@ -100,18 +100,14 @@ onAuthorize: (minRole: number) => {
 },
 ```
 
-## tokenLoaders 與 onLoaded
+## 多來源取 token
 
-| 選項 | 什麼時候用 | 預設 |
-| --- | --- | --- |
-| `onLoaded` | 查 Redis/DB 把 token 換成使用者；找不到返回 `false` | **必填** |
-| `tokenLoaders` | 預設只讀 `Authorization`；嵌入頁等才考慮 cookie/query | header Bearer（生產首選；query/body 易進訪問日誌與 Referer） |
-| `onAuthorize` | 需要 `authorize(角色)` 時再寫；只要登入態可省略 | 可選 |
+`onLoaded` 必填：查 Redis/DB 把 token 換成使用者，找不到返回 `false` → **401**。預設只讀 `Authorization` Bearer（生產首選）；嵌入頁等無法帶頭時，再加 query / cookie / body——query、body 易進訪問日誌與 Referer，能免則免。只要登入態、不卡角色時，`onAuthorize` 可省略。
 
 tokenLoaders 常見形態：
 
 - `{ type: 'header', key: 'authorization' }` — 只認 `Bearer <token>` 兩段式；裸 token 不放這裡
-- { type: 'body' \| 'query' \| 'cookie', key: 'access_token' } — 無法帶頭時的折中
+- `{ type: 'body' | 'query' | 'cookie', key: 'access_token' }` — 無法帶頭時的折中
 
 ```typescript
 new AuthBearerStrategy({
@@ -128,7 +124,7 @@ new AuthBearerStrategy({
 
 生成 OpenAPI 時，把掛了 `auth.authenticate('bearer')` 的同一份 `WebApp` 傳給 `generateOpenapi({ app })`，Bearer 安全方案才會出現在文件裡。總入口見 [身份認證](/zh-TW/plugins/auth)。
 
-onLoaded 返回 false 即未登入（**401**），別用業務異常代替，除非你要自定義錯誤碼。自包含 JWT 走 [JWT 策略](/zh-TW/plugins/auth-jwt-strategy)，別把 JWT 當不透明 Bearer 串驗。
+onLoaded 返回 false 即未登入，別用業務異常代替，除非你要自定義錯誤碼。自包含 JWT 走 [JWT 策略](/zh-TW/plugins/auth-jwt-strategy)，別把 JWT 當不透明 Bearer 串驗。
 
 ## 相關
 

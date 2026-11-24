@@ -2,15 +2,15 @@
 outline: deep
 ---
 
-# Bearer 戦略
+# Bearer ストラテジー
 
-最も一般的なフロントの形：`Authorization: Bearer <token>`。サーバーは不透明 token でユーザーオブジェクトに換える。通らなければ **401**。ローカル検証で DB 参照を減らすなら [JWT 戦略](/ja/plugins/auth-jwt-strategy)。失効・権限変更は別途検討が要る。
+フロントでいちばん多いのは `Authorization: Bearer <token>`。サーバーは不透明 token をユーザーオブジェクトに換える。通らなければ **401**。ローカルで署名検証し DB 照会を減らしたいなら [JWT ストラテジー](/ja/plugins/auth-jwt-strategy)。ただし失効と権限変更は別途の準備が要ることが多い。
 
-AuthBearerStrategy を設定：リクエストから token を取り、onLoaded で業務身元に。ロールが要るとき onAuthorize で比較。業務では ctx.auth.bearer.data を読む（生 token 文字列ではない）。
+AuthBearerStrategy を設定する：リクエストから token を取り、onLoaded で業務身分に換える。ロールが要るときは onAuthorize で比較する。業務では ctx.auth.bearer.data を読む。生の token 串ではない。
 
 ## インストール
 
-Bearer は `@aomex/auth` メインに同梱。サブパスから import。
+Bearer は `@aomex/auth` 本体に含まれる。サブパスから import すればよい。
 
 ```bash
 pnpm add @aomex/auth
@@ -62,7 +62,7 @@ router.delete('/posts/:id', {
 });
 ```
 
-ログイン API（authenticate なし）で token 発行：
+ログイン API（authenticate を載せない）で token を発行する：
 
 ```typescript
 router.post('/login', { // [!code focus:13]
@@ -80,7 +80,7 @@ router.post('/login', { // [!code focus:13]
 });
 ```
 
-signature が生成するのは**不透明**ランダム文字列（業務キーでドメイン分離可）。**JWT ではない**。ログインルート自体に authenticate を載せない。
+signature が作るのは**不透明**な乱数串（業務キーを混ぜてドメイン隔離も可）。**JWT ではない**。ログインルート自体に authenticate を載せない。
 
 認証成功後：
 
@@ -88,9 +88,9 @@ signature が生成するのは**不透明**ランダム文字列（業務キー
 ctx.auth.bearer // { token: string; data: T }
 ```
 
-T は onLoaded 成功時のオブジェクト形。authorize('bearer', n) の n の型は onAuthorize に従う。
+T は onLoaded が成功時に返すオブジェクトの形。authorize('bearer', n) の n の型はあなたの onAuthorize に従う。
 
-onAuthorize はインスタンスメソッド（this.getIdentity()）か柯里化——どちらか。型は戦略定義に従う：
+onAuthorize はインスタンスメソッド（this.getIdentity()）でも、カリー化でもよい——どちらか一方。型はストラテジー定義に従う：
 
 ```typescript
 onAuthorize: (minRole: number) => {
@@ -100,18 +100,14 @@ onAuthorize: (minRole: number) => {
 },
 ```
 
-## tokenLoaders と onLoaded
+## 複数ソースから token を取る
 
-| オプション | いつ使う | デフォルト |
-| --- | --- | --- |
-| `onLoaded` | Redis/DB で token→ユーザー。見つからなければ `false` | **必須** |
-| `tokenLoaders` | 既定は `Authorization` のみ。埋め込みページなどで cookie/query | header Bearer（本番推奨；query/body はアクセスログ・Referer に残りやすい） |
-| `onAuthorize` | `authorize(ロール)` が要るとき。ログイン態だけなら省略可 | 任意 |
+`onLoaded` は必須：Redis/DB を見て token をユーザーに換える。見つからなければ `false` → **401**。デフォルトは `Authorization` Bearer のみ（本番の第一選択）。埋め込みページなどでヘッダーが付けられないときだけ query / cookie / body——query、body はアクセスログや Referer に入りやすいので、避けられるなら避ける。ログイン状態だけでロールを見ないなら、`onAuthorize` は省略可。
 
-tokenLoaders の典型：
+tokenLoaders のよくある形：
 
-- `{ type: 'header', key: 'authorization' }` — `Bearer <token>` の二段式のみ。生 token はここに置かない
-- { type: 'body' \| 'query' \| 'cookie', key: 'access_token' } — ヘッダーが使えないときの妥協
+- `{ type: 'header', key: 'authorization' }` — `Bearer <token>` の二段式だけ認める。素の token はここに置かない
+- `{ type: 'body' | 'query' | 'cookie', key: 'access_token' }` — ヘッダーが付けられないときの妥協
 
 ```typescript
 new AuthBearerStrategy({
@@ -126,12 +122,12 @@ new AuthBearerStrategy({
 });
 ```
 
-OpenAPI 生成時、`auth.authenticate('bearer')` を載せた**同じ** `WebApp` を `generateOpenapi({ app })` に渡すと Bearer セキュリティがドキュメントに出る。総合入口は [認証](/ja/plugins/auth)。
+OpenAPI 生成時は、`auth.authenticate('bearer')` を載せた同じ `WebApp` を `generateOpenapi({ app })` に渡す。Bearer のセキュリティスキームがドキュメントに出る。総入口は [認証](/ja/plugins/auth)。
 
-onLoaded が false なら未ログイン（**401**）。業務例外で代用しない（カスタムコードが要る場合を除く）。自己完結 JWT は [JWT 戦略](/ja/plugins/auth-jwt-strategy)。JWT を不透明 Bearer 文字列として検証しない。
+onLoaded が false を返すのは未ログイン。業務例外で代用しない（カスタムエラーコードが要るとき以外）。自己完結 JWT は [JWT ストラテジー](/ja/plugins/auth-jwt-strategy)。JWT を不透明 Bearer 串として検証しない。
 
 ## 関連
 
 - [認証](/ja/plugins/auth)
-- [JWT 戦略](/ja/plugins/auth-jwt-strategy)
-- [生成OpenAPI](/ja/openapi/)
+- [JWT ストラテジー](/ja/plugins/auth-jwt-strategy)
+- [OpenAPI 生成](/ja/openapi/)

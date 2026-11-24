@@ -13,7 +13,7 @@ outline: deep
 Общее описание сервиса — в `docs.info.description`; описание группы — в `docs.tags[].description` (имя tag должно совпадать с маршрутом, см. [Теги](/ru/openapi/tags)).
 
 ```typescript
-import { generateOpenapi } from '@aomex/openapi';
+import { generateOpenapi } from '@aomex/openapi-generator';
 import { app } from './app.js';
 
 await generateOpenapi({

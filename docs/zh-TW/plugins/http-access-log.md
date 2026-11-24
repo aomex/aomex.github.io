@@ -2,22 +2,22 @@
 outline: deep
 ---
 
-# HTTP 訪問日誌
+# 訪問日誌
 
-在請求結束時打一行訪問日誌：方法、URL、狀態碼、耗時等，用來看流量和慢介面。
+想在應用裡看到「誰打了哪個介面、花了多久」——用 `@aomex/access-log` 的 `httpAccessLog()`。請求結束打一行。
 
-**生產優先用 Nginx access_log**（或閘道器 / 負載均衡自帶的訪問日誌）：格式統一、不佔 Node 事件迴圈，也更容易進現有采集。`@aomex/http-access-log` 適合本地開發、沒有反代，或要在日誌裡拼 **userId / 租戶 / traceId** 這類只有進了應用才能拿到的欄位。
+**生產環境優先用 Nginx 的 access_log**（或閘道器自帶的）。本包裝這幾種情況：本地開發、前面沒有反代、以及日誌裡要拼 **userId / 租戶 / traceId** 這類只有進了 Node 才能拿到的欄位。
 
 ```bash
-pnpm add @aomex/http-access-log
+pnpm add @aomex/access-log
 ```
 
-## 靠前掛全站
+## 掛在 routers 之前
 
-需要應用內訪問日誌時，把 `httpAccessLog()` 儘量放在 `routers` **之前**：請求結束打一行 combined 風格記錄；404、校驗 400 也會記賬。掛在後面容易對不齊整鏈耗時。
+把 `httpAccessLog()` 放在 `routers` **之前**。請求走完整條洋蔥後打一行；404、校驗 400 也會記。掛太靠後，耗時和早退路徑會對不齊你想要的「全站審計」。
 
 ```typescript
-import { httpAccessLog } from '@aomex/http-access-log';
+import { httpAccessLog } from '@aomex/access-log';
 import { routers, WebApp } from '@aomex/web';
 
 const app = new WebApp({
@@ -32,27 +32,18 @@ const app = new WebApp({
 });
 ```
 
-無配置時類似 combined 的一行文本，預設走 logger 出口（本地多為控制台）。欄位大致含：ip、method、url、statusCode、duration、contentLength。
+什麼都不配時，預設打到控制台，大致是 combined 風格：ip、method、url、statusCode、duration、contentLength。本地直連掛上即可；排慢介面再加 [響應時間](/zh-TW/plugins/response-time)。
 
 ::: warning
 掛在 routers **後面** 時，整條鏈耗時和早退 404 可能對不上你想要的「全站審計」。
 :::
 
-customTokens 裡回撥引數是 WebContext：ctx.auth 等欄位要在**內層鑑權跑完後**才能讀到——訪問日誌在 await next() 之後寫行，一般能拿到洋蔥內層掛上的屬性。若 customTokens 讀 ctx.auth 卻總是 -，確認洋蔥順序：鑑權在路由裡、日誌包在外層之前結束時，要把鑑權提高到 Router mount。
+## 改格式、落到檔案
 
-## 格式與落盤
-
-| 能力 | 什麼時候用 | 預設 |
-| --- | --- | --- |
-| `format` | 生產對齊 ELK/Loki 欄位順序 | 內建 combined 風格 |
-| `transports` | 落盤、推到遠端採集 | 控制台（跟 `logger`） |
-| `customTokens` | 使用者 ID、租戶、traceId | — |
-| `HttpAccessLogToken.*` | 拼 `ip` / `method` / `duration` 等 | 包內匯出 |
-
-### 生產：落盤
+生產要對齊 ELK / Loki 欄位順序，或寫到檔案裡，用 `format` + `transports`。`format` 建議用 `HttpAccessLogToken` 拼接，別手寫容易拼錯的佔位符。
 
 ```typescript
-import { HttpAccessLogToken, httpAccessLog } from '@aomex/http-access-log';
+import { HttpAccessLogToken, httpAccessLog } from '@aomex/access-log';
 import { FileTransport } from '@aomex/logger';
 
 httpAccessLog({
@@ -68,7 +59,11 @@ httpAccessLog({
 });
 ```
 
-### 鑑權後寫 userId
+傳空 `transports` 或 `disabled: true` 相當於關掉訪問日誌。生產有 Nginx 時，**優先**閘道器的 `access_log`；只有要自定義 token、或前面沒有反代時，再開應用層落盤 / 推採集，並與業務日誌分流。
+
+## 拼上 userId
+
+日誌在 `await next()` **之後**寫行，所以內層鑑權掛上的 `ctx.auth` 一般能讀到。用 `customTokens` 往 `format` 裡塞業務欄位：回撥拿到的是完整 `WebContext`。
 
 ```typescript
 httpAccessLog({
@@ -81,17 +76,12 @@ httpAccessLog({
 });
 ```
 
-常與 [響應時間](/zh-TW/plugins/response-time) 搭配：頭裡 X-Response-Time 給客戶端/閘道器，日誌裡 duration 進平臺。
+常與 [響應時間](/zh-TW/plugins/response-time) 搭配：頭裡的 `X-Response-Time` 給客戶端 / 閘道器看，日誌裡的 duration 進採集平臺。
 
-| 環境 | 建議 |
-| --- | --- |
-| 本地直連 | 掛本外掛打到控制台即可；慢介面排查可再加 `responseTime()` |
-| 生產有 Nginx | **優先** `access_log`；應用層只在要自定義 token（使用者、租戶）時再開 |
-| 生產無反代 | 本外掛落盤或推到採集，並與業務日誌分流 |
-
-訪問日誌適合流量與耗時觀測，**不要**當敏感操作的唯一審計來源——關鍵業務還要業務日誌或審計表。Nginx 的 access_log 和應用內日誌可以並存，但欄位別做成兩套互相打架的口徑。
+訪問日誌適合看流量和耗時，**不要**當成敏感操作的唯一審計——下單、改許可權這類還是寫業務日誌或審計表。
 
 ## 下一步
 
 - 響應頭耗時：[響應時間](/zh-TW/plugins/response-time)
+- WebSocket 連線 / 訊息訪問日誌：[訪問日誌（WebSocket）](/zh-TW/websocket/access-log)
 - 分級出口 / requestId：[日誌](/zh-TW/core/logger)

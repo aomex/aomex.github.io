@@ -84,7 +84,7 @@ router.get('/google/callback', {
 
 GitHub 等同理：另建 `GithubService`，裡面換 `GitHubOAuth2Client`；`callback` 預設多是 `{ base, userinfo }`。`redirectUri` 用 `(ctx) => …` 可按請求 origin 拼回調，多域名省事。
 
-`store` 暫存 `state`（及 PKCE verifier）。構造時經 `registerLifecycle` 自動 `connect` / 關停 `disconnect`。本地可用 memory；生產多實例換 Redis 適配器（腳手架常直接用 `CacheRedisAdapter`），否則回調可能打到另一臺、找不到 state。state 預設 TTL `'10 minutes'`（`stateTtl`，`DurationInput`）；併發 callback 只有一方成功，換票失敗**不會**恢復 state。
+`store` 暫存 `state`（及 PKCE verifier）。構造時經 `registerLifecycle` 自動 `connect` / 關停 `disconnect`。本地可用 memory；生產多例項換 Redis 介面卡（腳手架常直接用 `CacheRedisAdapter`），否則回撥可能打到另一臺、找不到 state。state 預設 TTL `'10 minutes'`（`stateTtl`，`DurationInput`）；併發 callback 只有一方成功，換票失敗**不會**恢復 state。
 
 前端 GIS / One Tap 拿 `credential` 的，不要用 oauth2-google，改用下表裡的 `google-identity-login`（也可同樣收成一個 Service）。
 
@@ -188,7 +188,7 @@ onProfile: async ({ token, oidc, ctx }) => {
 
 ## 重新整理與吊銷
 
-登入後業務自己存 `refresh_token`；過期前在 Service 裡對 `this.oauth` 調 `refresh`。可選 `scope`（只能縮小，不能擴大）。退出或廢票時調 `revoke`（需配置 `revocationEndpoint`；OIDC 未手寫時會嘗試 discovery 的 `revocation_endpoint`）。
+登入後業務自己存 `refresh_token`；過期前在 Service 裡對 `this.oauth` 調 `refresh`。可選 `scope`（只能縮小，不能擴大）。退出或廢票時調 `revoke`（需配置 `revocationEndpoint`；OIDC 未手寫時會嘗試 discovery 的 `revocation_endpoint`；純 OAuth2 常需手寫該 URL）。
 
 ```typescript
 const tokens = await this.oauth.refresh(storedRefreshToken);
@@ -197,20 +197,10 @@ await this.oauth.revoke(tokens.access_token, {
 });
 ```
 
-## 常改選項
-
-| 選項 | 幹什麼 |
-| --- | --- |
-| `redirectUri` | 固定字串，或 `(ctx) => string` 按請求拼（多域名） |
-| `clientSecret` | 字串，或 `() => string \| Promise<string>`（如 Apple 動態 JWT） |
-| `pkce` | 預設 `true`（S256）；極少數舊端點可關 |
-| `tokenAuth` | 換票時憑證放哪：`body`（預設）或 `basic` |
-| `stateTtl` | state 快取多久，預設 `'10 minutes'` |
-| `authorizationParams` | 額外塞進授權 URL 的 query（不覆蓋必要欄位） |
-| `revocationEndpoint` | 吊銷 URL；純 OAuth2 常需手寫 |
+構造時還會常動這幾項：`redirectUri` 可寫固定字串，或 `(ctx) => string` 按請求 origin 拼（多域名）；`clientSecret` 也可是 `() => string | Promise<string>`（如 Apple 動態 JWT）；`pkce` 預設 `true`（S256），極少數舊端點才關；換票憑證預設放 body，Spotify 等要用 `tokenAuth: 'basic'`；`stateTtl` 預設 `'10 minutes'`；額外授權 query 用 `authorizationParams`（不覆蓋必要欄位）。
 
 ::: warning
-`callback` 只接受授權碼流（`code` + `state`）。回調裡若帶隱式 / 混合流的 `id_token` 或 `token` query，會清掉 state 並拋錯。使用者取消授權時授權伺服器常帶 `error`（如 `access_denied`），校驗並消費 state 後拋錯——路由裡自行決定提示文案。Apple 等廠商可能是 **POST form_post**，以對應預設 README 為準。
+`callback` 只接受授權碼流（`code` + `state`）。回撥裡若帶隱式 / 混合流的 `id_token` 或 `token` query，會清掉 state 並拋錯。使用者取消授權時授權伺服器常帶 `error`（如 `access_denied`），校驗並消費 state 後拋錯——路由裡自行決定提示文案。Apple 等廠商可能是 **POST form_post**，以對應預設 README 為準。
 :::
 
 ## 和 Auth 怎麼接
