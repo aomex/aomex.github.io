@@ -56,7 +56,9 @@ new WebApp({
 
 ## カスタムスロットとネスト
 
-バージョン、トレースなど固定/派生値は `envelope.slot(schema, get)`。`schema` は OpenAPI、`get` は `{ success, payload, statusCode }` のみ読める。
+バージョン、トレースなど固定/派生値は `envelope.slot(schema, get)`。`schema` は OpenAPI；`get(vars, ctx)` の第1引数は `{ success, payload, statusCode }`、第2引数はリクエストコンテキスト（`WebContext` に `WebApp.Props` を足したもの。`onError` と同じ面——pathname、headers、services など）。
+
+定数だけなら引数は省略してよい：
 
 ```typescript
 envelope: {
@@ -70,7 +72,23 @@ envelope: {
   },
 },
 ```
-`get` 内で ctx、services など他コンテキストに依存しない——ラップ段階では上記3つしか見えない。
+
+現在のリクエストから取るときは第2引数 `ctx`：
+
+```typescript
+envelope: {
+  content: {
+    success: envelope.success,
+    statusCode: envelope.statusCode,
+    data: envelope.payload,
+    path: envelope.slot(rule.string(), (_vars, ctx) => { // [!code highlight]
+      return ctx.request.pathname;
+    }),
+  },
+},
+```
+
+`get` の戻り値は `schema` の推論型に揃える。閉じたオブジェクトに余分なキーがあると型エラーになる。
 
 ## formatError、response() との関係
 

@@ -57,7 +57,9 @@ new WebApp({
 
 ## 自定義槽與巢狀
 
-需要版本號、追蹤欄位等固定或派生值時，用 `envelope.slot(schema, get)`：`schema` 給 OpenAPI，`get` 只讀 `{ success, payload, statusCode }`。
+需要版本號、追蹤欄位等固定或派生值時，用 `envelope.slot(schema, get)`：`schema` 給 OpenAPI；`get(vars, ctx)` 第一參是 `{ success, payload, statusCode }`，第二參是請求上下文（`WebContext` 加上 `WebApp.Props`，和 `onError` 能拿到的一樣——pathname、headers、services 等）。
+
+只要常量時，可以不寫兩個形參：
 
 ```typescript
 envelope: {
@@ -72,7 +74,22 @@ envelope: {
 },
 ```
 
-`get` 裡別依賴 ctx、services 等其它上下文——套殼階段只能看到上面三個變數。
+要從當前請求裡取值時，用第二參 `ctx`：
+
+```typescript
+envelope: {
+  content: {
+    success: envelope.success,
+    statusCode: envelope.statusCode,
+    data: envelope.payload,
+    path: envelope.slot(rule.string(), (_vars, ctx) => { // [!code highlight]
+      return ctx.request.pathname;
+    }),
+  },
+},
+```
+
+`get` 的返回值須對齊 `schema` 的推斷型別；封閉物件上多寫欄位，型別會紅。
 
 ## 和 formatError、response() 的關係
 

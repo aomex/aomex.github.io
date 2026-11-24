@@ -57,7 +57,9 @@ new WebApp({
 
 ## Пользовательские слоты и вложение
 
-Если вам нужны фиксированные или производные значения, такие как номера версий и поля отслеживания, используйте` envelope.slot(schema, get)`:` schema `для OpenAPI,` get `только чтение`{ success, payload, statusCode }`.
+Фиксированные или производные значения (версия, трейс и т.п.) — через `envelope.slot(schema, get)`: `schema` для OpenAPI; `get(vars, ctx)` — первый аргумент `{ success, payload, statusCode }`, второй — контекст запроса (`WebContext` плюс `WebApp.Props`, та же поверхность, что у `onError`: pathname, headers, services и т.д.).
+
+Для константы аргументы можно не писать:
 
 ```typescript
 envelope: {
@@ -72,7 +74,22 @@ envelope: {
 },
 ```
 
-` get ` Не полагайтесь на другие контексты, такие как ctx и сервисы — на этапе оболочки можно увидеть только три вышеуказанные переменные.
+Значение из текущего запроса — второй аргумент `ctx`:
+
+```typescript
+envelope: {
+  content: {
+    success: envelope.success,
+    statusCode: envelope.statusCode,
+    data: envelope.payload,
+    path: envelope.slot(rule.string(), (_vars, ctx) => { // [!code highlight]
+      return ctx.request.pathname;
+    }),
+  },
+},
+```
+
+Возвращаемое значение `get` должно совпадать с выведенным типом `schema`; лишние ключи у закрытого объекта дают ошибку типов.
 
 ## Связь с formatError и ответом()
 

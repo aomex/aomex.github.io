@@ -57,7 +57,9 @@ new WebApp({
 
 ## 自定义槽与嵌套
 
-需要版本号、追踪字段等固定或派生值时，用 `envelope.slot(schema, get)`：`schema` 给 OpenAPI，`get` 只读 `{ success, payload, statusCode }`。
+需要版本号、追踪字段等固定或派生值时，用 `envelope.slot(schema, get)`：`schema` 给 OpenAPI；`get(vars, ctx)` 第一参是 `{ success, payload, statusCode }`，第二参是请求上下文（`WebContext` 加上 `WebApp.Props`，和 `onError` 能拿到的一样——pathname、headers、services 等）。
+
+只要常量时，可以不写两个形参：
 
 ```typescript
 envelope: {
@@ -72,7 +74,22 @@ envelope: {
 },
 ```
 
-`get` 里别依赖 ctx、services 等其它上下文——套壳阶段只能看到上面三个变量。
+要从当前请求里取值时，用第二参 `ctx`：
+
+```typescript
+envelope: {
+  content: {
+    success: envelope.success,
+    statusCode: envelope.statusCode,
+    data: envelope.payload,
+    path: envelope.slot(rule.string(), (_vars, ctx) => { // [!code highlight]
+      return ctx.request.pathname;
+    }),
+  },
+},
+```
+
+`get` 的返回值须对齐 `schema` 的推断类型；封闭对象上多写字段，类型会红。
 
 ## 和 formatError、response() 的关系
 

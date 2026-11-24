@@ -57,7 +57,9 @@ Name the field `data`, `result`, or `payload`—hang built-in slots on your keys
 
 ## Custom slots and nesting
 
-For version, trace fields, etc., use `envelope.slot(schema, get)`: `schema` for OpenAPI, `get` reads only `{ success, payload, statusCode }`.
+For version, trace fields, etc., use `envelope.slot(schema, get)`: `schema` for OpenAPI; `get(vars, ctx)` gets `{ success, payload, statusCode }` first, then the request context (`WebContext` plus `WebApp.Props`, same surface as `onError`—pathname, headers, services, and so on).
+
+For a constant you can omit both parameters:
 
 ```typescript
 envelope: {
@@ -72,7 +74,22 @@ envelope: {
 },
 ```
 
-In `get`, do not touch `ctx`, `services`, etc.—only the three values above exist at wrap time.
+To read from the current request, use the second argument `ctx`:
+
+```typescript
+envelope: {
+  content: {
+    success: envelope.success,
+    statusCode: envelope.statusCode,
+    data: envelope.payload,
+    path: envelope.slot(rule.string(), (_vars, ctx) => { // [!code highlight]
+      return ctx.request.pathname;
+    }),
+  },
+},
+```
+
+The return value of `get` must match the inferred type of `schema`; extra keys on a closed object turn red in the type checker.
 
 ## formatError and response()
 
