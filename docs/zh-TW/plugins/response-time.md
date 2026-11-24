@@ -12,7 +12,7 @@ pnpm add @aomex/response-time
 
 ## 與訪問日誌同排
 
-`responseTime()` 無配置，掛在訪問日誌旁：請求結束後在響應頭寫入耗時。和 Nginx `access_log` / [httpAccessLog](/zh-TW/plugins/http-access-log) 的 duration 互補（頭給客戶端/閘道器，日誌給平臺聚合）。生產訪問日誌仍優先邊緣；本外掛只解決「響應頭裡要不要帶耗時」。
+`responseTime()` 無配置，掛在訪問日誌旁：請求結束後在響應頭寫入耗時。和 Nginx `access_log` / [httpAccessLog](/zh-TW/plugins/access-log) 的 duration 互補（頭給客戶端/閘道器，日誌給平臺聚合）。生產訪問日誌仍優先邊緣；本外掛只解決「響應頭裡要不要帶耗時」。
 
 ```typescript
 import { responseTime } from '@aomex/response-time';
@@ -41,7 +41,7 @@ const app = new WebApp({
 | 輸出 | 給誰看 | 經驗 |
 | --- | --- | --- |
 | `X-Response-Time` | 瀏覽器、API 閘道器、測試斷言 | 與路由改動無關，全站同一行為 |
-| 訪問日誌 `duration` | 日誌平臺、告警、按路由聚合 | 見 [HTTP 訪問日誌](/zh-TW/plugins/http-access-log) |
+| 訪問日誌 `duration` | 日誌平臺、告警、按路由聚合 | 見 [HTTP 訪問日誌](/zh-TW/plugins/access-log) |
 
 沒有選項表：**要頭裡耗時就開，不要就不掛。** 一般放在 routers 前、靠近訪問日誌。
 
@@ -50,10 +50,10 @@ const app = new WebApp({
 | 生產 | 常與 `httpAccessLog()` 一起開 |
 | 本地 | 只 tail 控制台時可只留訪問日誌 |
 
-X-Response-Time 不是端到端總耗時：前面還有閘道器、TLS、客戶端排隊。對外 API 若擔心資訊洩露，可在邊緣剝掉頭；內網/自有前端一般無所謂。只開 responseTime 不落盤時，排障高峰仍要日誌聚合裡的 duration（見 [HTTP 訪問日誌](/zh-TW/plugins/http-access-log)）。
+X-Response-Time 不是端到端總耗時：前面還有閘道器、TLS、客戶端排隊。對外 API 若擔心資訊洩露，可在邊緣剝掉頭；內網/自有前端一般無所謂。只開 responseTime 不落盤時，排障高峰仍要日誌聚合裡的 duration（見 [HTTP 訪問日誌](/zh-TW/plugins/access-log)）。
 
 ## 下一步
 
-- 訪問日誌：[HTTP 訪問日誌](/zh-TW/plugins/http-access-log)
+- 訪問日誌：[HTTP 訪問日誌](/zh-TW/plugins/access-log)
 - 分散式追蹤：[鏈路追蹤](/zh-TW/plugins/async-trace)
 - [中介軟體](/zh-TW/core/middleware)

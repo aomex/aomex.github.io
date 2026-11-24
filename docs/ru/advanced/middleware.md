@@ -174,5 +174,5 @@ export const consoleTraceId = middleware.console<{ readonly traceId: string }>({
 ## Связанный
 
 - заказ,`.skip()`,` dependsOn`, слияние ctx: [Промежуточное ПО](/ru/core/middleware)
-- Готовые плагины: [Журнал HTTP-доступа](/ru/plugins/http-access-log), [Запись аутентификации](/ru/plugins/auth)
+- Готовые плагины: [Журнал HTTP-доступа](/ru/plugins/access-log), [Запись аутентификации](/ru/plugins/auth)
 - Создать документацию: [Генерация OpenAPI](/ru/openapi/)

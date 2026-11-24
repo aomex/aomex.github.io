@@ -111,4 +111,4 @@ If you only update the Web API origin and forget the docs site / Swagger / admin
 - Protect write requests from forgery: [CSRF](/en/plugins/csrf)
 - Mount order and the onion model: [Middleware](/en/core/middleware)
 - Security response headers (often next to CORS): [Helmet](/en/plugins/helmet)
-- Site-wide observability: [HTTP access log](/en/plugins/http-access-log)
+- Site-wide observability: [HTTP access log](/en/plugins/access-log)

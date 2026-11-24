@@ -287,4 +287,4 @@ The same pattern works on `services.logger.withBindings` in Console / Cron. You 
 
 - [Services](/en/core/service)
 - [Middleware](/en/core/middleware)
-- [Access log](/en/plugins/http-access-log) (one HTTP timing line; complements leveled transports)
+- [Access log](/en/plugins/access-log) (one HTTP timing line; complements leveled transports)

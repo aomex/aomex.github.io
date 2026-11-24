@@ -12,7 +12,7 @@ pnpm add @aomex/response-time
 
 ## Рядом с журналом доступа
 
-`responseTime()` без конфигурации; ставьте рядом с access log. После завершения запроса заголовок несёт длительность. Дополняет `access_log` в Nginx / поле `duration` в [httpAccessLog](/ru/plugins/http-access-log) (заголовок — клиенту/шлюзу, лог — агрегации). В проде журнал доступа чаще на периметре; плагин отвечает на вопрос «нужна ли длительность в заголовке ответа».
+`responseTime()` без конфигурации; ставьте рядом с access log. После завершения запроса заголовок несёт длительность. Дополняет `access_log` в Nginx / поле `duration` в [httpAccessLog](/ru/plugins/access-log) (заголовок — клиенту/шлюзу, лог — агрегации). В проде журнал доступа чаще на периметре; плагин отвечает на вопрос «нужна ли длительность в заголовке ответа».
 
 ```typescript
 import { responseTime } from '@aomex/response-time';
@@ -41,7 +41,7 @@ const app = new WebApp({
 | Выход | Аудитория | Заметки |
 | --- | --- | --- |
 | `X-Response-Time` | Браузер, API-шлюз, тесты | Одинаково по всему сайту, независимо от смены маршрутов |
-| `duration` в access log | Платформа логов, алерты, агрегация по маршрутам | См. [HTTP access log](/ru/plugins/http-access-log) |
+| `duration` в access log | Платформа логов, алерты, агрегация по маршрутам | См. [HTTP access log](/ru/plugins/access-log) |
 
 Таблицы опций нет: **нужен заголовок — монтируйте; нет — не ставьте.** Обычно перед `routers`, рядом с access log.
 
@@ -50,10 +50,10 @@ const app = new WebApp({
 | Прод | Часто вместе с `httpAccessLog()` |
 | Локально | Если только tail консоли, может хватить одного access log |
 
-`X-Response-Time` — не end-to-end: до него ещё шлюз, TLS, очередь клиента. На публичном API заголовок можно срезать на периметре; для внутренних/своих фронтов обычно не критично. Если включён только `responseTime` без сохранения логов, на пике нагрузки всё равно нужен `duration` в агрегации (см. [HTTP access log](/ru/plugins/http-access-log)).
+`X-Response-Time` — не end-to-end: до него ещё шлюз, TLS, очередь клиента. На публичном API заголовок можно срезать на периметре; для внутренних/своих фронтов обычно не критично. Если включён только `responseTime` без сохранения логов, на пике нагрузки всё равно нужен `duration` в агрегации (см. [HTTP access log](/ru/plugins/access-log)).
 
 ## Дальше
 
-- Access log: [HTTP access log](/ru/plugins/http-access-log)
+- Access log: [HTTP access log](/ru/plugins/access-log)
 - Распределённый трейсинг: [Async trace](/ru/plugins/async-trace)
 - [Middleware](/ru/core/middleware)

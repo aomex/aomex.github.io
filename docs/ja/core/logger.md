@@ -287,4 +287,4 @@ Console / Cron でも `services.logger.withBindings` は同様。停止やテス
 
 - [サービス層](/ja/core/service)
 - [ミドルウェア](/ja/core/middleware)
-- [アクセスログ](/ja/plugins/http-access-log)（HTTP 一行の所要時間。レベル別出口と補完）
+- [アクセスログ](/ja/plugins/access-log)（HTTP 一行の所要時間。レベル別出口と補完）

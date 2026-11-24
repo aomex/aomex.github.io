@@ -287,4 +287,4 @@ await ctx.logger.withBindings({ userId: ctx.auth.bearer.data.id }, next);
 
 - [Сервисный слой](/ru/core/service)
 - [Middleware](/ru/core/middleware)
-- [Access log](/ru/plugins/http-access-log) (одна строка HTTP с длительностью; дополняет уровневые выходы)
+- [Access log](/ru/plugins/access-log) (одна строка HTTP с длительностью; дополняет уровневые выходы)

@@ -12,7 +12,7 @@ pnpm add @aomex/response-time
 
 ## Next to access logs
 
-`responseTime()` has no config; mount it beside access logging. After the request finishes, the header carries duration. Complements Nginx `access_log` / [httpAccessLog](/en/plugins/http-access-log) `duration` (header for client/gateway, log for platform aggregation). Production access logs still prefer the edge; this plugin only answers “should the response header include timing?”.
+`responseTime()` has no config; mount it beside access logging. After the request finishes, the header carries duration. Complements Nginx `access_log` / [httpAccessLog](/en/plugins/access-log) `duration` (header for client/gateway, log for platform aggregation). Production access logs still prefer the edge; this plugin only answers “should the response header include timing?”.
 
 ```typescript
 import { responseTime } from '@aomex/response-time';
@@ -41,7 +41,7 @@ Plain `WebMiddleware`—business `ctx` types unchanged. Read it in the Network p
 | Output | Audience | Notes |
 | --- | --- | --- |
 | `X-Response-Time` | Browser, API gateway, test assertions | Same behavior site-wide, independent of route changes |
-| Access log `duration` | Log platform, alerts, per-route aggregation | See [HTTP access log](/en/plugins/http-access-log) |
+| Access log `duration` | Log platform, alerts, per-route aggregation | See [HTTP access log](/en/plugins/access-log) |
 
 No option table: **want the header—mount it; don’t—omit it.** Usually sits before `routers`, near access logging.
 
@@ -50,10 +50,10 @@ No option table: **want the header—mount it; don’t—omit it.** Usually sits
 | Production | Often paired with `httpAccessLog()` |
 | Local | If you only tail the console, access log alone may be enough |
 
-`X-Response-Time` is not end-to-end time—gateways, TLS, and client queuing come before it. Strip the header at the edge on public APIs if you worry about leakage; internal or first-party frontends usually do not. If you only enable `responseTime` without persistence, peak troubleshooting still needs log aggregation `duration` (see [HTTP access log](/en/plugins/http-access-log)).
+`X-Response-Time` is not end-to-end time—gateways, TLS, and client queuing come before it. Strip the header at the edge on public APIs if you worry about leakage; internal or first-party frontends usually do not. If you only enable `responseTime` without persistence, peak troubleshooting still needs log aggregation `duration` (see [HTTP access log](/en/plugins/access-log)).
 
 ## Next steps
 
-- Access logging: [HTTP access log](/en/plugins/http-access-log)
+- Access logging: [HTTP access log](/en/plugins/access-log)
 - Distributed tracing: [Async trace](/en/plugins/async-trace)
 - [Middleware](/en/core/middleware)

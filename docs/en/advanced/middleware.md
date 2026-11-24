@@ -174,5 +174,5 @@ export const consoleTraceId = middleware.console<{ readonly traceId: string }>({
 ## Related
 
 - Order, `.skip()`, `dependsOn`, ctx merging: [Middleware](/en/core/middleware)
-- Ready-made plugins: [HTTP access log](/en/plugins/http-access-log), [Auth entry](/en/plugins/auth)
+- Ready-made plugins: [HTTP access log](/en/plugins/access-log), [Auth entry](/en/plugins/auth)
 - Doc generation: [Generate OpenAPI](/en/openapi/)

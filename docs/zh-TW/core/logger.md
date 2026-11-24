@@ -287,4 +287,4 @@ withBindings 必須把 await next() 包在回撥裡，否則下游日誌可能�
 
 - [服務層](/zh-TW/core/service)
 - [中介軟體](/zh-TW/core/middleware)
-- [訪問日誌](/zh-TW/plugins/http-access-log)（HTTP 一行耗時，和分級出口互補）
+- [訪問日誌](/zh-TW/plugins/access-log)（HTTP 一行耗時，和分級出口互補）

@@ -174,5 +174,5 @@ export const consoleTraceId = middleware.console<{ readonly traceId: string }>({
 ## 相关
 
 - 顺序、`.skip()`、`dependsOn`、ctx 合并：[中间件](/zh/core/middleware)
-- 现成插件：[访问日志](/zh/plugins/http-access-log)、[统一入口 Auth](/zh/plugins/auth)
+- 现成插件：[访问日志](/zh/plugins/access-log)、[统一入口 Auth](/zh/plugins/auth)
 - 生成文档：[生成OpenAPI](/zh/openapi/)

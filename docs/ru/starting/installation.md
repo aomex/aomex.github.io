@@ -41,7 +41,7 @@ pnpm aomex -h
 | `--orm` | ORM | `--orm=prisma` \| `mongoose` \| `none` |
 | `--db` | БД Prisma (только `--orm=prisma`) | `--db=mysql` \| `postgresql` \| … |
 | `--auth` | стратегии аутентификации, через запятую; `none` — без | `--auth=bearer,jwt` \| `--auth=none` |
-| `--web-plugins` | опциональный Web middleware (`cors` / `etag` / `helmet` / `response-time` ставятся всегда) | `--web-plugins=http-access-log,async-trace` |
+| `--web-plugins` | опциональный Web middleware (`cors` / `etag` / `helmet` / `response-time` ставятся всегда) | `--web-plugins=access-log,async-trace` |
 | `--docs` | UI документации | `--docs=swagger` \| `redoc` \| `scalar` \| `none` |
 | `--logger` | выходы логов, через запятую | `--logger=console,file` |
 | `--console-middlewares` | плагины Console; `cron` всегда, можно добавить | `--console-middlewares=openapi` |
@@ -61,7 +61,7 @@ pnpm create aomex -- \
   --lang=zh-CN \
   --docker=true \
   --tz=Asia/Shanghai \
-  --web-plugins=http-access-log,async-trace \
+  --web-plugins=access-log,async-trace \
   --logger=console,file \
   --cluster=none
 ```

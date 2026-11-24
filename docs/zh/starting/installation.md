@@ -41,7 +41,7 @@ pnpm aomex -h
 | `--orm` | ORM | `--orm=prisma` \| `mongoose` \| `none` |
 | `--db` | Prisma 数据库（仅 `--orm=prisma`） | `--db=mysql` \| `postgresql` \| … |
 | `--auth` | 认证策略，逗号多选；`none` 表示无 | `--auth=bearer,jwt` \| `--auth=none` |
-| `--web-plugins` | 可选 Web 中间件（`cors` / `etag` / `helmet` / `response-time` 始终安装） | `--web-plugins=http-access-log,async-trace` |
+| `--web-plugins` | 可选 Web 中间件（`cors` / `etag` / `helmet` / `response-time` 始终安装） | `--web-plugins=access-log,async-trace` |
 | `--docs` | 文档 UI | `--docs=swagger` \| `redoc` \| `scalar` \| `none` |
 | `--logger` | 日志出口，逗号多选 | `--logger=console,file` |
 | `--console-middlewares` | Console 插件；`cron` 始终安装，可追加 | `--console-middlewares=openapi` |
@@ -61,7 +61,7 @@ pnpm create aomex -- \
   --lang=zh-CN \
   --docker=true \
   --tz=Asia/Shanghai \
-  --web-plugins=http-access-log,async-trace \
+  --web-plugins=access-log,async-trace \
   --logger=console,file \
   --cluster=none
 ```

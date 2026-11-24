@@ -171,7 +171,7 @@ input: (s) => {
 - **业务文档**挂在 **Web 应用** 下（路径前缀 `/openapi/`）：侧栏先挂 **Swagger UI / Redoc UI / Scalar UI**，再是 **怎么选文档 UI**（`/openapi/choose-ui`，三套对照），然后是 **生成OpenAPI**（含 `generateOpenapi` 与 Console `openapi()` 落盘，同页 `/openapi/`）、Tags、Markdown 文案。各 locale 侧栏均挂 Tags 与 Markdown（`includeOpenapiExtras: true`）。
 - OpenAPI：生成包为 **`@aomex/openapi-generator`**。**路由声明 + `generateOpenapi`** 与 **`openapi()` + `aomex openapi` 落盘**写在同一篇「生成OpenAPI」；落盘指令仍挂在 `ConsoleApp` 上。生成时传 **`app`（`WebApp` 实例）**，由其带出全局 mount 与 envelope；**不要**再手写一份 `mount` 数组。CLI import 时 `new WebApp` 与 `app.listen` 须拆开。
 - **WebSocket 应用**（路径前缀 `/websocket/`）：应用入口 → 事件路由 Channel → 输入输出（`payload` / `emit`；默认合上）→ 传输层 → 多机 Hub → 常用中间件（`/websocket/access-log` · `/websocket/rate-limit` · `/websocket/abuse`，**只写 socket 用法**）→ **业务文档**（默认合上：AsyncAPI UI + 生成 AsyncAPI，路径前缀 `/asyncapi/`）。
-- Web 常用中间件里的访问日志 / 请求限速 / 滥用防护（`/plugins/http-access-log` · `rate-limit` · `abuse`）**只写 HTTP 用法**；与 WebSocket 页互不重复，需要对照时各页文末可单链，不把两套写法写进同一篇。
+- Web 常用中间件里的访问日志 / 请求限速 / 滥用防护（`/plugins/access-log` · `rate-limit` · `abuse`）**只写 HTTP 用法**；与 WebSocket 页互不重复，需要对照时各页文末可单链，不把两套写法写进同一篇。
 - AsyncAPI：Channel 上 **`payload()` / `emit()`** + **`generateAsyncapi`** 与 Console **`asyncapi()`** 落盘写在同一篇「生成 AsyncAPI」；UI 用 `@aomex/asyncapi-ui`。`WebsocketApp` 独立模块导出，HTTP 入口 `attach`；Console 只 import 不 attach。
 - **中间件 / 服务层 / 缓存 / 日志 / Prisma / Mongoose / 链路追踪** 放在 **通用模块**（不再单开「核心概念」）。
 

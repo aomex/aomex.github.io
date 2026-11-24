@@ -287,4 +287,4 @@ withBindings 必须把 await next() 包在回调里，否则下游日志可能�
 
 - [服务层](/zh/core/service)
 - [中间件](/zh/core/middleware)
-- [访问日志](/zh/plugins/http-access-log)（HTTP 一行耗时，和分级出口互补）
+- [访问日志](/zh/plugins/access-log)（HTTP 一行耗时，和分级出口互补）

@@ -41,7 +41,7 @@ Every option can be passed as a CLI flag to skip prompts (handy for scripts / CI
 | `--orm` | ORM | `--orm=prisma` \| `mongoose` \| `none` |
 | `--db` | Prisma database (only with `--orm=prisma`) | `--db=mysql` \| `postgresql` \| … |
 | `--auth` | Auth strategies, comma-separated; `none` for none | `--auth=bearer,jwt` \| `--auth=none` |
-| `--web-plugins` | Optional Web middleware (`cors` / `etag` / `helmet` / `response-time` are always installed) | `--web-plugins=http-access-log,async-trace` |
+| `--web-plugins` | Optional Web middleware (`cors` / `etag` / `helmet` / `response-time` are always installed) | `--web-plugins=access-log,async-trace` |
 | `--docs` | Docs UI | `--docs=swagger` \| `redoc` \| `scalar` \| `none` |
 | `--logger` | Log transports, comma-separated | `--logger=console,file` |
 | `--console-middlewares` | Console plugins; `cron` is always installed, you can add more | `--console-middlewares=openapi` |
@@ -61,7 +61,7 @@ pnpm create aomex -- \
   --lang=en-US \
   --docker=true \
   --tz=Asia/Shanghai \
-  --web-plugins=http-access-log,async-trace \
+  --web-plugins=access-log,async-trace \
   --logger=console,file \
   --cluster=none
 ```

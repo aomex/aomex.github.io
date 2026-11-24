@@ -169,5 +169,5 @@ export const consoleTraceId = middleware.console<{ readonly traceId: string }>({
 ## 関連
 
 - 順序、`.skip()`、`dependsOn`、ctx のマージ：[ミドルウェア](/ja/core/middleware)
-- 既成プラグイン：[アクセスログ](/ja/plugins/http-access-log)、[認証統一エントリ Auth](/ja/plugins/auth)
+- 既成プラグイン：[アクセスログ](/ja/plugins/access-log)、[認証統一エントリ Auth](/ja/plugins/auth)
 - ドキュメント生成：[生成OpenAPI](/ja/openapi/)

@@ -12,7 +12,7 @@ pnpm add @aomex/response-time
 
 ## アクセスログと並べる
 
-`responseTime()` は設定なし。アクセスログの横に置き、リクエスト終了後にヘッダーへ所要時間を書く。Nginx `access_log` / [httpAccessLog](/ja/plugins/http-access-log) の duration と補完関係（ヘッダーはクライアント/ゲートウェイ、ログはプラットフォーム集計）。本番のアクセスログは依然エッジ優先。このプラグインは「ヘッダーに時間を載せるか」だけを扱う。
+`responseTime()` は設定なし。アクセスログの横に置き、リクエスト終了後にヘッダーへ所要時間を書く。Nginx `access_log` / [httpAccessLog](/ja/plugins/access-log) の duration と補完関係（ヘッダーはクライアント/ゲートウェイ、ログはプラットフォーム集計）。本番のアクセスログは依然エッジ優先。このプラグインは「ヘッダーに時間を載せるか」だけを扱う。
 
 ```typescript
 import { responseTime } from '@aomex/response-time';
@@ -41,7 +41,7 @@ process.hrtime を使い、ヘッダーはしばしば 12.345ms の形。失敗�
 | 出力 | 誰向け | 経験 |
 | --- | --- | --- |
 | `X-Response-Time` | ブラウザ、API ゲートウェイ、テストアサーション | ルート変更と無関係、サイト全体同じ挙動 |
-| アクセスログ `duration` | ログ基盤、アラート、ルート別集計 | [HTTP アクセスログ](/ja/plugins/http-access-log) 参照 |
+| アクセスログ `duration` | ログ基盤、アラート、ルート別集計 | [HTTP アクセスログ](/ja/plugins/access-log) 参照 |
 
 オプション表はない：**ヘッダーに時間が要るならオン、不要なら載せない。** 一般に routers の前、アクセスログの近く。
 
@@ -50,10 +50,10 @@ process.hrtime を使い、ヘッダーはしばしば 12.345ms の形。失敗�
 | 本番 | 多くは `httpAccessLog()` と一緒にオン |
 | ローカル | コンソールだけ tail ならアクセスログのみでも可 |
 
-X-Response-Time はエンドツーエンド総時間ではない。手前にゲートウェイ、TLS、クライアント待ちがある。外向き API で情報漏えいが心配ならエッジでヘッダーを剥ぐ。社内/自社フロントなら多くは問題ない。responseTime だけでログに落とさないとき、ピーク時の障害切り分けにはログ集計の duration が依然必要（[HTTP アクセスログ](/ja/plugins/http-access-log)）。
+X-Response-Time はエンドツーエンド総時間ではない。手前にゲートウェイ、TLS、クライアント待ちがある。外向き API で情報漏えいが心配ならエッジでヘッダーを剥ぐ。社内/自社フロントなら多くは問題ない。responseTime だけでログに落とさないとき、ピーク時の障害切り分けにはログ集計の duration が依然必要（[HTTP アクセスログ](/ja/plugins/access-log)）。
 
 ## 次のステップ
 
-- アクセスログ：[HTTP アクセスログ](/ja/plugins/http-access-log)
+- アクセスログ：[HTTP アクセスログ](/ja/plugins/access-log)
 - 分散トレース：[リンクトレース](/ja/plugins/async-trace)
 - [ミドルウェア](/ja/core/middleware)

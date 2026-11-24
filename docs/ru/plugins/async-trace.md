@@ -73,7 +73,7 @@ class UserService {
 
 `asyncTrace.run(label, callback)` открывает дочерний узел в уже начатом дереве. В записи обычно есть label, duration, parent / children, error — для отладки часто хватает duration и label.
 
-Дополняет [@aomex/access-log](/ru/plugins/http-access-log): access log пишет суммарное время, трассировка — шаги. Пакет не заменяет распределённый trace вроде OpenTelemetry; между сервисами нужна стандартная схема.
+Дополняет [@aomex/access-log](/ru/plugins/access-log): access log пишет суммарное время, трассировка — шаги. Пакет не заменяет распределённый trace вроде OpenTelemetry; между сервисами нужна стандартная схема.
 
 ## Связанное
 

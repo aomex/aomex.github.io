@@ -73,7 +73,7 @@ class UserService {
 
 `asyncTrace.run(label, callback)` 在已開啟的樹裡再開子節點。記錄裡一般有 label、duration、parent / children、error 等——排障時盯 duration 和 label 就夠的情況很多。
 
-與 [@aomex/access-log](/zh-TW/plugins/http-access-log) 互補：訪問日誌記總耗時，鏈路追蹤拆子步驟。本包不替代 OpenTelemetry 等分散式 trace，跨服務還得用標準方案。
+與 [@aomex/access-log](/zh-TW/plugins/access-log) 互補：訪問日誌記總耗時，鏈路追蹤拆子步驟。本包不替代 OpenTelemetry 等分散式 trace，跨服務還得用標準方案。
 
 ## 相關
 

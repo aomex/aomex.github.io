@@ -111,4 +111,4 @@ Web API だけ直し、ドキュメントサイト / Swagger / 管理画面の o
 - 書き込みの偽造防止：[CSRF](/ja/plugins/csrf)
 - マウント順とオニオンモデル：[ミドルウェア](/ja/core/middleware)
 - セキュリティ応答ヘッダー（CORS と並べることが多い）：[Helmet](/ja/plugins/helmet)
-- サイト全体の観測：[HTTP アクセスログ](/ja/plugins/http-access-log)
+- サイト全体の観測：[HTTP アクセスログ](/ja/plugins/access-log)

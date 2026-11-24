@@ -111,4 +111,4 @@ cors({
 - Защита запросов записи от подделки: [CSRF](/ru/plugins/csrf)
 - Порядок монтирования и onion-модель: [Middleware](/ru/core/middleware)
 - Security-заголовки (часто рядом с CORS): [Helmet](/ru/plugins/helmet)
-- Наблюдаемость на всём сайте: [HTTP access log](/ru/plugins/http-access-log)
+- Наблюдаемость на всём сайте: [HTTP access log](/ru/plugins/access-log)

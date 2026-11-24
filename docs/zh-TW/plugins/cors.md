@@ -111,4 +111,4 @@ cors({
 - 寫請求防偽造：[CSRF](/zh-TW/plugins/csrf)
 - 掛載順序與洋蔥模型：[中介軟體](/zh-TW/core/middleware)
 - 安全響應頭（常與 CORS 同排）：[Helmet](/zh-TW/plugins/helmet)
-- 全站觀測：[HTTP 訪問日誌](/zh-TW/plugins/http-access-log)
+- 全站觀測：[HTTP 訪問日誌](/zh-TW/plugins/access-log)

@@ -570,7 +570,7 @@ const makeSidebar = (
             { text: t.compress, link: p('/plugins/compress') },
             { text: t.helmet, link: p('/plugins/helmet') },
             { text: t.etag, link: p('/plugins/etag') },
-            { text: t.accessLog, link: p('/plugins/http-access-log') },
+            { text: t.accessLog, link: p('/plugins/access-log') },
             { text: t.prettyJson, link: p('/plugins/pretty-json') },
             { text: t.rateLimit, link: p('/plugins/rate-limit') },
             { text: t.abuse, link: p('/plugins/abuse') },

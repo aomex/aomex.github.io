@@ -73,7 +73,7 @@ class UserService {
 
 `asyncTrace.run(label, callback)` は、すでに開いている木の中に子ノードを足す。レコードにはだいたい label、duration、parent / children、error などがある——障害切り分けでは duration と label を見れば足りることが多い。
 
-[@aomex/access-log](/ja/plugins/http-access-log) と補完関係：アクセスログは総所要時間、リンクトレースは子ステップを分ける。本パッケージは OpenTelemetry などの分散 trace の代わりにはならない。サービス横断は標準方式が必要。
+[@aomex/access-log](/ja/plugins/access-log) と補完関係：アクセスログは総所要時間、リンクトレースは子ステップを分ける。本パッケージは OpenTelemetry などの分散 trace の代わりにはならない。サービス横断は標準方式が必要。
 
 ## 関連
 

@@ -73,7 +73,7 @@ class UserService {
 
 `asyncTrace.run(label, callback)` opens a child node inside an already-started tree. Records usually include label, duration, parent / children, error, and so on—often watching duration and label is enough when debugging.
 
-Complements [@aomex/access-log](/en/plugins/http-access-log): access logs record total duration; async trace splits sub-steps. This package doesn’t replace OpenTelemetry or other distributed traces—cross-service still needs a standard approach.
+Complements [@aomex/access-log](/en/plugins/access-log): access logs record total duration; async trace splits sub-steps. This package doesn’t replace OpenTelemetry or other distributed traces—cross-service still needs a standard approach.
 
 ## Related
 

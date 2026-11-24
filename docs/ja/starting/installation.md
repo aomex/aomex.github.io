@@ -41,7 +41,7 @@ pnpm aomex -h
 | `--orm` | ORM | `--orm=prisma` \| `mongoose` \| `none` |
 | `--db` | Prisma データベース（`--orm=prisma` のときだけ） | `--db=mysql` \| `postgresql` \| … |
 | `--auth` | 認証ストラテジー。カンマで複数。`none` は無し | `--auth=bearer,jwt` \| `--auth=none` |
-| `--web-plugins` | 任意の Web ミドルウェア（`cors` / `etag` / `helmet` / `response-time` は常にインストール） | `--web-plugins=http-access-log,async-trace` |
+| `--web-plugins` | 任意の Web ミドルウェア（`cors` / `etag` / `helmet` / `response-time` は常にインストール） | `--web-plugins=access-log,async-trace` |
 | `--docs` | ドキュメント UI | `--docs=swagger` \| `redoc` \| `scalar` \| `none` |
 | `--logger` | ログ出口。カンマで複数 | `--logger=console,file` |
 | `--console-middlewares` | Console プラグイン。`cron` は常にインストール。追加可 | `--console-middlewares=openapi` |
@@ -61,7 +61,7 @@ pnpm create aomex -- \
   --lang=zh-CN \
   --docker=true \
   --tz=Asia/Shanghai \
-  --web-plugins=http-access-log,async-trace \
+  --web-plugins=access-log,async-trace \
   --logger=console,file \
   --cluster=none
 ```
