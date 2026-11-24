@@ -6,7 +6,7 @@ outline: deep
 
 给产品、对接方一份**适合长文阅读**的 API 说明：左侧导航、折叠 schema，比 Swagger 清爽。Redoc **不能在页内直接试调**——联调仍靠 [Swagger UI](/zh/openapi/swagger-ui)、[Scalar UI](/zh/openapi/scalar-ui) 或自己的客户端。多套 UI 可以同站并存，注意 **路由前缀不要重复**。
 
-契约来源：[生成OpenAPI](/zh/openapi/)。
+想先感受界面：[官方演示](https://redocly.github.io/redoc/)。契约来源：[生成OpenAPI](/zh/openapi/)。
 
 ```bash
 pnpm add @aomex/redoc-ui

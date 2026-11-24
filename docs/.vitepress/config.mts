@@ -517,6 +517,11 @@ const makeSidebar = (
             { text: t.oauth2Client, link: p('/plugins/oauth2-client') },
           ],
         },
+        {
+          text: t.docs,
+          collapsed: true,
+          items: docsItems,
+        },
       ],
     },
     {
@@ -583,11 +588,6 @@ const makeSidebar = (
         { text: t.schema, link: p('/validators/schema') },
         { text: t.validate, link: p('/validators/validate') },
       ],
-    },
-    {
-      text: t.docs,
-      collapsed: false,
-      items: docsItems,
     },
     {
       text: t.advanced,

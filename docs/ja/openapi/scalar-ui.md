@@ -6,7 +6,7 @@ outline: deep
 
 [Scalar](https://github.com/scalar/scalar) ベースの API ドキュメントページを載せる。閲覧はモダンで、ページ内試行もできる。契約はファイル出力した openapi.json / yaml、または実行時 `generateOpenapi`。[Swagger UI](/ja/openapi/swagger-ui) / [Redoc UI](/ja/openapi/redoc-ui) と同站併存可。**uriPrefix の衝突に注意**（デフォルト `/scalar`）。
 
-契約の出どころ：[生成OpenAPI](/ja/openapi/)。
+まずは [公式デモ](https://galaxy.scalar.com/) を見てから。契約の出どころ：[生成OpenAPI](/ja/openapi/)。
 
 ```bash
 pnpm add @aomex/scalar-ui

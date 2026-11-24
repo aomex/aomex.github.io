@@ -6,7 +6,7 @@ outline: deep
 
 A **long-form readable** API reference for product and partner teams: left nav, folded schemas—calmer than Swagger. Redoc **cannot try requests in the page**—use [Swagger UI](/en/openapi/swagger-ui), [Scalar UI](/en/openapi/scalar-ui), or your own client. Multiple UIs can coexist; keep **URI prefixes distinct**.
 
-Contract sources: [Generate OpenAPI](/en/openapi/).
+Try the [official demo](https://redocly.github.io/redoc/) first. Contract sources: [Generate OpenAPI](/en/openapi/).
 
 ```bash
 pnpm add @aomex/redoc-ui

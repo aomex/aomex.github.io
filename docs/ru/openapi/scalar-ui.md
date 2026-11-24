@@ -6,7 +6,7 @@ outline: deep
 
 Страница документации на базе [Scalar](https://github.com/scalar/scalar): современное чтение и проба в браузере. Контракт — с диска (openapi.json / yaml) или через `generateOpenapi` в рантайме. Можно вместе с [Swagger UI](/ru/openapi/swagger-ui) / [Redoc UI](/ru/openapi/redoc-ui) — **uriPrefix не должны пересекаться** (по умолчанию `/scalar`).
 
-Откуда контракт: [Генерация OpenAPI](/ru/openapi/).
+Сначала [официальное демо](https://galaxy.scalar.com/). Откуда контракт: [Генерация OpenAPI](/ru/openapi/).
 
 ```bash
 pnpm add @aomex/scalar-ui

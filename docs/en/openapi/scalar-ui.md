@@ -6,7 +6,7 @@ outline: deep
 
 Serve an API docs page powered by [Scalar](https://github.com/scalar/scalar): modern reading plus in-page try-out. Same contract sources as the other UIs—exported `openapi.json` / yaml or runtime `generateOpenapi`. Can sit beside [Swagger UI](/en/openapi/swagger-ui) / [Redoc UI](/en/openapi/redoc-ui); keep **uriPrefix** distinct (default `/scalar`).
 
-Where the contract comes from: [Generate OpenAPI](/en/openapi/).
+Try the [official demo](https://galaxy.scalar.com/) first. Where the contract comes from: [Generate OpenAPI](/en/openapi/).
 
 ```bash
 pnpm add @aomex/scalar-ui

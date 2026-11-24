@@ -6,7 +6,7 @@ outline: deep
 
 プロダクトや連携先向けに、**長文閲覧向き**の API 説明を載せる。左ナビ、折りたたみ schema で Swagger よりすっきり。**ページ内から直接試行はできない**——連携は [Swagger UI](/ja/openapi/swagger-ui)、[Scalar UI](/ja/openapi/scalar-ui)、または自前クライアント。複数 UI を同一サイトで併存可。**ルート接頭辞の重複に注意**。
 
-契約の出どころ：[生成OpenAPI](/ja/openapi/)。
+まずは [公式デモ](https://redocly.github.io/redoc/) を見てから。契約の出どころ：[生成OpenAPI](/ja/openapi/)。
 
 ```bash
 pnpm add @aomex/redoc-ui

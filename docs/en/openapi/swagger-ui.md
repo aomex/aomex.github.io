@@ -6,7 +6,7 @@ outline: deep
 
 Host **click-to-try** API docs on localhost or an internal network. You need an OpenAPI Document (exported `openapi.json` or runtime `generateOpenapi`). For long-form reading see [Redoc UI](/en/openapi/redoc-ui); for a modern try-out UI see [Scalar UI](/en/openapi/scalar-ui). Multiple UIs can coexist—**keep prefixes distinct**.
 
-Contract sources: [Generate OpenAPI](/en/openapi/).
+Try the [official demo](https://petstore.swagger.io/) first. Contract sources: [Generate OpenAPI](/en/openapi/).
 
 ```bash
 pnpm add @aomex/swagger-ui

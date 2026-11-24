@@ -6,7 +6,7 @@ outline: deep
 
 Для продукта и интеграторов — **удобное длинное чтение**: левое меню, свёрнутые schema, спокойнее Swagger. Redoc **не дергает API в странице** — интеграция через [Swagger UI](/ru/openapi/swagger-ui), [Scalar UI](/ru/openapi/scalar-ui) или свой клиент. Несколько UI на одном сайте можно, **префиксы роутов не должны совпадать**.
 
-Источник контракта: [Генерация OpenAPI](/ru/openapi/).
+Сначала [официальное демо](https://redocly.github.io/redoc/). Источник контракта: [Генерация OpenAPI](/ru/openapi/).
 
 ```bash
 pnpm add @aomex/redoc-ui

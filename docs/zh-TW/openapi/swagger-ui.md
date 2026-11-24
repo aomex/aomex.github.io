@@ -6,7 +6,7 @@ outline: deep
 
 在本機或內網掛一份**點開就能試調**的 API 文件。前提是一份 OpenAPI Document（落盤的 openapi.json 或執行時 `generateOpenapi`）。長文閱讀可看 [Redoc UI](/zh-TW/openapi/redoc-ui)；現代試調可看 [Scalar UI](/zh-TW/openapi/scalar-ui)。多套 UI 可並存，**字首別撞車**。
 
-契約從哪來：[生成OpenAPI](/zh-TW/openapi/)。
+想先感受介面：[官方演示](https://petstore.swagger.io/)。契約從哪來：[生成OpenAPI](/zh-TW/openapi/)。
 
 ```bash
 pnpm add @aomex/swagger-ui

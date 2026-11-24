@@ -6,7 +6,7 @@ outline: deep
 
 Повесь локально или во внутренней сети документацию API: **открыл — можно дергать**. Нужен OpenAPI Document (файл openapi.json на диске или `generateOpenapi` в рантайме). Для длинного чтения — [Redoc UI](/ru/openapi/redoc-ui); более современная проба — [Scalar UI](/ru/openapi/scalar-ui). Несколько UI можно держать вместе — **префиксы не должны пересекаться**.
 
-Откуда контракт: [Генерация OpenAPI](/ru/openapi/).
+Сначала [официальное демо](https://petstore.swagger.io/). Откуда контракт: [Генерация OpenAPI](/ru/openapi/).
 
 ```bash
 pnpm add @aomex/swagger-ui

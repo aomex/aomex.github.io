@@ -6,7 +6,7 @@ outline: deep
 
 掛一份基於 [Scalar](https://github.com/scalar/scalar) 的 API 文件頁：閱讀體驗偏現代，也能在頁內試調。契約同樣來自落盤的 openapi.json / yaml，或執行時 `generateOpenapi`。可與 [Swagger UI](/zh-TW/openapi/swagger-ui) / [Redoc UI](/zh-TW/openapi/redoc-ui) 同站並存，**uriPrefix 別撞車**（預設 `/scalar`）。
 
-契約從哪來：[生成OpenAPI](/zh-TW/openapi/)。
+想先感受介面：[官方演示](https://galaxy.scalar.com/)。契約從哪來：[生成OpenAPI](/zh-TW/openapi/)。
 
 ```bash
 pnpm add @aomex/scalar-ui
