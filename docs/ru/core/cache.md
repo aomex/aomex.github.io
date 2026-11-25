@@ -1,22 +1,50 @@
 # Кэш
 
-Соберите **CacheService**: выберите адаптер memory / file / Redis, читайте и пишите через `this.cache`, пройдите цепочку login **session** (token → данные пользователя) — выдача token, чтение при авторизации, удаление при выходе.
+В корне композиции — один общий **`Caching`**: выберите адаптер memory / file / Redis и передайте **тот же экземпляр** в бизнес-код и плагины auth / abuse / OAuth (в конфиге часто `store`). Прогоните цепочку login **session** (token → данные пользователя): выдача, чтение при auth, удаление при выходе.
 
-В подклассе реализуйте `createAdapter()`; бизнес-префиксы собирайте в `CacheKey` через `protected readonly` и `this.key(...)`, в методах дальше цепляйте `.key(token)`, чтобы строки не разъезжались.
+Имя класса оставьте `Caching`, не `Cache` — чтобы не столкнуться с глобальным `Cache` DOM / Web Cache API. Переменную экземпляра зовите `cache`. Первое чтение/запись — ленивое подключение; при остановке — отключение через внутренний `registerLifecycle`.
+
+`src/cache.ts` **экспортирует только** `cache` и `remember`; сессии и префиксы ключей — в своих Service, импорт `cache` отсюда.
 
 ```typescript
-import { BaseCacheService } from '@aomex/cache';
+// src/cache.ts
+import { Caching, createRemember } from '@aomex/cache';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 
-export default class CacheService extends BaseCacheService { // [!code focus:28]
-  protected readonly loginTokenKey = this.key('login-token', 'v1');
+export const cache = new Caching(new CacheMemoryAdapter()); // [!code highlight]
+export const remember = createRemember(cache);
+```
 
-  protected createAdapter() {
-    return new CacheMemoryAdapter(); // [!code highlight]
-  }
+`get` / `set` / `delete` / `getAndDelete` / `singleFlight` и т.д. принимают **строку или `CacheKey`**. С generic `get<T>(key)` тип результата — `T | null`; TTL в `set` / `setNX` / `expire` — **`DurationInput`**: миллисекунды или строки вроде `'7 days'`, `'30m'`, `'1.5 hours'`, см. ниже.
+
+В плагины — тот же экземпляр:
+
+```typescript
+import { cache } from '@/cache';
+
+new Abuse({ store: cache, strategies: [/* … */] });
+new AuthSessionStrategy({ store: cache, /* … */ });
+new OAuth2Client({ store: cache, /* … */ });
+```
+
+::: tip
+Не создавайте `new Caching(adapter)` в каждом плагине — один раз в корне и делите. Второй экземпляр только при двух хранилищах (локальный memory + общий Redis), у каждого свой `createRemember`.
+:::
+
+## Чтение и запись session
+
+После login сохраните «token → пользователь» в кэше; в `onLoaded` auth прочитайте; при logout — `delete`. Имя ключа — префикс `CacheKey` с версией: при смене структуры сессии в релизе меняете одно место и инвалидируете пачку. Методы — в User / Auth Service:
+
+```typescript
+// src/services/user.service.ts
+import { Service } from '@aomex/common';
+import { cache } from '@/cache';
+
+export default class UserService extends Service {
+  protected readonly loginTokenKey = cache.key('login-token', 'v1'); // [!code highlight]
 
   async getLoginToken(token: string) {
-    return this.cache.get<{ userId: number; role: number }>(
+    return cache.get<{ userId: number; role: number }>(
       this.loginTokenKey.key(token),
     );
   }
@@ -25,239 +53,207 @@ export default class CacheService extends BaseCacheService { // [!code focus:28]
     token: string,
     session: { userId: number; role: number },
   ) {
-    await this.cache.set(
-      this.loginTokenKey.key(token),
-      session,
-      '7 days',
-    );
+    await cache.set(this.loginTokenKey.key(token), session, '7 days');
   }
 
   async deleteLoginToken(token: string) {
-    await this.cache.delete(this.loginTokenKey.key(token));
+    return cache.delete(this.loginTokenKey.key(token));
   }
 }
 ```
 
-`get` / `set` / `delete` / `getAndDelete` / `singleFlight` и др. принимают **строку или `CacheKey`**. С дженериком у `get<T>(key)` возврат типизируется как `T | null`; срок у `set` / `setNX` / `expire` и у `duration` в `@remember` — это **`DurationInput`**: миллисекунды или читаемые строки (`'7 days'`, `'30m'`, `'1.5 hours'`) — см. ниже. Имена и параметры `services.cache.xxx` совпадают с объявлением в CacheService; смена сигнатуры заставит компилятор пройтись по маршрутам и колбэкам авторизации.
-
-Регистрация и прогрев (в проде при переходе на Redis особенно нужен `eager`):
-
-```typescript
-await combineServices(
-  {
-    cache: () => import('./cache.service.js'),
-  },
-  { eager: ['cache'] }, // [!code highlight]
-);
-```
-
-::: warning
-В проде или при нескольких инстансах, если cache не в `eager`, первое чтение кэша платит за подключение к Redis, и хвостовая задержка может подскочить.
-:::
-
-## Чтение и запись session
-
-После выдачи token при логине запишите в кэш «token → данные пользователя»; в `onLoaded` авторизации прочитайте; при выходе — `delete`. Имена ключей — с версионным префиксом `CacheKey`; при смене структуры сессии на релизе меняете одно место и инвалидируете пакет.
-
-Со стороны бизнес-логики (логин / auth / выход):
+Со стороны бизнеса (login / auth / logout):
 
 ```typescript
 // 登录成功后写入
 const token = auth.strategy('bearer').signature('sha256', user.id);
-await services.cache.setLoginToken(token, {
+await services.user.setLoginToken(token, {
   userId: user.id,
   role: user.role,
 }); // [!code highlight]
 
 // 鉴权 onLoaded 里读取
-const session = await services.cache.getLoginToken(token);
+const session = await services.user.getLoginToken(token);
 if (!session) {
   return false;
 }
 
 // 退出登录删掉
-await services.cache.deleteLoginToken(token);
+await services.user.deleteLoginToken(token);
 ```
-
-Выдачу token и запросы к БД оставляйте в User / Auth; CacheService только хранит и отдаёт.
 
 ## Выбор адаптера
 
-Адаптер решает, где лежат данные: **memory** — без зависимостей, в процессе, сброс при рестарте, для локалки и тестов; **Redis** — общий session и счётчики лимитов между инстансами; **file** — лёгкая дисковая персистенция. В бизнес-коде обычно меняют только `createAdapter()`; API чтения/записи тот же.
+Адаптер решает, где лежат данные: **memory** — без зависимостей, в процессе, пропадает при рестарте (локально и в тестах); **Redis** — общий session и счётчики rate limit при нескольких инстансах; **file** — лёгкая персистенция на одной машине. В бизнес-коде обычно меняют только адаптер при создании, API чтения/записи то же.
 
-Локально и в тестах — `@aomex/cache/memory`, без зависимостей, данные теряются при рестарте:
+Локально и в тестах — `@aomex/cache/memory`:
 
 ```typescript
+import { Caching } from '@aomex/cache';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 
-protected createAdapter() {
-  return new CacheMemoryAdapter();
-}
+export const cache = new Caching(new CacheMemoryAdapter());
 ```
 
-Прод или несколько инстансов с общим session / rate limit — `@aomex/cache-redis-adapter` (`ioredis` в пакете; чаще всего меняют только `createAdapter()`):
+Прод или несколько инстансов — `@aomex/cache-redis-adapter` (`ioredis` в пакете):
 
 ```typescript
+import { Caching } from '@aomex/cache';
 import { CacheRedisAdapter } from '@aomex/cache-redis-adapter';
 
-protected createAdapter() {
-  return new CacheRedisAdapter({ host: '127.0.0.1', port: 6379 });
-}
+export const cache = new Caching(
+  new CacheRedisAdapter({ host: '127.0.0.1', port: 6379 }),
+);
 ```
 
-На одной машине с лёгкой персистенцией — `@aomex/cache/file`.
+На одной машине с диском — `@aomex/cache/file`.
 
-## Сборка ключей: CacheKey
+## Как собирать ключ: CacheKey
 
-`this.key(...)` возвращает **`CacheKey`**, а не обычную строку: сегменты склеиваются через `:`, можно продолжать `.key` / `.keyHash` / `.toHash()`. `this.cache.get` / `set` и т.д. принимают его напрямую — `String(...)` не нужен.
+`cache.key(...)` (или статический `CacheKey.key(...)`) возвращает **`CacheKey`**, не строку: части склеиваются `:`, дальше `.key` / `.keyHash` / `.toHash()`. `cache.get` / `set` принимают его без `String(...)`.
 
 ```typescript
-this.key('user', 1); // user:1
-this.key('user').key(1); // 同上
-this.key('user').keyHash(1); // user:<md5('1')>，前缀可读
-this.key('user', 1).toHash(); // <md5('user:1')>
-this.keyHash('user', 1); // 同上，整键哈希
+cache.key('user', 1); // user:1
+cache.key('user').key(1); // 同上
+cache.key('user').keyHash(1); // user:<md5('1')>，前缀可读
+cache.key('user', 1).toHash(); // <md5('user:1')>
+cache.keyHash('user', 1); // 同上，整键哈希
 ```
 
-| Запись | Результат |
+| Запись | Что получаете |
 | --- | --- |
-| `this.key('a', 1)` | Читаемый ключ `a:1` |
-| `prefix.key(id)` | Ещё один сегмент после префикса `CacheKey` |
-| `this.key('a').keyHash(id)` | Префикс остаётся, **хешируется только этот аргумент** |
-| `this.key(...).toHash()` / `this.keyHash(...)` | **Весь** ключ MD5, без читаемого префикса |
+| `cache.key('a', 1)` | читаемый ключ `a:1` |
+| `prefix.key(id)` | ещё сегмент к существующему префиксу `CacheKey` |
+| `cache.key('a').keyHash(id)` | префикс виден, **хешируется только аргумент** |
+| `cache.key(...).toHash()` / `cache.keyHash(...)` | **весь** ключ MD5, без читаемого префикса |
 
-Хешируйте, если сегмент длинный, с «странными» символами или не хотите plain text в Redis; для повседневных ключей читаемый префикс упрощает разбор. Отдельный `hash()` убран — используйте варианты выше.
+Хеш — для длинных кусков, странных символов, когда не хотите plaintext в Redis; для обычных бизнес-ключей читаемый префикс проще отлаживать. Старый отдельный `hash()` убран — только варианты выше.
 
-### Префиксы и версии
+### Префикс и версия
 
-`protected readonly` поля собирают бизнес-префиксы (например `login-token`); в методах цепляйте `.key(token)` / `.key(id)`, не разбрасывайте магические строки. Версия в префиксе (`v1` → `v2`) **без конфликта имён** списывает старые session:
+В Service держите префиксы в `protected readonly` (например `login-token`), в методах `.key(token)` / `.key(id)` — не размазывайте магические строки. Версия в префиксе (`v1` → `v2`) — **без коллизий** инвалидирует старые session:
 
 ```typescript
-protected readonly loginTokenKey = this.key('login-token', 'v2');
+protected readonly loginTokenKey = cache.key('login-token', 'v2');
 ```
 
 ## Длительность DurationInput
 
-Срок не обязательно писать как `60_000`. `set` / `setNX` / `expire` и `duration` у `@remember` принимают:
+Не обязательно писать `60_000` вручную. `set` / `setNX` / `expire` и `duration` у `@remember` принимают:
 
-- **number**: миллисекунды (как раньше)
-- **строка**: число + единица, пробел по желанию — `'30m'`, `'1 hour'`, `'7 days'`
+- **number** — миллисекунды (как раньше)
+- **string** — число + единица, пробел опционален: `'30m'`, `'1 hour'`, `'7 days'`
 
-Частые единицы: `ms` / `s` (`sec` / `second`) / `m` (`min` / `minute`) / `h` (`hr` / `hour`) / `d` (`day`) / `w` (`week`) / `month` / `y` (`year`). `month` — 30 дней, `year` — 365. В других местах можно `import { parseDuration } from '@aomex/common'`.
+Единицы: `ms` / `s` (`sec` / `second`) / `m` (`min` / `minute`) / `h` (`hr` / `hour`) / `d` (`day`) / `w` (`week`) / `month` / `y` (`year`). `month` = 30 дней, `year` = 365. Или `import { parseDuration } from '@aomex/common'` где нужно ms.
 
 ```typescript
-await this.cache.set(key, session, '7 days');
-await this.cache.setNX(lockKey, '1', '30 seconds');
-await this.cache.expire(key, '1 hour');
+await cache.set(key, session, '7 days');
+await cache.setNX(lockKey, '1', '30 seconds');
+await cache.expire(key, '1 hour');
 ```
 
-## exists: только наличие
+## exists: только «есть ли ключ»
 
-Когда нужно лишь узнать, **есть ли** ключ, без чтения и декодирования значения, используй `exists`. Возвращает `boolean`, принимает строку или `CacheKey`.
+Когда нужно знать **наличие**, без десериализации значения — `exists`. Возвращает `boolean`, строка или `CacheKey`.
 
 ```typescript
-const key = this.loginTokenKey.key(token);
-if (await this.cache.exists(key)) {
-  // сессия ещё есть — решать, нужен ли get
+const key = loginTokenKey.key(token);
+if (await cache.exists(key)) {
+  // 会话还在，再决定要不要 get 详情
 }
 ```
 
-Отличие от `get`: при промахе `get` даёт `null` (сам решаешь, что это значит) и десериализует значение; `exists` только спрашивает адаптер, остался ли ключ. Подходит для меток-заглушек, проверки, что замок ещё удерживается, или разведки перед вытягиванием большого объекта.
+Отличие от `get`: промах — `null` и полная десериализация; `exists` спрашивает адаптер «ключ ещё жив?». Маркеры, удержание lock, разведка перед тяжёлым `get`.
 
 ::: tip
-Между «сначала exists, потом get» другой процесс может удалить или изменить ключ — не используй это как строгое транзакционное условие. Захват замка и идемпотентность — через `setNX` ниже; одноразовое потребление — `getAndDelete`.
+Между exists и get ключ могут удалить или изменить — не как строгое транзакционное условие. Lock и идемпотентность — `setNX` ниже; одноразовое потребление — `getAndDelete`.
 :::
 
 ## getAndDelete: прочитал и удалил
 
-Чтобы повторить Redis `GETDEL` и одноразовые удостоверения, используйте `getAndDelete`: атомарно достать и удалить. При параллельных вызовах значение получит только один; остальные — `null` (или ваш default).
+Как Redis `GETDEL` для одноразовых токенов — `getAndDelete`: атомарно взять и удалить. При двух параллельных вызовах значение получит только один, у другого `null` (или ваш default).
 
-Типично: OAuth `state`, код из письма, короткий ticket на скачивание — после чтения ключ должен исчезнуть, чтобы нельзя было повторить.
+Типично: OAuth `state`, код из письма, короткий download ticket — прочитали — обязали инвалидировать, без replay.
 
 ```typescript
-const ticket = await this.cache.getAndDelete<{ userId: number }>(
-  this.key('email-verify', code),
+const ticket = await cache.getAndDelete<{ userId: number }>(
+  cache.key('email-verify', code),
 );
 if (!ticket) {
-  ctx.throw(400, 'Неверный или уже использованный код');
+  ctx.throw(400, '验证码无效或已使用');
 }
-// ticket.userId доступен; ключа уже нет
+// ticket.userId 可用；键已不在缓存里
 ```
 
-В отличие от «`get`, потом `delete`», никто не успеет прочитать ключ между шагами. Второй аргумент — значение по умолчанию при промахе (как у `get`).
+В отличие от `get` затем `delete`: между шагами ключ ещё читается; `getAndDelete` — один проход в адаптере. Второй аргумент — default при промахе (тип как у `get`).
 
 ## setNX и счётчики
 
-`setNX` пишет, только если ключа нет — распределённые замки, идемпотентное «обработать один раз». TTL должен покрывать худшее время задачи, иначе после истечения замок может забрать другой worker. `increment` / `expire` — для счётчиков ошибок кода, скользящих окон.
+`setNX` пишет, если ключа нет — распределённый lock, идемпотентность «обработать один раз». TTL должен перекрывать худшее время задачи, иначе после истечения lock возьмёт другой worker. `increment` / `expire` — ошибки OTP, счётчики в фиксированном окне.
 
-Замок, идемпотентность (TTL больше худшего времени задачи):
+Lock / идемпотентность (TTL > худшего времени):
 
 ```typescript
-const ok = await this.cache.setNX(lockKey, '1', '30 seconds');
+const ok = await cache.setNX(lockKey, '1', '30 seconds');
 if (!ok) {
   return;
 }
 ```
 
-Ошибки кода: сначала `increment`, при первом срабатывании (или если TTL ещё нет) — `expire` на окно; как привычка Redis `INCR`. В memory-адаптере `increment` / `decrement` **сохраняют текущий TTL**, смена числа не сбрасывает срок.
+Ошибки OTP: `increment`, при первом (или без TTL) — `expire` на окно — как привычка Redis `INCR`. В memory-адаптере incr/decr **сохраняют TTL**, сброс срока от смены числа нет.
 
 ```typescript
-const key = this.key('otp-fail', phone);
-const n = await this.cache.increment(key);
-if (n === 1 || (await this.cache.ttl(key)) === -1) {
-  await this.cache.expire(key, '15 minutes'); // [!code highlight]
+const key = cache.key('otp-fail', phone);
+const n = await cache.increment(key);
+if (n === 1 || (await cache.ttl(key)) === -1) {
+  await cache.expire(key, '15 minutes'); // [!code highlight]
 }
 if (n > 5) {
   ctx.throw(429);
 }
 ```
 
-## singleFlight: один расчёт при конкуренции
+## singleFlight: при параллели считать один раз
 
-Когда многим сразу нужно одно и то же «посчитать сейчас» (JWKS, дорогой API), но **без** долгой записи в кэш, берите `singleFlight`: первый выполняет `factory`, остальные делят результат; **после полёта долговременного кэша нет** — следующий вызов считает снова.
+Много запросов на один ключ хотят «посчитать сейчас» (JWKS, дорогой API), без долгого кэша — `singleFlight`: первый идёт в `factory`, остальные ждут общий результат; **после полёта долгого кэша нет**, следующий вызов снова считает.
 
 ```typescript
-async loadJwks() {
-  return this.cache.singleFlight(this.key('jwks'), async () => { // [!code focus:3]
+async function loadJwks() {
+  return cache.singleFlight(cache.key('jwks'), async () => { // [!code focus:3]
     return fetchJwksFromIdp();
   });
 }
 ```
 
-По сравнению с `@remember`: `remember` = однократный расчёт при конкуренции **плюс** запись на `duration`; `singleFlight` = **только эта волна**. Замок ~30 с с продлением; при ошибке ждущие получают ту же ошибку. Если победитель упал без результата, ждущие снова соревнуются (есть лимит раундов).
+Разделение с `@remember`: `remember` = singleFlight + **запись на `duration`**; `singleFlight` = **только общий расчёт в этой волне**. Lock ~30s с продлением при работе; при ошибке ждущие видят ту же ошибку. Если исполнитель упал без результата — ждущие соревнуются снова (с лимитом раундов).
 
 ::: tip
-На нескольких инстансах ключ должен жить в общем адаптере (например Redis); memory защищает только текущий процесс.
+При нескольких инстансах ключ должен быть на общем адаптере (Redis) — иначе singleFlight только внутри процесса; локальный memory — только этот процесс.
 :::
 
 ## Декоратор кэша
 
-Повторять в каждом методе «get → промах → вычислить → set» утомительно, при параллельных запросах с одним ключом вычисление дублируется. `createRemember` даёт декоратор метода `@remember`: при попадании — сразу ответ; при промахе — только исходный метод и запись; **при конкуренции по одному ключу выполняется один вызов**, остальные ждут результат (слот ~30 с с продлением, как у `singleFlight`).
+Повторять в методах «get → нет → считать → set» утомительно; при параллели на один ключ считают многократно. `createRemember` даёт декоратор `@remember`: hit — сразу ответ; miss — метод и запись; **на один ключ в полёте один исполнитель**, остальные ждут (placeholder lock как у singleFlight, ~30s с продлением).
 
-Декоратор привязывайте к **своему** классу кэш-сервиса — передайте **конструктор подкласса** `BaseCacheService` (не базовый класс, не экземпляр). Удобнее всего в `cache.service.ts`; в бизнес-коде импортируйте `remember`:
+Декоратор привязан к **конкретному `Caching`** — `createRemember(cache)`, не адаптер и не класс. Экспорт из `cache.ts`, в Service импорт `remember`:
 
 ```typescript
-import { BaseCacheService, createRemember } from '@aomex/cache';
+import { Caching, createRemember } from '@aomex/cache';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 
-export default class CacheService extends BaseCacheService {
-  protected createAdapter() {
-    return new CacheMemoryAdapter();
-  }
-}
-
-export const remember = createRemember(CacheService); // [!code highlight]
+export const cache = new Caching(new CacheMemoryAdapter());
+export const remember = createRemember(cache); // [!code highlight]
 ```
 
-После подключения адаптера в `onInit` у `BaseCacheService` remember вешается сам и снимается при остановке — **ручная регистрация не нужна**. В `combineServices` по-прежнему стоит `eager: ['cache']`: пока кэш не готов, декорированные методы **ждут**; после shutdown вызов **бросает ошибку**.
+Подключение — ленивая загрузка `Caching`.
 
 ### На бизнес-методы
 
-Метод должен быть **async** (возвращать `Promise`). Одна длительность — «сколько держать в кэше» (`DurationInput`):
+Метод должен быть **async** (Promise). Только длительность — «сколько кэшировать» (`DurationInput`):
 
 ```typescript
 import { Service } from '@aomex/common';
-import { remember } from './cache.service.js';
+import { remember } from '@/cache';
 
 class ReportService extends Service {
   @remember('1 minute')
@@ -267,7 +263,7 @@ class ReportService extends Service {
 }
 ```
 
-Чтобы задать ключ или значение по умолчанию, передай объект. Тогда первый `await services.report.find(1)` идёт в БД; повтор с теми же аргументами в окне читает кэш. `duration` — срок после записи:
+Свой `key` или `defaultValue` — объектом; первый `await services.report.find(1)` идёт в БД, в окне с теми же аргументами — из кэша. `duration` — срок после записи:
 
 ```typescript
 class ReportService extends Service {
@@ -284,40 +280,40 @@ class ReportService extends Service {
 }
 ```
 
-| Форма | Назначение |
+| Запись | Назначение |
 | --- | --- |
-| `@remember('1 minute')` / `@remember(60_000)` | Только срок; ключ по умолчанию |
-| `duration` | Обязательно (объектная форма); срок кэша |
-| `key: 'фиксированная строка'` | Один ключ на весь метод (без аргументов, один результат на сайт) |
-| `key: (...args) => string` | Ключ из аргументов; `this` — экземпляр сервиса |
-| `defaultValue` | Когда исходный метод вернул `null`, наружу это значение (по умолчанию `null`) |
+| `@remember('1 minute')` / `@remember(60_000)` | только TTL; ключ по умолчанию |
+| `duration` | обязателен в объектной форме; как долго хранить |
+| `key: 'строка'` | один ключ на весь метод (без аргументов, глобальный результат) |
+| `key: (...args) => string` | ключ из аргументов; `this` — экземпляр сервиса |
+| `defaultValue` | если метод вернул `null`, наружу это значение (по умолчанию `null`) |
 
-### Сборка ключа по умолчанию
+### Ключ по умолчанию
 
-Без `key` фреймворк использует:
+Без `key` фреймворк собирает:
 
 `имя класса или displayName` + `-` + `имя метода` + `-` + `JSON.stringify(аргументы)`
 
-При наследовании `Service` и имени на `Service` берётся `displayName` без суффикса (`ReportService` → `Report`). Аргументы идут в JSON — **не передавайте не сериализуемое или «прыгающее»** (`Date`, циклы, каждый раз новый объект), иначе ключи не совпадут и кэша по сути не будет. При сложных аргументах свой `key` надёжнее.
+Для наследников `Service` с именем на `Service` — `displayName` без суффикса (`ReportService` → `Report`). Аргументы в JSON — **не кладите несериализуемое или «дрожащее»** (`Date`, циклы, каждый раз новый объект), иначе ключ не совпадёт. Много аргументов или хаос — свой `key` надёжнее.
 
-### Конкуренция и пустые результаты
+### Параллель и пустой результат
 
-При одновременных запросах с одним ключом первый через `setNX` занимает слот и выполняет метод; слот ~30 с, продлевается на время выполнения; остальные поллят до снятия слота, затем читают кэш (или `defaultValue`). Это от пробоя кэша, а не универсальный распределённый замок — не используйте как общий lock. Если нужно только «разделить эту волну без долгого кэша» — см. `singleFlight` выше.
+На один ключ параллельно: первый ставит placeholder через `setNX` и гоняет метод (~30s, продление при работе); остальные ждут снятия placeholder и читают кэш (или `defaultValue`). Это против cache stampede, не семантика распределённого lock — не универсальная блокировка. «Только общий расчёт в этой волне, без долгого кэша» — `singleFlight` выше.
 
-Если исходный метод вернул `null`, **`null` не пишется** (чтобы «нет данных» не застывало надолго); снаружи видят `defaultValue`. Чтобы закэшировать явное «нет», продумайте ключи сами или пишите `this.cache.set` вручную.
+Если метод вернул `null`, **`null` в кэш не пишется** (чтобы не зацементировать «нет»); снаружи — `defaultValue`. Кэшировать явное «ничего» — свой ключ или ручной `cache.set`.
 
 ### Несколько кэшей
 
-Локальный memory и общий Redis: по подклассу `BaseCacheService` и по вызову `createRemember`. Область — **класс сервиса**; `fork()` нет. Какой `remember` повесили — в то хранилище и попадёте.
+Локальный memory и общий Redis: по `new Caching(adapter)` и свой `createRemember`. Область — **экземпляр**, без `fork()`. Какой `remember` на методе — в то хранилище.
 
 ::: warning
-Вешайте только на **чтение-частые, редко меняющиеся** запросы, где краткая устарелость допустима. Не на методы с побочными эффектами — запись в БД, SMS, списание склада — в кэше останется старое. При изменении данных сами `cache.delete` по ключу или поднимите версию ключа (см. сборку ключей выше).
+Вешайте только на **часто читаемые, редко пишущиеся запросы с коротким TTL**. Не на запись в БД, SMS, списание склада — в кэше останется старое. После изменений данных — `cache.delete` или смена версии ключа (см. «Как собирать ключ»).
 :::
 
 ## Дальше
 
-- Регистрация сервисов и `eager`: [Сервисный слой](/ru/core/service)
+- Регистрация сервисов и lifecycle: [слой сервисов](/ru/core/service)
 - OAuth `state` и `store`: [OAuth2-клиент](/ru/plugins/oauth2-client)
-- `store` для счётчиков abuse: [Защита от злоупотреблений](/ru/plugins/abuse)
-- Session в авторизации: [Единая точка Auth](/ru/plugins/auth)
-- Bearer и стратегии token: [Стратегия Bearer](/ru/plugins/auth-bearer-strategy)
+- `store` для abuse-счётчиков: [защита от злоупотреблений](/ru/plugins/abuse)
+- session в auth: [единая точка Auth](/ru/plugins/auth)
+- Bearer и token: [стратегия Bearer](/ru/plugins/auth-bearer-strategy)

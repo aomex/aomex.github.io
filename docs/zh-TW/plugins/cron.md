@@ -21,10 +21,11 @@ pnpm add @aomex/cron
 ```typescript
 import { commanders, ConsoleApp } from '@aomex/console';
 import { crons } from '@aomex/cron';
+import { logger } from '@/services/logger.service';
 
 const app = new ConsoleApp({
   services,
-  logger: services.logger,
+  logger,
   language: 'zh-CN',
   mount: [ // [!code focus:7]
     crons({
@@ -124,17 +125,20 @@ commander.create('export', {
 
 ## 多副本換共享 store
 
-預設 `store` 是**程序內記憶體**：單機 Console 夠用。上了多 Pod / 多機後，每個程序各自到點都會跑一遍——日報發兩封、對賬跑兩遍就從這兒來。
+預設 `store` 是程序內 `Caching`（memory）：單機 Console 夠用。上了多 Pod / 多機後，每個程序各自到點都會跑一遍——日報發兩封、對賬跑兩遍就從這兒來。
 
-要多副本一起跑、但同一計劃在全叢集只按 `concurrent` 搶槽，就給 `crons()` 換**共享 store**（常用 Redis）。排程與互斥靠 store 協調，業務 action 不用自己加分散式鎖。
+要多副本一起跑、但同一計劃在全叢集只按 `concurrent` 搶槽，就給 `crons()` 換**共享 `Caching`**（常用 Redis）。排程與互斥靠 store 協調，業務 action 不用自己加分散式鎖。
 
 ```typescript
+import { Caching } from '@aomex/cache';
 import { CacheRedisAdapter } from '@aomex/cache-redis-adapter';
 
 crons({
   commanders: './src/commanders',
   port: 9786,
-  store: new CacheRedisAdapter({ host: '127.0.0.1', port: 6379 }), // [!code highlight]
+  store: new Caching( // [!code highlight]
+    new CacheRedisAdapter({ host: '127.0.0.1', port: 6379 }),
+  ),
 });
 ```
 

@@ -8,7 +8,7 @@ outline: deep
 
 **按 IP / 連線的全站限流，生產優先用 Nginx**（如 `limit_req_zone` / `limit_req`）：請求還沒進 Node 就被擋住，多副本也不用先上 Redis。`@aomex/rate-limit` 更適合：**按使用者 / API Key 等業務鍵**、登入簡訊等單路由收緊，或本地沒有反代時先頂一陣。
 
-預設**程序內記憶體**計數——單機夠用；多副本且必須在應用內計數時要換 Redis，否則總限額約等於 `limit × 例項數`。
+預設**程序內記憶體**計數——單機夠用；多副本且必須在應用內計數時要換 Redis，否則總限額約等於 `limit × 实例数`。
 
 ```bash
 pnpm add @aomex/rate-limit
@@ -23,10 +23,11 @@ pnpm add @aomex/rate-limit-redis-store
 ```typescript
 import { rateLimit } from '@aomex/rate-limit';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:7]
@@ -90,9 +91,9 @@ router.post('/login', {
 
 ## 生產多副本：換 Redis
 
-多 Pod 仍用預設記憶體 store，各例項各算各的，總配額會翻倍。共享計數時換成 `@aomex/rate-limit-redis-store`。
+多 Pod 仍用預設記憶體 store，各實例各算各的，總配額會翻倍。共享計數時換成 `@aomex/rate-limit-redis-store`。
 
-構造時只傳 `RedisOptions`（`host` / `port` 等；型別可從本包引入），不要傳入已建好的 `Redis` 例項。`ioredis` 已隨包裝好，不必再單獨加依賴。store 內部會 `lazyConnect`，由 `rateLimit()` 經 [`registerLifecycle`](/zh-TW/core/service#生命週期鉤子) 在程序側連上 / 斷開。
+構造時只傳 `RedisOptions`（`host` / `port` 等；型別可從本包引入），不要傳入已建好的 `Redis` 實例。`ioredis` 已隨包裝好，不必再單獨加依賴。store 內部會 `lazyConnect`，由 `rateLimit()` 經 [`registerLifecycle`](/zh-TW/core/service#生命週期鉤子) 在程序側連上 / 斷開。
 
 ```typescript
 import { RateLimitRedisStore } from '@aomex/rate-limit-redis-store';

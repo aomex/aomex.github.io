@@ -19,10 +19,11 @@ After you confirm the edge is **not** already compressing the same response, put
 ```typescript
 import { compress } from '@aomex/compress';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'en-US' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:4]

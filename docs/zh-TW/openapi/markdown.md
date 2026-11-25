@@ -14,7 +14,7 @@ OpenAPI 裡不少 **description** 欄位按 **CommonMark** 渲染（Swagger UI /
 
 ```typescript
 import { generateOpenapi } from '@aomex/openapi-generator';
-import { app } from './app.js';
+import { app } from '@/app';
 
 await generateOpenapi({
   routers: './src/routers',

@@ -22,9 +22,11 @@ Later middleware and handlers depend on `await next()`. You may skip `next()` to
 After `middleware.mixin<{ … }>` declares new `ctx` fields, **later middleware and the route action** get autocomplete for those properties. Assign at runtime without the generic and TypeScript still thinks they do not exist.
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 // in the action
 async (ctx) => { // [!code highlight]
-  await services.logger.info('request', { requestId: ctx.requestId });
+  logger.info(`request ${ctx.requestId}`);
   return { ok: true };
 };
 ```
@@ -38,11 +40,12 @@ Multiple middleware mixins merge onto the same `ctx` type. Runtime-only fields w
 ```typescript
 import { WebApp } from '@aomex/web';
 import { routers } from '@aomex/web';
-import { withRequestId } from './middlewares/request-id.js';
+import { withRequestId } from '@/middlewares/request-id';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:2]

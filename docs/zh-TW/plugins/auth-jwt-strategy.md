@@ -96,7 +96,7 @@ new AuthJwtStrategy({
 });
 ```
 
-管理介面按角色攔截仍走 `onAuthorize`，例項方法裡用 `this.getIdentity()`。非對稱金鑰、舊金鑰輪換等進階配法見 [高階：自定義鑑權策略](/zh-TW/advanced/auth-strategy)。
+管理介面按角色攔截仍走 `onAuthorize`，實例方法裡用 `this.getIdentity()`。非對稱金鑰、舊金鑰輪換等進階配法見 [高階：自定義鑑權策略](/zh-TW/advanced/auth-strategy)。
 
 驗籤失敗時先想伺服器時鐘是否同步。吊銷沒有銀彈：短 expiresIn + 重新整理介面是常見組合，黑名單要自己維護。
 

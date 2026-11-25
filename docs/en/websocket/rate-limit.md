@@ -20,9 +20,10 @@ Window via `window` (milliseconds or readable durations like `'10s'` / `'1 minut
 import { websocketRateLimit } from '@aomex/rate-limit/websocket';
 import { WebsocketApp, channels } from '@aomex/websocket';
 import { WsTransport } from '@aomex/websocket-ws-transport';
+import { logger } from '@/services/logger.service';
 
 new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'en-US' },
   transport: new WsTransport(),
   mount: [ // [!code focus:6]

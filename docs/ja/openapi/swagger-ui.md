@@ -6,7 +6,7 @@ outline: deep
 
 ローカルや社内で、**開けばすぐ試行できる** API ドキュメントを載せる。前提は OpenAPI Document（ファイル出力した openapi.json、または実行時の `generateOpenapi`）。長文閲覧は [Redoc UI](/ja/openapi/redoc-ui)、モダンな試行 UI は [Scalar UI](/ja/openapi/scalar-ui)。複数 UI の併存可。**接頭辞の衝突に注意**。
 
-まずは [公式デモ](https://petstore.swagger.io/) を見てから。契約の出どころ：[生成OpenAPI](/ja/openapi/)。
+まずは [公式デモ](https://petstore.swagger.io/) を見てから。契約の出どころ：[OpenAPI を生成](/ja/openapi/)。
 
 ```bash
 pnpm add @aomex/swagger-ui
@@ -34,7 +34,7 @@ mount: [
 ```typescript
 import { swaggerUI } from '@aomex/swagger-ui';
 import { generateOpenapi } from '@aomex/openapi-generator';
-import { app } from './app.js';
+import { app } from '@/app';
 
 mount: [ // [!code focus:12]
   swaggerUI({
@@ -101,4 +101,4 @@ Redoc / Scalar との比較、併存、シナリオ選定は [ドキュメント
 
 - [ドキュメント UI の選び方](/ja/openapi/choose-ui)
 - [Scalar UI](/ja/openapi/scalar-ui) · [Redoc UI](/ja/openapi/redoc-ui)
-- [生成OpenAPI](/ja/openapi/)
+- [OpenAPI を生成](/ja/openapi/)

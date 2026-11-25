@@ -4,24 +4,25 @@ outline: deep
 
 # カスタムバリデータ
 
-社員番号、チェックディジット付き伝票、内部列挙コード——同じ形が body、query、schema、OpenAPI に何度も出る。毎回 `rule.string().match(/^E\d{6}$/)` でも動くが：
+社員番号、チェックディジット付き番号、内部列挙コード — 同じ形が body、query、schema、OpenAPI に何度も出ます。毎回 `rule.string().match(/^E\d{6}$/)` でも動きますが：
 
-- エラーメッセージがバラバラで結合テストがずれる  
-- OpenAPI には汎用 string しか残らず、形式が分からない  
-- ルール変更で正規表現を全域検索する羽目になる  
+- エラーメッセージがバラバラで連携がずれる
+- OpenAPI には汎用 string のままで形式が分からない
+- ルール変更で正規表現を全体検索
 
-このページでは **`rule.employeeId()`** まで一緒に作る：検証・型・ドキュメントを一箇所で保守。一度きりのフィールドは [バリデータ一覧](/ja/validators/builtins) + [共通チェーン](/ja/validators/chain) で十分。
+本ページでは **`rule.employeeId()`** を一緒に作ります。検証・型・ドキュメントを一箇所で保守。一度きりのフィールドは [バリデータ一覧](/ja/validators/builtins) + [共通チェーン](/ja/validators/chain) で十分です。
 
-## 完成形
+## 完成イメージ
 
-成功時フィールドは `string`；失敗は自動 400；ドキュメントに `pattern` と例。ルートでは最終的に：
+成功時フィールドは `string`；失敗は自動 400；ドキュメントに `pattern` と example。ルート上は最終的に：
 
 ```typescript
 mount: [body({ employeeId: rule.employeeId() })];
 ```
-## ステップ1：クラスを作り、実行時検証だけ
 
-`src/validators/employee-id.validator.ts` を新規作成。OpenAPI やチェーンメソッドは後回し——`accept` / `deny` できればよい。
+## ステップ 1：クラスを作り、ランタイム検証だけ
+
+`src/validators/employee-id.validator.ts` を新規作成。OpenAPI とチェーンメソッドは後回し — `accept` / `deny` できればよい。
 
 ```typescript
 // src/validators/employee-id.validator.ts
@@ -40,20 +41,22 @@ export class EmployeeIdValidator<T = string> extends Validator<T> {
   }
 }
 ```
-`ValidateResult.accept(value)` は通過を表し、**ここで返した値**が後続に入る（正規化も可）。`deny` の文字列は 400 エンベロープに入る。
 
-HTTP を起こさず [手動検証](/ja/validators/validate) で単体テスト：
+`ValidateResult.accept(value)` は通過し、**ここで返した値**が後続に進みます（正規化も可）。`deny` の文字列は 400 エンベロープに入ります。
+
+[手動検証](/ja/validators/validate) で HTTP なしに単体確認：
 
 ```typescript
 import { validate } from '@aomex/common';
-import { EmployeeIdValidator } from './employee-id.validator.js';
+import { EmployeeIdValidator } from '@/validators/employee-id.validator';
 
 await validate('E123456', new EmployeeIdValidator()); // 通过
 // await validate('bad', new EmployeeIdValidator()); // 抛错
 ```
-## ステップ2：チェーンメソッドの型を宣言
 
-基底の `optional` / `default` / `transform` などは `protected` 実装。子クラスで `declare public` し直さないと、チェーン後の型が基底に落ちたり補全が消える。組み込み `rule.string()` の宣言を写す（実装は基底にある）：
+## ステップ 2：チェーンメソッドの型を宣言
+
+基底の `optional` / `default` / `transform` などは `protected` 実装です。サブクラスで `declare public` し直さないと、チェーン後の型が基底に戻ったり補完が欠けます。組み込み `rule.string()` と同じ宣言を写してください（実装は基底にあります）：
 
 ```typescript
 import {
@@ -97,14 +100,15 @@ export class EmployeeIdValidator<T = string> extends Validator<T> {
   }
 }
 ```
-`declare protected copy` が重要：専用チェーン（次のステップ）は `this.copy()` で複製し、戻り型は `EmployeeIdValidator` のままにする。
 
-## ステップ3：`rule.xxx()` に登録
+`declare protected copy` が重要です。専用チェーン（次のステップ）は `this.copy()` クローンに依存し、戻り型は `EmployeeIdValidator` のままである必要があります。
 
-両方欠かせない：
+## ステップ 3：`rule.xxx()` に登録
 
-1. `declare module '@aomex/common'` で `Rule` インタフェース拡張 → エディタが `rule.employeeId()` を認識  
-2. `Rule.register('employeeId', EmployeeIdValidator)` → 実行時にこのファクトリが存在  
+二段階、どちらも必須：
+
+1. `declare module '@aomex/common'` で `Rule` を拡張 → エディタが `rule.employeeId()` を認識
+2. `Rule.register('employeeId', EmployeeIdValidator)` → ランタイムにファクトリ
 
 ```typescript
 import { Rule } from '@aomex/common';
@@ -117,16 +121,17 @@ declare module '@aomex/common' {
 
 Rule.register('employeeId', EmployeeIdValidator); // [!code highlight]
 ```
+
 ::: warning
-クラスだけ書いて `register` しない：型はたまたま合っても（手動で module 拡張した場合）、実行時は `rule.employeeId is not a function`。  
-`register` だけで `declare module` しない：動くが補全がなく any になりやすい。
+クラスだけで `register` なし：型だけたまたま合っても（手動 module 拡張時）、ランタイムは `rule.employeeId is not a function`。  
+`register` だけで `declare module` なし：動くが補完なし、any になりがち。
 :::
 
-登録は **副作用**：いかなる `rule.employeeId()` より前に実行。習慣は schema ファイル先頭で `import '../validators/employee-id.validator.js'`、または `web.ts` / `cli.ts` 入口で一度 import。
+登録は **side-effect**：いかなる `rule.employeeId()` より前に実行。習慣として schema ファイル先頭で `import '@/validators/employee-id.validator'`、または `web.ts` / `cli.ts` エントリで一度 import。
 
-## ステップ4：OpenAPI 形状を足す
+## ステップ 4：OpenAPI 形状を補う
 
-`toDocument()` をオーバーライド。書かないとドキュメントはほぼ plain string。
+`toDocument()` をオーバーライドすると生成時に `pattern` / `example` が付きます。書かないとほぼ plain string です。
 
 ```typescript
 import type { OpenAPI } from '@aomex/common';
@@ -139,13 +144,14 @@ protected override toDocument(): OpenAPI.SchemaObject {
   };
 }
 ```
-（プロジェクトで `OpenAPI` の `@aomex/common` からの export パスが型ヒントと違う場合は、エディタの定義ジャンプに従う。）
 
-## ステップ5：schema / ルートにマウント
+（プロジェクトで `OpenAPI` の export パスが型ヒントと違う場合はエディタのジャンプに従ってください。）
+
+## ステップ 5：schema / ルートに載せる
 
 ```typescript
 // src/schemas/staff.schema.ts
-import '../validators/employee-id.validator.js';
+import '@/validators/employee-id.validator';
 import { schema, rule } from '@aomex/common';
 
 export const staffSchema = schema({
@@ -156,7 +162,7 @@ export const staffSchema = schema({
 
 ```typescript
 import { body } from '@aomex/web';
-import { staffSchema } from '../schemas/staff.schema.js';
+import { staffSchema } from '@/schemas/staff.schema';
 
 router.post('/staff', {
   mount: [body(staffSchema)],
@@ -166,11 +172,12 @@ router.post('/staff', {
   },
 });
 ```
-再度試す：合法な社員番号は action へ；`employeeId=abc` は 400 で、文言は自分の `deny` 由来のはず。
 
-## ステップ6（任意）：専用チェーンメソッド
+改めて試す：合法な社員番号は action へ；`employeeId=abc` は 400 で、文案はあなたの `deny` 由来。
 
-例：小文字 `e` を許す。組み込み `trim` / `min` と同じ：`copy()` → `config` 変更 → `return`。
+## ステップ 6（任意）：専用チェーンメソッド
+
+例：小文字 `e` を許可。組み込み `trim` / `min` と同型：`copy()` → `config` 変更 → `return`。
 
 まず `Options` にフィールドを足し、メソッドを実装：
 
@@ -196,25 +203,26 @@ protected validateValue(value: unknown, _key: string, label: string) {
   return ValidateResult.accept(value);
 }
 ```
-用法：`rule.employeeId().allowLowerE()`。
 
-`Rule.register` が載せるのは**無引数ファクトリ**。「モード」が要るときはチェーンかデフォルト config。`rule.employeeId('v2')` は期待しない（組み込み `rule.uuid('v4')` は Rule クラス直下で、register 由来ではない）。
+使い方：`rule.employeeId().allowLowerE()`。
 
-## エラー文言を製品言語パックへ
+`Rule.register` は**無引数ファクトリ**；「モード」はチェーンかデフォルト config で。`rule.employeeId('v2')` は期待しない（組み込み `rule.uuid('v4')` は Rule クラス上のメソッドで、register 由来ではない）。
 
-`deny` 内で `import { i18n } from '../i18n/index.js'` して `i18n.t('errors.badEmployeeId')` 可。フレームワーク `language` は組み込み検証文言、[ビジネス i18n](/ja/advanced/i18n) は別系統。
+## エラー文案を製品言語パックに載せるとき
 
-## ファイル全体の参照
+`deny` 内で `import { i18n } from '@/i18n'` して `i18n.t('errors.badEmployeeId')` 可。フレームワーク `language` は組み込み検証文案用で、業務パックとは別 — [アプリケーションの i18n](/ja/advanced/i18n)。
 
-上記を1ファイルにまとめる順序の目安：namespace Options → class（declare チェーン + validateValue + toDocument + 専用チェーン）→ `declare module` → `Rule.register`。
+## ファイル全体の並び
 
-同じ型の参考：
+上記を 1 ファイルにまとめる順序：`namespace Options` → class（declare チェーン + validateValue + toDocument + 専用チェーン）→ `declare module` → `Rule.register`。
 
-- [rule.file()](/ja/validators/rules/file)（`@aomex/web`、maxSize など）  
-- [Mongoose](/ja/plugins/mongoose) の `rule.mongoObjectId()`  
+同型の参考：
+
+- [rule.file()](/ja/validators/rules/file)（`@aomex/web`、maxSize など）
+- [Mongoose](/ja/plugins/mongoose) の `rule.mongoObjectId()`
 
 ## 関連
 
-- 日常使用：[バリデータ：クイックスタート](/ja/validators/)
+- 日常用法：[バリデータ：クイックスタート](/ja/validators/)
 - 共通チェーン：[共通チェーン](/ja/validators/chain)
 - スクリプト内検証：[手動検証](/ja/validators/validate)

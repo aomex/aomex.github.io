@@ -14,12 +14,13 @@ pnpm add tsx -D
 ```typescript
 // src/web.ts
 import { routers, WebApp } from '@aomex/web';
-import { services } from './services/index.js';
+import { logger } from '@/services/logger.service';
+import { services } from '@/services';
 
 const app = new WebApp({ // [!code focus:7]
   services,
-  logger: services.logger,
-  language: { mode: 'fixed', language: 'zh-CN' },
+  logger, // [!code highlight]
+  language: { mode: 'fixed', language: 'en-US' },
   proxyIP: { mode: 'detect' },
   mount: [routers('./src/routers')], // [!code highlight]
 });
@@ -52,15 +53,17 @@ These fields live on `new WebApp({ ... })`. Routes answer “what this path does
 
 ## services and logger
 
-`services` is the business container (DB, cache, mail, etc.) from [combineServices](/en/core/service). On shutdown the framework calls `destroy` on loaded services to close connections and flush logs.
+`services` is the business container (DB, mail, etc.) from [combineServices](/en/core/service). On shutdown the framework calls `destroy` on loaded services to close connections.
 
-`logger` must be passed again (usually `services.logger`): `ctx.logger` in routes and middleware is that instance—same reference as the constructor arg.
+`logger` is a [`Logger`](/en/core/logger) instance (`new Logger({ transports })`). In app code `import { logger } from '@/services/logger.service'`; `ctx.logger` is the same reference (for third-party and in-app middleware). Cache: [`Caching`](/en/core/cache).
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 const app = new WebApp({
   services, // [!code highlight]
-  logger: services.logger, // [!code highlight]
-  language: { mode: 'fixed', language: 'zh-CN' },
+  logger, // [!code highlight]
+  language: { mode: 'fixed', language: 'en-US' },
   proxyIP: { mode: 'detect' },
 });
 ```
@@ -164,10 +167,11 @@ Logic for one URL group belongs on [Router](/en/web/router) or per-route `mount`
 ```typescript
 import { middleware } from '@aomex/common';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:9]
@@ -176,7 +180,7 @@ const app = new WebApp({
       await next();
       const cost = Date.now() - start;
       const { method, url } = ctx.request;
-      await ctx.logger.info(`${method} ${url} ${cost}ms`);
+      logger.info(`${method} ${url} ${cost}ms`);
     }),
     routers('./src/routers'),
   ],
@@ -205,9 +209,11 @@ Before large uploads or webhook JSON, check defaults; tighten or relax at app le
 | `formData` | `multipart/form-data` | ~`50mb` per file, caps on file/field count |
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   body: { // [!code focus:8]
@@ -338,7 +344,7 @@ Other exits—details on dedicated pages:
 
 - `ctx.download`: stream files to client; Promise settles after stream ends—good for delete-after-download temps.
 - `ctx.sse()`: server-sent events—[SSE](/en/web/sse).
-- `ctx.logger`: the `logger` passed to `WebApp`; per-request fields—[Logger · withBindings](/en/core/logger#request-scoped-context-withbindings).
+- App logs: `import { logger } from '@/services/logger.service'` (same reference as `ctx.logger`; `ctx.logger` is for third-party and in-app middleware). For `requestId` and friends, see [Logging · withBindings](/en/core/logger#request-scoped-context-withbindings).
 
 ### app.on('error')
 

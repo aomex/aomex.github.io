@@ -8,7 +8,7 @@ outline: deep
 
 先說清楚一件事：訊息是**盡力送達**。`await ws.room(...).send(...)` 結束，只表示框架已經往外寫（或丟給 Redis），**不保證**對方一定收到，也沒有自動重發、離線信箱。重要資料照樣落庫；客戶端重連後用 HTTP 把漏掉的狀態補回來。
 
-## 裝好依賴，寫出第一份例項
+## 裝好依賴，寫出第一份實例
 
 假定你已經有一個能跑的 [Web 應用](/zh-TW/web/)。再裝即時相關包：
 
@@ -22,10 +22,10 @@ pnpm add @aomex/websocket @aomex/websocket-ws-transport
 // src/ws.ts
 import { WebsocketApp, channels } from '@aomex/websocket';
 import { WsTransport } from '@aomex/websocket-ws-transport';
-import { services } from './services/index.js';
+import { logger } from '@/services/logger.service';
 
 export const ws = new WebsocketApp({ // [!code focus:8]
-  logger: services.logger,
+  logger, // [!code highlight]
   language: { mode: 'fixed', language: 'zh-CN' },
   path: '/ws',
   transport: new WsTransport(),
@@ -35,7 +35,7 @@ export const ws = new WebsocketApp({ // [!code focus:8]
 
 `logger`、`language`、`transport` 都是必填；漏了編譯器會攔。
 
-- `logger`：和 Web / Console 傳**同一個** `services.logger`。傳輸層初始化失敗、往房間扇出時出錯，都會打到這裡。
+- `logger`：和 Web / Console 傳**同一個** `Logger` 實例。傳輸層初始化失敗、往房間扇出時出錯，都會打到這裡。
 - `language`：管這條連線上的框架文案（握手失敗、非法幀關閉原因、限流 / 校驗失敗回推的話）。上面用的是 `fixed`——後臺、內網、單語種最省事。
 - `mount`：先掛 `channels('./src/channels')`，和 Web 裡掛 `routers('./src/routers')` 是同一類事。Channel 怎麼寫見 [事件路由](/zh-TW/websocket/channel)。
 
@@ -62,12 +62,13 @@ WebSocket 不能自己再開一個埠聽——它要借 Web 那個 `http.Server`
 ```typescript
 // src/web.ts —— 真正启动进程的入口
 import { routers, WebApp } from '@aomex/web';
-import { services } from './services/index.js';
-import { ws } from './ws.js';
+import { services } from '@/services';
+import { ws } from '@/ws';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [routers('./src/routers')],
@@ -128,8 +129,10 @@ Socket.IO 客戶端則是 `io('http://localhost:3000', { path: '/realtime' })`�
 連線剛要升級時，可以用 `verify` 做粗門檻：入參是普通的 Web 請求物件，能讀 Cookie、頭、IP。返回 `true` 放行；`false` 或 HTTP 狀態碼（如 `401`）則拒絕握手。細到某個事件要不要許可權，放到 Channel 的 mount 裡更合適。
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 export const ws = new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   transport: new WsTransport(),
   verify: (request) => { // [!code focus:3]
@@ -167,8 +170,10 @@ maxPayload: 256 * 1024, // 256KiB，收紧一点
 想在人數變化、入站成敗時立刻知道，掛 `onMetric`：有事就回調。回撥裡拋錯只會打 warn，不影響收發。
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 export const ws = new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   transport: new WsTransport(),
   mount: [channels('./src/channels')],
@@ -198,7 +203,7 @@ setInterval(async () => {
 ```typescript
 // src/routers/order.ts
 import { Router } from '@aomex/web';
-import { ws } from '../ws.js';
+import { ws } from '@/ws';
 
 export const router = new Router();
 

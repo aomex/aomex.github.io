@@ -20,10 +20,11 @@ A no-arg `csrf()` is enough: GET/HEAD/OPTIONS only issue or reuse the cookie and
 import { cors } from '@aomex/cors';
 import { csrf } from '@aomex/csrf';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:5]

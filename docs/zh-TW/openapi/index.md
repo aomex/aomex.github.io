@@ -12,7 +12,7 @@ outline: deep
 pnpm add @aomex/openapi-generator
 ```
 
-**傳入與線上同一份 `WebApp` 例項**（`app`），生成器會讀它的全域性 `mount` 和 `envelope`，security、錯誤體、套殼才不容易和真環境漂開。
+**傳入與線上同一份 `WebApp` 實例**（`app`），生成器會讀它的全域性 `mount` 和 `envelope`，security、錯誤體、套殼才不容易和真環境漂開。
 
 ## 路由上掛 response 與 docs
 
@@ -56,7 +56,7 @@ router.get('/:id', { // [!code focus:14]
 
 ## 傳入 app 生成 Document
 
-`generateOpenapi` 要的是 **`WebApp` 例項**，不再單獨傳一份 `mount` 陣列。從 `app` 上讀取全域性中介軟體和 [響應體套殼](/zh-TW/web/envelope)，作為 OpenAPI 注入的單一真源。
+`generateOpenapi` 要的是 **`WebApp` 實例**，不再單獨傳一份 `mount` 陣列。從 `app` 上讀取全域性中介軟體和 [響應體套殼](/zh-TW/web/envelope)，作為 OpenAPI 注入的單一真源。
 
 CLI、測試、指令碼會 `import` 這份模組時，請把 `new WebApp(...)` 與 `app.listen(...)` **拆開**（或只在真正的程序入口 listen），否則一 import 就副作用起服、搶埠。
 
@@ -64,11 +64,12 @@ CLI、測試、指令碼會 `import` 這份模組時，請把 `new WebApp(...)` 
 // src/app.ts —— 只创建并导出，不 listen
 import { formatError, routers, WebApp } from '@aomex/web';
 import { rule } from '@aomex/common';
-import { services } from './services/index.js';
+import { services } from '@/services';
+import { logger } from '@/services/logger.service';
 
 export const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:12]
@@ -88,7 +89,7 @@ export const app = new WebApp({
 
 ```typescript
 // src/main.ts —— 进程入口才听端口
-import { app } from './app.js';
+import { app } from '@/app';
 
 app.listen(3000);
 ```
@@ -96,7 +97,7 @@ app.listen(3000);
 ```typescript
 import { writeFile } from 'node:fs/promises';
 import { generateOpenapi } from '@aomex/openapi-generator';
-import { app } from './app.js';
+import { app } from '@/app';
 
 const document = await generateOpenapi({ // [!code focus:11]
   routers: './src/routers',
@@ -170,14 +171,14 @@ export const openapiBinaryFile = middleware.web({ // [!code focus:18]
 | `generateOpenapi` 選項 | 什麼時候用 |
 | --- | --- |
 | `routers` | 必填；與 Web 掃路由同一 glob |
-| `app` | 與線上同一 `WebApp` 例項（帶出 mount、envelope） |
+| `app` | 與線上同一 `WebApp` 實例（帶出 mount、envelope） |
 | `docs` | `info.title` / `version` / `description` |
 | `fix` | 補 `servers`、聯絡人、廠商擴充套件；單條響應優先在路由上 `response()` |
 
 執行時動態吐規範（自建 `/openapi.json`）：
 
 ```typescript
-import { app } from '../app.js';
+import { app } from '@/app';
 
 router.get('/openapi.json', {
   docs: { showInOpenapi: false },
@@ -194,7 +195,7 @@ router.get('/openapi.json', {
 每次請求都掃路由——訪問頻繁時可加快取，或改下面的 Console 落盤 + 靜態檔案。
 
 ::: warning
-`generateOpenapi` 的 `app` **必填**（型別上也是），並應與線上是**同一份配置**（同一例項最省事）。漏傳過不了編譯；傳了另一套 mount / envelope 時，文件裡的鑑權、formatError、套殼仍會和真環境對不上。
+`generateOpenapi` 的 `app` **必填**（型別上也是），並應與線上是**同一份配置**（同一實例最省事）。漏傳過不了編譯；傳了另一套 mount / envelope 時，文件裡的鑑權、formatError、套殼仍會和真環境對不上。
 :::
 
 ## Console 落盤：`openapi()` + `aomex openapi`
@@ -205,12 +206,13 @@ router.get('/openapi.json', {
 // src/cli.ts
 import { openapi } from '@aomex/openapi-generator';
 import { commanders, ConsoleApp } from '@aomex/console';
-import { app } from './app.js';
-import { services } from './services/index.js';
+import { app } from '@/app';
+import { services } from '@/services';
+import { logger } from '@/services/logger.service';
 
 new ConsoleApp({
   services,
-  logger: services.logger,
+  logger,
   language: 'zh-CN',
   mount: [
     openapi({ // [!code focus:18]

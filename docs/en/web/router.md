@@ -44,8 +44,8 @@ new WebApp({
 For tests or feature flags, pass instances instead of scanning a directory:
 
 ```typescript
-import { userRouter } from './routers/user.js';
-import { postRouter } from './routers/post.js';
+import { userRouter } from '@/routers/user';
+import { postRouter } from '@/routers/post';
 
 mount: [routers([userRouter, postRouter])],
 ```

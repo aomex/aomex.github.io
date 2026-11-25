@@ -19,14 +19,14 @@ outline: deep
 
 | 方式 | 適合什麼 |
 | --- | --- |
-| **反向代理 + 多例項** | 裸機 / 傳統 VM：Nginx / Caddy / HAProxy 後面掛多個 Node 埠 |
+| **反向代理 + 多實例** | 裸機 / 傳統 VM：Nginx / Caddy / HAProxy 後面掛多個 Node 埠 |
 | **systemd**（多 unit / 模板） | Linux 單機，想跟系統服務同一套啟停與日誌，不用 Node 專用程序管理器 |
 | **PM2 `-i` / `instances`** | 單機 VM，要程序管理、日誌聚合、零停機過載 |
 | **`clusterListen`** | 單機 / VM，用 Node 自帶 `cluster`，不另裝程序管理器 |
 | **Docker Compose `scale` / Swarm + Nginx** | 已容器化；同棧反代，DNS 自動輪詢副本 |
 | **K8s `replicas` / HPA** | 生產編排：滾動、探針、配額、自動擴縮 |
 | **雲託管副本**（ECS/Fargate、Cloud Run、Container Apps…） | 要託管編排、少自建控制面；語義仍是「映象內單程序 × 副本」 |
-| **PaaS 橫向擴充套件**（Fly.io、Render、Heroku dyno…） | 平臺按「例項數」擴；入口仍是單程序 listen |
+| **PaaS 橫向擴充套件**（Fly.io、Render、Heroku dyno…） | 平臺按「實例數」擴；入口仍是單程序 listen |
 
 下面按場景展開。雲廠商控制台點「副本 / instances」的，寫法與 Docker / K8s 同一原則，不再逐家複述命令。
 
@@ -36,11 +36,12 @@ Docker、K8s、雲託管、PaaS、systemd、Nginx 多 upstream、PM2 `-i`——�
 
 ```typescript
 import { routers, WebApp } from '@aomex/web';
-import { services } from './services/index.js';
+import { services } from '@/services';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [routers('./src/routers')],
@@ -50,7 +51,7 @@ app.http({ keepAliveTimeout: 61_000 }).listen(process.env.PORT || 3000);
 
 關停對接 [優雅關停](/zh-TW/web/#shutdown)：編排或程序管理器發 `SIGTERM`，應用排空連線後再退出。
 
-## 反向代理 + 多例項
+## 反向代理 + 多實例
 
 不引入容器編排時，最常見的業界做法：同一臺或幾臺機器上起多個 Node（不同埠或不同主機），前面用 Nginx / Caddy / HAProxy 做負載均衡。
 
@@ -78,7 +79,7 @@ server {
 
 ## systemd
 
-Linux 上可以把應用註冊成系統服務：開機自啟、崩潰重啟、journal 日誌，和 Nginx 同一套運維習慣。多程序時用**多個 unit** 或 **模板 unit**（`aomex@3001`、`aomex@3002`），每個例項一個 `PORT`，前面仍掛反向代理。
+Linux 上可以把應用註冊成系統服務：開機自啟、崩潰重啟、journal 日誌，和 Nginx 同一套運維習慣。多程序時用**多個 unit** 或 **模板 unit**（`aomex@3001`、`aomex@3002`），每個實例一個 `PORT`，前面仍掛反向代理。
 
 ```ini
 # /etc/systemd/system/aomex@.service 片段
@@ -98,7 +99,7 @@ systemctl enable --now aomex@3001 aomex@3002 aomex@3003
 
 ## PM2
 
-單機沒上編排、又想要 Node 生態裡現成的程序管理時，用 PM2：拉起多例項、日誌、`reload` 零停機過載。入口保持單程序 listen，例項數交給 `-i`：
+單機沒上編排、又想要 Node 生態裡現成的程序管理時，用 PM2：拉起多實例、日誌、`reload` 零停機過載。入口保持單程序 listen，實例數交給 `-i`：
 
 ```bash
 pm2 start dist/main.js -i max
@@ -115,14 +116,15 @@ pm2 start dist/main.js -i max
 
 ```typescript
 import { clusterListen, routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 clusterListen({ // [!code focus:18]
   workers: 'max', // 或具体数字，如 4
   listen: async () => {
-    const { services } = await import('./services/index.js');
+    const { services } = await import('@/services');
     const app = new WebApp({
       services,
-      logger: services.logger,
+      logger,
       language: { mode: 'fixed', language: 'zh-CN' },
       proxyIP: { mode: 'detect' },
       mount: [routers('./src/routers')],
@@ -145,7 +147,7 @@ clusterListen({ // [!code focus:18]
 | `onListening` / `onExit` | primary 上觀察 worker 監聽 / 退出 | — |
 
 ::: warning
-已經用反向代理多例項、systemd 多 unit、Docker / 雲託管副本、K8s `replicas`、PM2 `-i` 或 PaaS 橫向擴充套件時，**不要再**套 `clusterListen`。主動關機、`disconnect` 導致的退出不會 respawn；只有意外掛掉才會按上面的策略拉起。
+已經用反向代理多實例、systemd 多 unit、Docker / 雲託管副本、K8s `replicas`、PM2 `-i` 或 PaaS 橫向擴充套件時，**不要再**套 `clusterListen`。主動關機、`disconnect` 導致的退出不會 respawn；只有意外掛掉才會按上面的策略拉起。
 :::
 
 ## Docker Compose scale
@@ -240,10 +242,10 @@ spec:
 
 ## PaaS 橫向擴充套件
 
-Fly.io Machines、Render services、Heroku dynos 等按「例項數」擴。平臺替你起多份程序並做流量分發；倉庫入口保持單程序 `listen`，用平臺文件裡的 scale / instances 配置調數量即可，不必在應用裡再 `fork`。
+Fly.io Machines、Render services、Heroku dynos 等按「實例數」擴。平臺替你起多份程序並做流量分發；倉庫入口保持單程序 `listen`，用平臺文件裡的 scale / instances 配置調數量即可，不必在應用裡再 `fork`。
 
 ## 下一步
 
 - [應用入口](/zh-TW/web/)：`listen` / `shutdown` / proxyIP
 - [限流](/zh-TW/plugins/rate-limit)：多副本換共享 store
-- [快取](/zh-TW/core/cache)：session 與 Redis 介面卡
+- [快取](/zh-TW/core/cache)：session 與 Redis 適配器

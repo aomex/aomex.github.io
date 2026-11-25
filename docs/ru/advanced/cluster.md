@@ -4,43 +4,44 @@ outline: deep
 
 # Несколько процессов и масштабирование
 
-Когда одного процесса мало для всех ядер или нужен больший QPS, запускают несколько процессов Node. Из типичных путей **выбирают один** — наложение перемножает число процессов (например PM2 `-i 4` плюс `clusterListen({ workers: 4 })` → 16 рабочих процессов).
+Когда одного процесса Node не хватает, чтобы загрузить все ядра или выдержать больший QPS, запускают **несколько экземпляров**. Обычно выбирают **один** из подходов ниже — комбинации перемножают число процессов (например PM2 `-i 4` плюс `clusterListen({ workers: 4 })` → 16 рабочих копий приложения).
 
-Сначала разделение на два уровня:
+Сначала разделение ролей:
 
-| Уровень | Задача |
+| Уровень | За что отвечает |
 | --- | --- |
-| **Кто управляет процессами / репликами** | Docker / K8s / PM2 / systemd / управляемый облачный сервис… — сколько поднять, перезапуск при падении, rolling deploy |
-| **Что писать во входе приложения** | В большинстве случаев: **один `app.listen` на процесс**; `clusterListen` — только если на одной машине используете встроенный `cluster` Node без отдельного менеджера процессов |
+| **Кто держит процессы / реплики** | Docker / K8s / PM2 / systemd / managed-хостинг… — сколько поднять, перезапуск, rolling deploy |
+| **Что писать в entry приложения** | В большинстве случаев: **в одном процессе один `app.listen`**; `clusterListen` — только если на одной машине встроенный cluster без внешнего менеджера |
 
-Лимиты в памяти, memory-кэш и in-process `Map` **не** разделяются между процессами — при нескольких репликах счётчики и session переносят в Redis и т.п. См. [Rate limiting](/ru/plugins/rate-limit) · [Кэш](/ru/core/cache).
+In-memory rate limit, memory-кэш и Map в процессе **не** разделяются между процессами. При нескольких репликах счётчики и session — во внешнее хранилище (Redis и т.д.), см. [rate limit](/ru/plugins/rate-limit) и [кэш](/ru/core/cache).
 
 ## Как выбрать
 
-| Способ | Когда подходит |
+| Способ | Когда уместен |
 | --- | --- |
-| **Обратный прокси + несколько инстансов** | Bare metal / классические VM: Nginx / Caddy / HAProxy перед несколькими портами Node |
-| **systemd** (несколько unit / шаблон) | Linux на одном хосте: те же start/stop и логи, что у системных сервисов, без Node-менеджера |
-| **PM2 `-i` / `instances`** | Одна VM: менеджер процессов, агрегация логов, reload без простоя |
-| **`clusterListen`** | Одна машина / VM: встроенный `cluster` Node, без доп. менеджера |
-| **Docker Compose `scale` / Swarm + Nginx** | Уже в контейнерах; обратный прокси в том же стеке, DNS автоматически round-robin по репликам |
-| **K8s `replicas` / HPA** | Продакшен-оркестрация: rolling, пробы, квоты, автоскейл |
-| **Управляемые реплики в облаке** (ECS/Fargate, Cloud Run, Container Apps…) | Меньше своего control plane; семантика та же: «один процесс в образе × реплики» |
-| **Горизонтальное масштабирование PaaS** (Fly.io, Render, Heroku dyno…) | Платформа масштабирует по «числу инстансов»; вход по-прежнему single-process `listen` |
+| **Обратный прокси + несколько инстансов** | Bare metal / классические VM: несколько портов Node за Nginx / Caddy / HAProxy |
+| **systemd** (несколько unit / шаблон) | Одна Linux-машина, те же start/stop и журнал, что у системных сервисов, без отдельного Node-менеджера |
+| **PM2 `-i` / `instances`** | Одна VM: управление процессами, логи, reload без простоя |
+| **`clusterListen`** | Одна машина / VM, встроенный `cluster` Node, без внешнего менеджера |
+| **Docker Compose `scale` / Swarm + Nginx** | Уже в контейнерах; прокси в том же стеке, DNS крутит реплики |
+| **K8s `replicas` / HPA** | Прод-оркестрация: rollout, пробы, квоты, autoscale |
+| **Управляемые реплики** (ECS/Fargate, Cloud Run, Container Apps…) | Меньше своей control plane; семантика «один процесс в образе × число реплик» |
+| **Горизонтальный scale PaaS** (Fly.io, Render, Heroku dyno…) | Платформа расширяет по «числу инстансов»; entry — один listen |
 
-Ниже — по сценариям. Консоли облаков с «replicas / instances» следуют тем же принципам, что Docker / K8s; команды по вендорам не перечисляются.
+Ниже — по сценариям. Кнопки «реплики / instances» в облачных консолях следуют тем же принципам, что Docker / K8s; команды по вендорам не повторяем.
 
-## Вход с одним процессом (общий для большинства схем)
+## Entry в один процесс (общий для большинства схем)
 
-Docker, K8s, managed cloud, PaaS, systemd, несколько upstream в Nginx, PM2 `-i` — везде один и тот же обычный single-process listen. На этот файл указывают `CMD` образа, `ExecStart` в systemd и `pm2 start`:
+Docker, K8s, managed-хостинг, PaaS, systemd, несколько upstream в Nginx, PM2 `-i` — в entry обычный single-process listen. `CMD` образа, `ExecStart` в systemd, `pm2 start` указывают на этот файл:
 
 ```typescript
 import { routers, WebApp } from '@aomex/web';
-import { services } from './services/index.js';
+import { services } from '@/services';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [routers('./src/routers')],
@@ -48,11 +49,11 @@ const app = new WebApp({
 app.http({ keepAliveTimeout: 61_000 }).listen(process.env.PORT || 3000);
 ```
 
-Остановка стыкуется с [graceful shutdown](/ru/web/#shutdown): оркестратор или менеджер шлёт `SIGTERM`, приложение сливает соединения и выходит.
+Остановку согласуйте с [graceful shutdown](/ru/web/#shutdown): оркестратор или менеджер шлёт `SIGTERM`, приложение сливает соединения и выходит.
 
 ## Обратный прокси + несколько инстансов
 
-Без оркестрации контейнеров обычный вариант: несколько Node (разные порты или хосты), спереди Nginx / Caddy / HAProxy для балансировки.
+Без оркестрации контейнеров типичная схема: несколько Node на одной или нескольких машинах (разные порты или хосты), спереди Nginx / Caddy / HAProxy.
 
 ```nginx
 upstream aomex {
@@ -74,14 +75,14 @@ server {
 }
 ```
 
-Каждый backend — тот же single-process вход (`PORT=3001` / `3002`…). Настройте [proxyIP](/ru/web/) в WebApp, иначе ключи лимитов и audit-логи увидят прокси, а не клиента. Масштаб = больше процессов и правка upstream; health check и слив соединений — на прокси или в скриптах деплоя.
+Каждый backend — entry выше (`PORT=3001` / `3002`…). Настройте [proxyIP](/ru/web/) в WebApp, иначе ключи rate limit и аудит увидят адрес прокси, а не клиента. Масштаб = больше процессов и правка upstream; health check и drain — на прокси или в скрипте выката.
 
 ## systemd
 
-На Linux приложение можно оформить как системный сервис: автозапуск, перезапуск при сбое, journal — те же привычки, что с Nginx. Несколько процессов — **несколько unit** или **шаблонный unit** (`aomex@3001`, `aomex@3002`), у каждого свой `PORT`, спереди обратный прокси.
+На Linux приложение можно оформить как системный сервис: автозапуск, рестарт при падении, логи в journal — как у Nginx. Несколько процессов — **несколько unit** или **шаблон** (`aomex@3001`, `aomex@3002`), у каждого свой `PORT`, спереди обратный прокси.
 
 ```ini
-# /etc/systemd/system/aomex@.service 片段
+# фрагмент /etc/systemd/system/aomex@.service
 [Service]
 Environment=PORT=%i
 ExecStart=/usr/bin/node /opt/aomex/dist/main.js
@@ -94,35 +95,36 @@ TimeoutStopSec=15
 systemctl enable --now aomex@3001 aomex@3002 aomex@3003
 ```
 
-`TimeoutStopSec` должен покрывать `shutdown.timeout` приложения. В `ExecStart` **не** оборачивайте `clusterListen` или PM2.
+`TimeoutStopSec` должен перекрывать `shutdown.timeout` приложения. В **`ExecStart` не вкладывайте** `clusterListen` или PM2.
 
 ## PM2
 
-На одном хосте без оркестрации PM2 даёт менеджмент процессов, логи и `reload` без простоя. Вход — single-process listen, число инстансов — у `-i`:
+На одной машине без оркестрации, когда нужен привычный Node-менеджер: PM2 поднимает несколько инстансов, логи, `reload` без простоя. Entry остаётся single listen, число инстансов — в `-i`:
 
 ```bash
 pm2 start dist/main.js -i max
-# 或 ecosystem：instances: 'max' / 数字，exec_mode: 'cluster'
+# или ecosystem: instances: 'max' / число, exec_mode: 'cluster'
 ```
 
-`-i max` ориентировочно по числу ядер CPU; фиксированное число проще контролировать. Уже используется cluster-режим PM2 — **`clusterListen` не добавляйте**.
+`-i max` — примерно по числу ядер CPU; явное число предсказуемее. Уже используется cluster PM2 — **`clusterListen` не накладывайте**.
 
 ## clusterListen
 
-Если не хотите PM2 или несколько systemd unit, но нужен встроенный `cluster` Node на одной машине — `clusterListen` из `@aomex/web`: primary только `fork` и сигналы; **реальный `listen` только в worker**. Сам `WebApp.listen` не меняется, в worker — прежняя цепочка shutdown.
+Если не хотите PM2 / несколько unit systemd, но на одной машине нужен встроенный `cluster` Node — `clusterListen` из `@aomex/web`: primary только `fork` и сигналы, **`listen` только в worker**. Сам `WebApp.listen` не меняется, в worker — прежняя цепочка shutdown.
 
-Сборку App и `listen` поместите в колбэк `listen` (при необходимости lazy-`import` services), чтобы primary не гонял бизнес-инициализацию впустую:
+Сборку App и `listen` поместите в callback `listen` (при необходимости `import` services), чтобы primary не гонял бизнес-инициализацию зря:
 
 ```typescript
 import { clusterListen, routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 clusterListen({ // [!code focus:18]
-  workers: 'max', // 或具体数字，如 4
+  workers: 'max', // или число, например 4
   listen: async () => {
-    const { services } = await import('./services/index.js');
+    const { services } = await import('@/services');
     const app = new WebApp({
       services,
-      logger: services.logger,
+      logger,
       language: { mode: 'fixed', language: 'zh-CN' },
       proxyIP: { mode: 'detect' },
       mount: [routers('./src/routers')],
@@ -132,25 +134,25 @@ clusterListen({ // [!code focus:18]
 });
 ```
 
-`workers: 'max'` использует `os.availableParallelism()`; можно ограничить, например `Math.min(4, availableParallelism())`. По `SIGINT` / `SIGTERM` primary делает `disconnect` worker'ам, ждёт выхода (при таймауте — `SIGKILL`), затем `process.exit`.
+`workers: 'max'` — `os.availableParallelism()`; можно `Math.min(4, availableParallelism())` для потолка. primary на `SIGINT` / `SIGTERM` делает `disconnect` worker'ам, ждёт выхода (по таймауту `SIGKILL`), затем `process.exit`.
 
 | Опция | Назначение | По умолчанию |
 | --- | --- | --- |
-| `workers` | Число или `'max'` | (обязательно) |
-| `listen` | Вызывается **только в worker**: создать App и `listen` | (обязательно) |
-| `respawn` | Снова `fork` после неожиданного выхода worker | `true` |
-| `respawnDelay` | Мс ожидания перед повторным fork | `1000` |
-| `maxRespawns` | Лимит неожиданных перезапусков; при превышении primary выходит с кодом `1` | без лимита |
-| `shutdownTimeout` | Сколько ждать shutdown, затем kill | `5000` (как у WebApp `shutdown.timeout`) |
-| `onListening` / `onExit` | Наблюдение за listen / выходом worker на primary | — |
+| `workers` | число или `'max'` | (обязательно) |
+| `listen` | вызывается **только в worker**: собрать App и `listen` | (обязательно) |
+| `respawn` | fork снова после неожиданного падения worker | `true` |
+| `respawnDelay` | пауза перед повторным fork (мс) | `1000` |
+| `maxRespawns` | лимит «случайных» подъёмов; при превышении primary выходит с кодом `1` | без лимита |
+| `shutdownTimeout` | сколько ждать остановки, затем kill | `5000` (как `shutdown.timeout` WebApp) |
+| `onListening` / `onExit` | на primary наблюдать listen / выход worker | — |
 
 ::: warning
-Если вы уже масштабируетесь через несколько инстансов за прокси, несколько systemd unit, реплики Docker / managed cloud, K8s `replicas`, PM2 `-i` или горизонтальное масштабирование PaaS — **`clusterListen` не накладывайте**. Плановый shutdown и выход из-за `disconnect` не respawn'ятся; по политике выше поднимаются только неожиданные падения.
+Уже есть обратный прокси с несколькими инстансами, несколько unit systemd, реплики Docker / managed, K8s `replicas`, PM2 `-i` или горизонтальный scale PaaS — **`clusterListen` не добавляйте**. Плановый shutdown и выход из‑за `disconnect` не respawn'ятся; только неожиданный краш — по политике выше.
 :::
 
 ## Docker Compose scale
 
-В образе по-прежнему **один процесс с одним `app.listen`**; число реплик — у Compose. В том же `compose.yaml` часто добавляют Nginx: наружу только 80/443, обратный прокси на имя сервиса `web` — встроенный DNS Docker разрешает **несколько реплик одного имени сервиса**, а с конфигом ниже получается автоматический round-robin без ручного перечисления `3001`/`3002`/`3003` в Nginx.
+В образе по-прежнему **один процесс, один `app.listen`**; реплики задаёт Compose. В том же `compose.yaml` часто Nginx: наружу 80/443, прокси на имя сервиса `web` — встроенный DNS Docker резолвит **все реплики одноимённого сервиса**, при конфигурации ниже получается round-robin без ручного `3001`/`3002`/`3003` в Nginx.
 
 ```yaml
 # compose.yaml
@@ -159,7 +161,7 @@ services:
     build: .
     environment:
       PORT: '3000'
-    # 不对外 publish；只进 compose 网络
+    # без publish наружу; только сеть compose
     deploy:
       replicas: 3 # [!code highlight]
 
@@ -175,13 +177,13 @@ services:
 
 ```bash
 docker stack deploy -c compose.yaml aomex
-# 本机无 Swarm、临时试副本：
+# локально без Swarm, попробовать реплики:
 # docker compose up --scale web=3 -d
 ```
 
-`deploy` — семантика Swarm: несколько реплик по файлу поднимает `docker stack deploy` (или совместимый инструмент). Обычный `docker compose up` **часто игнорирует** `deploy`; для быстрой локальной проверки укажите `--scale web=3`.
+`deploy` — семантика Swarm: несколько реплик по файлу даёт `docker stack deploy` (или совместимый инструмент). Обычный `docker compose up` **часто игнорирует** `deploy`, временно — `--scale web=3`.
 
-В Nginx достаточно одной строки upstream для имени сервиса. Docker DNS резолвит `web` в **все адреса реплик на данный момент**; если Nginx получает несколько IP, он round-robin между ними — **не** нужно вручную прописывать три `server`:
+В Nginx достаточно одной строки upstream с именем сервиса. DNS Docker отдаёт **все адреса реплик** `web`; несколько IP — round-robin между ними, **без** трёх ручных `server`.
 
 ```nginx
 # nginx.conf
@@ -206,17 +208,17 @@ http {
 }
 ```
 
-Замечание: в open-source Nginx по умолчанию имена хостов резолвятся при **старте / reload** и кэшируются. Если реплики уже подняты до старта Nginx (`depends_on: web`), конфиг выше даёт round-robin. После последующего `scale` вверх или вниз нужны **`nginx -s reload`** (или перезапуск контейнера Nginx), чтобы заново резолвить; без reload список peer остаётся старым.
+Важно: OSS Nginx по умолчанию резолвит имена при **старте / reload** и кэширует. Если Nginx поднимается после реплик (`depends_on: web`), round-robin работает. После `scale` нужен **`nginx -s reload`** (или рестарт контейнера Nginx), иначе список peer устареет.
 
-Если нужно подхватывать масштабирование **без reload**, используйте DNS Docker (`resolver 127.0.0.11`) и `proxy_pass` через переменную (`set $upstream web; proxy_pass http://$upstream:3000;`) с повторным resolve по интервалу `valid`. Для большинства развёртываний в одном стеке хватает upstream и reload после scale.
+Чтобы после scale **без reload** подхватывать новые адреса — DNS Docker (`resolver 127.0.0.11`) и `proxy_pass` через переменную (`set $upstream web; proxy_pass http://$upstream:3000;`) с периодом `valid`. Для многих стеков хватает upstream + reload после scale.
 
-У WebApp по-прежнему должен быть настроен [proxyIP](/ru/web/). **Не** запускайте в entrypoint образа `clusterListen` или PM2 `-i`. Остановка — `SIGTERM` в связке с [graceful shutdown](/ru/web/#shutdown).
+WebApp: корректный [proxyIP](/ru/web/). **Не** запускайте в entry образа `clusterListen` или PM2 `-i`. Остановка — `SIGTERM` и [graceful shutdown](/ru/web/#shutdown).
 
-Traefik / Caddy с Docker provider могут находить реплики по labels без ручного `resolver`; смысл тот же — обратный прокси в стеке и round-robin по репликам.
+Traefik / Caddy с Docker provider часто находят реплики по labels и при scale обходятся без ручного reload Nginx.
 
-## Kubernetes и managed cloud
+## Kubernetes и managed-хостинг
 
-Та же идея, что у Docker: **один процесс в Pod / задаче**, масштаб числом реплик.
+Та же логика, что у Docker: **в Pod / задаче один процесс**, масштаб — числом реплик.
 
 ```yaml
 apiVersion: apps/v1
@@ -234,16 +236,16 @@ spec:
             - containerPort: 3000
 ```
 
-Пробы и `terminationGracePeriodSeconds` должны быть больше (или хотя бы покрывать) `shutdown.timeout` приложения, иначе оркестратор может убить Pod раньше. HPA меняет `replicas` по CPU или своим метрикам; код приложения не трогают.
+Пробы и `terminationGracePeriodSeconds` должны быть больше (или как минимум покрывать) `shutdown.timeout` приложения, иначе оркестратор убьёт раньше. HPA меняет `replicas` по CPU / своим метрикам без правок кода.
 
-Управляемые контейнерные сервисы (AWS ECS/Fargate, Google Cloud Run, Azure Container Apps, Alibaba Cloud ACK/SAE и т.д.) сводят реплики, rolling и пробы в консоль или Terraform: вы по-прежнему поставляете **образ с одним процессом**, масштаб — платформе. Планировщики вроде HashiCorp Nomad — та же модель: реплики job × однопроцессная задача.
+Managed-контейнеры (ECS/Fargate, Cloud Run, Container Apps, ACK/SAE и т.д.) забирают реплики, rollout и пробы в консоль или Terraform: вы поставляете **образ с одним процессом**, scale — платформе. Nomad и аналоги — та же модель «реплики job × одна задача-процесс».
 
-## Горизонтальное масштабирование PaaS
+## Горизонтальный scale PaaS
 
-Fly.io Machines, Render services, Heroku dyno и аналоги масштабируются по «числу инстансов». Платформа поднимает несколько процессов и разводит трафик; во входе репозитория оставьте single-process `listen` и меняйте число через scale / instances в документации платформы — без `fork` в приложении.
+Fly.io Machines, Render, Heroku dynos расширяют по «числу инстансов». Платформа поднимает процессы и раздаёт трафик; в репозитории — single listen, количество — в scale / instances документации платформы, без `fork` в приложении.
 
 ## Дальше
 
-- [Вход приложения](/ru/web/): `listen` / `shutdown` / proxyIP
-- [Rate limiting](/ru/plugins/rate-limit): общий store при нескольких репликах
-- [Кэш](/ru/core/cache): session и адаптеры Redis
+- [Точка входа приложения](/ru/web/): `listen` / `shutdown` / proxyIP
+- [Rate limit](/ru/plugins/rate-limit): при репликах — общий store
+- [Кэш](/ru/core/cache): session и Redis-адаптер

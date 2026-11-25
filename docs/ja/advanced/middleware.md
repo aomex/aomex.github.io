@@ -4,23 +4,23 @@ outline: deep
 
 # カスタムミドルウェア
 
-[ミドルウェア](/ja/core/middleware) の `middleware.mixin`、`.skip()`（関数または `boolean`）、`dependsOn`（上流の型だけ借りる）は日常の組み合わせで足りる。このページに来るのは、**実行時に何かする**だけでなく、**OpenAPI / CLI ヘルプ生成時に契約へ一行書きたい**——同じミドルウェアに両方を書き、一箇所の変更で両方が変わるようにしたいとき。
+[ミドルウェア](/ja/core/middleware) の `middleware.mixin`、`.skip()`（関数または `boolean`）、`dependsOn`（上流の型だけ借りる）で日常の組み合わせは足ります。本ページに来るのはたいてい、**ランタイムで動かしつつ OpenAPI / CLI ヘルプ生成時に契約へ 1 行書き足したい** — 同じミドルウェアに両方を書き、変更は一箇所で済ませたいからです。
 
-以下は「まず Web ドキュメントフック → Console ヘルプ → 最後にステージ横断再利用」の順。最後までやれば、マウントするだけで Swagger に効く trace ミドルウェアができる。
+「Web のドキュメントフック → Console のヘルプ → ステージ横断で再利用」の順で進めます。手を動かせば Swagger に効く trace ミドルウェアができます。
 
-## 先に区別：mixin か web / console か
+## 先に切り分け：mixin か web / console か
 
 | 欲しい効果 | 使うもの |
 | --- | --- |
-| 実行時 `ctx` だけ変え、ドキュメントは不要 | `middleware.mixin`（[ミドルウェア](/ja/core/middleware)） |
-| Web：実行時 + OpenAPI operation を変える | `middleware.web({ fn, openapi })` |
-| Console：実行時 + `--help` ツリーに貢献 | `middleware.console({ fn, help })` |
+| ランタイムの `ctx` だけ、ドキュメントは不要 | `middleware.mixin`（[ミドルウェア](/ja/core/middleware)） |
+| Web：ランタイム + OpenAPI operation を変える | `middleware.web({ fn, openapi })` |
+| Console：ランタイム + `--help` ツリーに寄与 | `middleware.console({ fn, help })` |
 
-`middleware.web` のインスタンスは Console に**直接**マウントできない。逆も同様。両方必要なら、共通ロジックを通常関数に抜き、それぞれ包む。
+`middleware.web` のインスタンスは Console に**そのまま**載せられません。逆も同様。両方必要なら共通ロジックを通常関数に抜き、それぞれでラップします。
 
-## ステップ1：まず動く実行時を書く
+## ステップ 1：まず動くランタイムを書く
 
-目標：各リクエストに `traceId` を付け、下流 action が読めるようにする。
+目標：各リクエストに `traceId` を載せ、下流 action が読めるようにする。
 
 ```typescript
 // src/middleware/trace-id.ts
@@ -35,17 +35,19 @@ export const traceId = middleware.web<{ // [!code highlight]
   },
 });
 ```
-ジェネリック `{ readonly traceId: string }` を `middleware.web` に付けると、**それより後のミドルウェアと同一ルートの action** で `ctx.traceId` が補完される。代入だけでジェネリックを書かないと、実行時にはあっても TypeScript は存在しないとみなす。
 
-アプリやルートにマウントして試す：
+ジェネリック `{ readonly traceId: string }` を `middleware.web` に書いたあと、**それより後のミドルウェアと同じルートの action** で `ctx.traceId` が補完されます。代入だけでジェネリックを省略すると、実行時にはあっても TypeScript は存在しない扱いです。
+
+アプリまたはルートに載せて試す：
 
 ```typescript
 import { routers, WebApp } from '@aomex/web';
-import { traceId } from './middlewares/trace-id.js';
+import { traceId } from '@/middlewares/trace-id';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [
@@ -56,26 +58,29 @@ const app = new WebApp({
 ```
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 action: async (ctx) => {
-  await services.logger.info('ok', { traceId: ctx.traceId });
+  logger.info(`ok ${ctx.traceId}`);
   ctx.send({ ok: true });
 };
 ```
-この時点では Swagger に trace の説明はまだ出ない——実行時とドキュメントは別注入。
 
-## ステップ2：OpenAPI フックを足す
+この時点では Swagger に trace の説明は出ません — ランタイムとドキュメントは別注入です。
 
-同じ `middleware.web` の引数オブジェクトに `openapi` を追加。ドキュメント生成がルートを走査するとき、フレームワークがこれらのフックを呼び、現在の operation（または document 全体）を変更できる。
+## ステップ 2：OpenAPI フックを足す
 
-よく使う入口（型ヒントから選べばよく、全部書く必要はない）：
+同じ `middleware.web` の引数オブジェクトに `openapi` を追加します。ルートをスキャンしてドキュメント生成するとき、フレームワークがこれらのフックを呼び、現在の operation（または document 全体）を変更できます。
 
-| フック | いつ使うか |
+よく使う入口（型ヒントで選び、全部書く必要はありません）：
+
+| フック | いつ使う |
 | --- | --- |
-| `onMethod` | **この1本**の operation にパラメータ、レスポンス、security を足す |
-| `postMethod` | 他が先に書いたあと仕上げ（例：共通エンベロープ） |
-| `onDocument` | `components.securitySchemes` など全体ブロックを登録 |
+| `onMethod` | **この 1 本**の operation にパラメータ・レスポンス・security |
+| `postMethod` | 他が書き終えたあと仕上げ（例：共通エンベロープ） |
+| `onDocument` | `components.securitySchemes` などグローバルブロック登録 |
 
-`traceId` を載せた各 API にレスポンスヘッダ説明を足す：
+`traceId` を載せた各 API にレスポンスヘッダーの説明を足す例：
 
 ```typescript
 import { middleware } from '@aomex/common';
@@ -103,15 +108,16 @@ export const traceId = middleware.web<{
   },
 });
 ```
-[生成OpenAPI](/ja/openapi/) を再実行するか Swagger を開く：このミドルウェアをマウントした operation に `X-Trace-Id` が見えるはず。フックの構造ミスは `pnpm start` では怒られない。生成結果で確認する。
+
+[OpenAPI の生成](/ja/openapi/) を再実行するか Swagger を開く：このミドルウェアを載せた operation に `X-Trace-Id` が見えるはずです。フック内の構造ミスは `pnpm start` では出にくい — 生成結果で確認してください。
 
 ::: tip
-ミドルウェアが**実行時に何もしない**のにドキュメントだけ変えたいなら、ルート `docs` やジェネレータ設定で足せないか先に考える——空回りの1層は mount を読みにくくする。
+ランタイムで**何もしない**ミドルウェアがドキュメントだけのためなら、ルートの `docs` やジェネレータ設定で足せないか先に検討 — 空の 1 層は mount を読みにくくします。
 :::
 
-## ステップ3：Console 側も同じパターン
+## ステップ 3：Console 側も同じ型式
 
-コマンドの `--help` に説明を差し込むときは `middleware.console` + `help`：
+コマンドが `--help` に説明を足すときは `middleware.console` + `help`：
 
 ```typescript
 import { middleware } from '@aomex/common';
@@ -122,16 +128,17 @@ export const withDryRunFlag = middleware.console({ // [!code highlight]
   },
   help: {
     onDocument(doc) {
-      // 按类型提示往帮助树贡献说明；具体字段以编辑器补全为准
+      // 型ヒントどおりヘルプツリーに寄与；具体フィールドはエディタ補完に従う
     },
   },
 });
 ```
-`commander.create` の `mount` に載せる。Web の `openapi` と対称：HTTP 契約か CLI ヘルプかの違いだけ。
 
-## ステップ4：同じロジックを両ステージで共有
+`commander.create` の `mount` に載せます。Web の `openapi` と対称 — HTTP 契約と CLI ヘルプです。
 
-UUID ロジックを二重に書かない。関数に抜き、包む：
+## ステップ 4：両ステージで同じロジック
+
+UUID ロジックを二重に書かない。関数に抜き、ラップする：
 
 ```typescript
 import { middleware } from '@aomex/common';
@@ -157,17 +164,18 @@ export const consoleTraceId = middleware.console<{ readonly traceId: string }>({
   },
 });
 ```
-## 設定を間違えると
 
-| 現象 | 多くは原因 |
+## 設定ミスで起きがちなこと
+
+| 現象 | 原因のことが多い |
 | --- | --- |
-| action に `ctx.traceId` 補全がない | `middleware.web` / `mixin` の Props ジェネリック漏れ |
-| 実行時に header はあるが Swagger にない | `fn` だけ書いて `openapi` を忘れた、または生成時にそのミドルウェアをマウントしたルートを走査していない |
-| Console に `middleware.web` をマウントして型エラー | ステージ違い。`middleware.console` に換える |
-| ヘルスチェックがまだ認証で止まる | `.skip()`。[ミドルウェア · skip](/ja/core/middleware#skip-で特定リクエストを迂回) |
+| action に `ctx.traceId` 補完なし | `middleware.web` / `mixin` に Props ジェネリック漏れ |
+| 実行時はヘッダーあるが Swagger にない | `fn` だけで `openapi` 忘れ、または生成時にそのミドルウェアのルートがスキャンされていない |
+| Console に `middleware.web` を載せて型エラー | ステージ違い、`middleware.console` に変更 |
+| ヘルスチェックがまだ認証で止まる | `.skip()`、[ミドルウェア · skip](/ja/core/middleware#skip-で特定リクエストを迂回) |
 
 ## 関連
 
 - 順序、`.skip()`、`dependsOn`、ctx のマージ：[ミドルウェア](/ja/core/middleware)
-- 既成プラグイン：[アクセスログ](/ja/plugins/access-log)、[認証統一エントリ Auth](/ja/plugins/auth)
-- ドキュメント生成：[生成OpenAPI](/ja/openapi/)
+- 既成プラグイン：[アクセスログ](/ja/plugins/access-log)、[統一 Auth](/ja/plugins/auth)
+- ドキュメント生成：[OpenAPI の生成](/ja/openapi/)

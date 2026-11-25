@@ -25,9 +25,9 @@ pnpm add @aomex/oauth2-client
 ```typescript
 // src/services/google.service.ts
 import { Service } from '@aomex/common';
-import { CacheMemoryAdapter } from '@aomex/cache/memory';
 import type { WebContext } from '@aomex/web';
 import { GoogleOAuth2Client } from '@aomex-contrib/oauth2-google';
+import { cache } from '@/cache';
 
 export default class GoogleService extends Service {
   protected readonly oauth = new GoogleOAuth2Client({ // [!code focus:8]
@@ -36,7 +36,7 @@ export default class GoogleService extends Service {
     redirectUri: (ctx) => {
       return `${ctx.request.origin}/oauth/google/callback`;
     },
-    store: new CacheMemoryAdapter(),
+    store: cache, // [!code highlight]
   });
 
   oauthRedirect(ctx: WebContext) {
@@ -53,8 +53,8 @@ export default class GoogleService extends Service {
 
 ```typescript
 export const services = await combineServices({
-  google: () => import('./google.service.js'),
-  // github: () => import('./github.service.js'),
+  google: () => import('@/services/google.service'),
+  // github: () => import('@/services/github.service'),
 });
 ```
 
@@ -62,7 +62,7 @@ export const services = await combineServices({
 
 ```typescript
 import { Router } from '@aomex/web';
-import { services } from '../services/index.js';
+import { services } from '@/services';
 
 export const router = new Router({ prefix: '/oauth' });
 
@@ -84,7 +84,7 @@ router.get('/google/callback', {
 
 GitHub 等同理：另建 `GithubService`，里面换 `GitHubOAuth2Client`；`callback` 默认多是 `{ base, userinfo }`。`redirectUri` 用 `(ctx) => …` 可按请求 origin 拼回调，多域名省事。
 
-`store` 暂存 `state`（及 PKCE verifier）。构造时经 `registerLifecycle` 自动 `connect` / 关停 `disconnect`。本地可用 memory；生产多实例换 Redis 适配器（脚手架常直接用 `CacheRedisAdapter`），否则回调可能打到另一台、找不到 state。state 默认 TTL `'10 minutes'`（`stateTtl`，`DurationInput`）；并发 callback 只有一方成功，换票失败**不会**恢复 state。
+`store` 暂存 `state`（及 PKCE verifier），类型是共享的 [`Caching`](/zh/core/cache)。本地可用 memory；生产多实例换 Redis 适配器并仍传同一份 `Caching`，否则回调可能打到另一台、找不到 state。连接由 `Caching` 懒加载负责。state 默认 TTL `'10 minutes'`（`stateTtl`，`DurationInput`）；并发 callback 只有一方成功，换票失败**不会**恢复 state。
 
 前端 GIS / One Tap 拿 `credential` 的，不要用 oauth2-google，改用下表里的 `google-identity-login`（也可同样收成一个 Service）。
 
@@ -126,9 +126,9 @@ GitHub 等同理：另建 `GithubService`，里面换 `GitHubOAuth2Client`；`ca
 
 ```typescript
 import { Service } from '@aomex/common';
-import { CacheMemoryAdapter } from '@aomex/cache/memory';
 import type { WebContext } from '@aomex/web';
 import { OAuth2Client } from '@aomex/oauth2-client';
+import { cache } from '@/cache';
 
 export default class IdpService extends Service {
   protected readonly oauth = new OAuth2Client({ // [!code focus:14]
@@ -140,7 +140,7 @@ export default class IdpService extends Service {
       return `${ctx.request.origin}/oauth/callback`;
     },
     scopes: ['profile'],
-    store: new CacheMemoryAdapter(),
+    store: cache,
     onProfile: async ({ token }) => {
       const res = await fetch('https://idp.example.com/userinfo', {
         headers: { Authorization: `Bearer ${token.access_token}` },
@@ -171,7 +171,7 @@ protected readonly oauth = new OAuth2Client({ // [!code focus:8]
     return `${ctx.request.origin}/oauth/callback`;
   },
   scopes: ['openid', 'email', 'profile'],
-  store: new CacheMemoryAdapter(),
+  store: cache,
   oidc: { issuer: 'https://accounts.example.com' },
 });
 ```

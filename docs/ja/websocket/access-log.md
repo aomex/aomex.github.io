@@ -4,32 +4,33 @@ outline: deep
 
 # アクセスログ
 
-リアルタイムチャネルに「URL + ステータスコード」はありませんが、それでも知りたいことがあります：どの IP、どの接続、いま何のイベントを処理し、何にどれだけかかったか。`@aomex/access-log/websocket` の `websocketAccessLog()` を使います。各受信メッセージがミドルウェア鎖を走り切ったあと（throw も含む）一行を打ちます。
+リアルタイムチャネルに「URL + ステータスコード」はないが、どの IP・どの接続がどのイベントを処理し何 ms かかったかは知りたい。`@aomex/access-log/websocket` の `websocketAccessLog()`：各入站メッセージはミドルウェアチェーン完了後（例外含む）に 1 行ログ。
 
 ```bash
 pnpm add @aomex/access-log
 ```
 
-## まず各受信メッセージを見る
+## まず各入站メッセージ
 
-`channels()` の**手前**に掛けます。そうしないと業務処理完了後の一行が取れません。既定フォーマットは `[ip] [clientId] [event] [duration]` で、コンソールへ出ます：
+`channels()` の**前**に掛ける。そうでないと業務処理後の行が出ない。デフォルト形式 `[ip] [clientId] [event] [duration]`、コンソール出力：
 
 ```typescript
 import { websocketAccessLog } from '@aomex/access-log/websocket';
 import { WebsocketApp, channels } from '@aomex/websocket';
 import { WsTransport } from '@aomex/websocket-ws-transport';
+import { logger } from '@/services/logger.service';
 
 new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   transport: new WsTransport(),
   mount: [websocketAccessLog(), channels('./src/channels')], // [!code highlight]
 });
 ```
 
-## 形式を変え、業務フィールドを足す
+## フォーマットと業務フィールド
 
-トークンは `WebsocketAccessLogToken` です。`customTokens` が受け取るのは WebSocket の ctx で、以前 `client.data` に入れた業務フィールドを取れます。ファイルへ落としたいときは `FileTransport` に換えます：
+トークンは `WebsocketAccessLogToken`。`customTokens` の ctx は WebSocket 用。`client.data` に保存した業務フィールドを取れる。ファイル出力は `FileTransport`：
 
 ```typescript
 import {
@@ -54,10 +55,10 @@ websocketAccessLog({ // [!code focus:14]
 });
 ```
 
-イベント分布や遅い処理を見るのに向きます。**機密操作の唯一の監査**にはしないでください。
+イベント分布や遅い処理の把握向け。**機密操作の唯一の監査ログにはしない**。
 
 ## 次のステップ
 
-- [アプリケーション入口](/ja/websocket/)
-- [イベントルーティング](/ja/websocket/channel)
-- 段階付き出口：[ログ](/ja/core/logger)
+- [アプリ入口](/ja/websocket/)
+- [イベントルート](/ja/websocket/channel)
+- ログレベル：[ログ](/ja/core/logger)

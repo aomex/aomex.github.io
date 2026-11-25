@@ -25,9 +25,9 @@ Google（OIDC のフルページ redirect）を例に：
 ```typescript
 // src/services/google.service.ts
 import { Service } from '@aomex/common';
-import { CacheMemoryAdapter } from '@aomex/cache/memory';
 import type { WebContext } from '@aomex/web';
 import { GoogleOAuth2Client } from '@aomex-contrib/oauth2-google';
+import { cache } from '@/cache';
 
 export default class GoogleService extends Service {
   protected readonly oauth = new GoogleOAuth2Client({ // [!code focus:8]
@@ -36,7 +36,7 @@ export default class GoogleService extends Service {
     redirectUri: (ctx) => {
       return `${ctx.request.origin}/oauth/google/callback`;
     },
-    store: new CacheMemoryAdapter(),
+    store: cache, // [!code highlight]
   });
 
   oauthRedirect(ctx: WebContext) {
@@ -53,8 +53,8 @@ export default class GoogleService extends Service {
 
 ```typescript
 export const services = await combineServices({
-  google: () => import('./google.service.js'),
-  // github: () => import('./github.service.js'),
+  google: () => import('@/services/google.service'),
+  // github: () => import('@/services/github.service'),
 });
 ```
 
@@ -62,7 +62,7 @@ export const services = await combineServices({
 
 ```typescript
 import { Router } from '@aomex/web';
-import { services } from '../services/index.js';
+import { services } from '@/services';
 
 export const router = new Router({ prefix: '/oauth' });
 
@@ -84,7 +84,7 @@ router.get('/google/callback', {
 
 GitHub なども同様：別途 `GithubService` を作り、中で `GitHubOAuth2Client` に換える。`callback` のデフォルトはだいたい `{ base, userinfo }`。`redirectUri` を `(ctx) => …` にするとリクエスト origin からコールバックを組み立てられ、複数ドメインが楽。
 
-`store` は一時的に `state`（と PKCE verifier）を置く。構築時に `registerLifecycle` 経由で自動 `connect` / シャットダウン時 `disconnect`。ローカルは memory でよい。本番の複数インスタンスは Redis アダプタに替える（スキャフォールドはよく `CacheRedisAdapter` をそのまま使う）。さもないとコールバックが別マシンに行き、state が見つからない。state のデフォルト TTL は `'10 minutes'`（`stateTtl`、`DurationInput`）。並行 callback は一方だけ成功し、換票失敗では state を**復元しない**。
+`store` は `state`（および PKCE verifier）を一時保管する。型は共有の [`Caching`](/ja/core/cache)。ローカルは memory；本番の複数インスタンスは Redis アダプタに差し替えつつ同じ `Caching` を渡す。さもないとコールバックが別マシンに行き state が見つからない。接続は `Caching` のレイジーロードが担う。state のデフォルト TTL は `'10 minutes'`（`stateTtl`、`DurationInput`）；並行 callback は一方だけ成功し、換票失敗では state を**復元しない**。
 
 フロントの GIS / One Tap で `credential` を取る場合は oauth2-google を使わず、下表の `google-identity-login`（同様に一つの Service にまとめてよい）。
 
@@ -126,9 +126,9 @@ OIDC discovery が無いときは、`authorizationEndpoint` / `tokenEndpoint` �
 
 ```typescript
 import { Service } from '@aomex/common';
-import { CacheMemoryAdapter } from '@aomex/cache/memory';
 import type { WebContext } from '@aomex/web';
 import { OAuth2Client } from '@aomex/oauth2-client';
+import { cache } from '@/cache';
 
 export default class IdpService extends Service {
   protected readonly oauth = new OAuth2Client({ // [!code focus:14]
@@ -140,7 +140,7 @@ export default class IdpService extends Service {
       return `${ctx.request.origin}/oauth/callback`;
     },
     scopes: ['profile'],
-    store: new CacheMemoryAdapter(),
+    store: cache,
     onProfile: async ({ token }) => {
       const res = await fetch('https://idp.example.com/userinfo', {
         headers: { Authorization: `Bearer ${token.access_token}` },
@@ -171,7 +171,7 @@ protected readonly oauth = new OAuth2Client({ // [!code focus:8]
     return `${ctx.request.origin}/oauth/callback`;
   },
   scopes: ['openid', 'email', 'profile'],
-  store: new CacheMemoryAdapter(),
+  store: cache,
   oidc: { issuer: 'https://accounts.example.com' },
 });
 ```

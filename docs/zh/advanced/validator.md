@@ -48,7 +48,7 @@ export class EmployeeIdValidator<T = string> extends Validator<T> {
 
 ```typescript
 import { validate } from '@aomex/common';
-import { EmployeeIdValidator } from './employee-id.validator.js';
+import { EmployeeIdValidator } from '@/validators/employee-id.validator';
 
 await validate('E123456', new EmployeeIdValidator()); // 通过
 // await validate('bad', new EmployeeIdValidator()); // 抛错
@@ -127,7 +127,7 @@ Rule.register('employeeId', EmployeeIdValidator); // [!code highlight]
 只 `register`、没 `declare module`：能跑，但补全没有、容易写成 any。
 :::
 
-注册是 **side-effect**：在任何 `rule.employeeId()` 之前就要执行。习惯做法是在 schema 文件顶部 `import '../validators/employee-id.validator.js'`，或在 `web.ts` / `cli.ts` 入口统一 import 一次。
+注册是 **side-effect**：在任何 `rule.employeeId()` 之前就要执行。习惯做法是在 schema 文件顶部 `import '@/validators/employee-id.validator'`，或在 `web.ts` / `cli.ts` 入口统一 import 一次。
 
 ## 第四步：补 OpenAPI 形状
 
@@ -151,7 +151,7 @@ protected override toDocument(): OpenAPI.SchemaObject {
 
 ```typescript
 // src/schemas/staff.schema.ts
-import '../validators/employee-id.validator.js';
+import '@/validators/employee-id.validator';
 import { schema, rule } from '@aomex/common';
 
 export const staffSchema = schema({
@@ -162,7 +162,7 @@ export const staffSchema = schema({
 
 ```typescript
 import { body } from '@aomex/web';
-import { staffSchema } from '../schemas/staff.schema.js';
+import { staffSchema } from '@/schemas/staff.schema';
 
 router.post('/staff', {
   mount: [body(staffSchema)],
@@ -210,7 +210,7 @@ protected validateValue(value: unknown, _key: string, label: string) {
 
 ## 报错文案要走产品语言包时
 
-`deny` 里可以 `import { i18n } from '../i18n/index.js'` 再 `i18n.t('errors.badEmployeeId')`。框架 `language` 管的是内置校验文案，和业务包是两套——见 [业务国际化](/zh/advanced/i18n)。
+`deny` 里可以 `import { i18n } from '@/i18n'` 再 `i18n.t('errors.badEmployeeId')`。框架 `language` 管的是内置校验文案，和业务包是两套——见 [业务国际化](/zh/advanced/i18n)。
 
 ## 完整文件对照
 

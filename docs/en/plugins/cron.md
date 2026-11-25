@@ -21,10 +21,11 @@ Mounting on `WebApp.mount` mixes HTTP and scheduled-job entry points; keep them 
 ```typescript
 import { commanders, ConsoleApp } from '@aomex/console';
 import { crons } from '@aomex/cron';
+import { logger } from '@/services/logger.service';
 
 const app = new ConsoleApp({
   services,
-  logger: services.logger,
+  logger,
   language: 'zh-CN',
   mount: [ // [!code focus:7]
     crons({
@@ -126,15 +127,18 @@ commander.create('export', {
 
 The default `store` is **in-process memory**: fine for a single Console. With multiple Pods / machines, every process fires at the scheduled time—double daily emails and double reconciliations come from here.
 
-To run many replicas but let the same schedule compete for slots cluster-wide under `concurrent`, give `crons()` a **shared store** (usually Redis). Scheduling and mutual exclusion are coordinated by the store; business actions don’t need their own distributed locks.
+To run many replicas but let the same schedule compete for slots cluster-wide under `concurrent`, give `crons()` a **shared `Caching`** (usually Redis). Scheduling and mutual exclusion are coordinated by the store; business actions don’t need their own distributed locks.
 
 ```typescript
+import { Caching } from '@aomex/cache';
 import { CacheRedisAdapter } from '@aomex/cache-redis-adapter';
 
 crons({
   commanders: './src/commanders',
   port: 9786,
-  store: new CacheRedisAdapter({ host: '127.0.0.1', port: 6379 }), // [!code highlight]
+  store: new Caching( // [!code highlight]
+    new CacheRedisAdapter({ host: '127.0.0.1', port: 6379 }),
+  ),
 });
 ```
 

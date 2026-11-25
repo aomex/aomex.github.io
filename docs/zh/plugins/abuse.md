@@ -6,7 +6,7 @@ outline: deep
 
 扫目录、撞蜜罐、短时间刷 404、用假 token 试探退出——这些往往不是「正常超限」，而是在摸你的边界。`@aomex/abuse` 按策略**计数**，满额后**封 IP**（或回调你去封账号），和 [请求限速](/zh/plugins/rate-limit) 互补：限速挡突发 QPS，滥用挡探测与业务侧上报的恶意行为。
 
-计数与封禁态落在 `@aomex/cache` 的适配器上（memory / Redis 等），多实例共享时换 Redis。依赖 `ctx.request.ip`，生产请配 `proxyIP: { mode: 'detect' }`（或固定信任链），否则全站可能只看到反代 IP。
+计数与封禁态落在共享的 [`Caching`](/zh/core/cache) 上（memory / Redis 等），多实例共享时换 Redis。依赖 `ctx.request.ip`，生产请配 `proxyIP: { mode: 'detect' }`（或固定信任链），否则全站可能只看到反代 IP。
 
 ```bash
 pnpm add @aomex/abuse
@@ -21,11 +21,15 @@ pnpm add @aomex/abuse
 
 ```typescript
 import { Abuse } from '@aomex/abuse';
+import { Caching } from '@aomex/cache';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
+
+const cache = new Caching(new CacheMemoryAdapter());
 
 const abuse = new Abuse({ // [!code focus:18]
-  store: new CacheMemoryAdapter(),
+  store: cache,
   strategies: [
     {
       strategy: 'honeypot',
@@ -46,14 +50,14 @@ const abuse = new Abuse({ // [!code focus:18]
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [abuse.web(), routers('./src/routers')], // [!code highlight]
 });
 ```
 
-本地 / 单测用 memory；生产多副本把 `store` 换成 Redis 适配器，否则封禁只在本机生效。`window` / `blockFor` 等时长接受毫秒数或可读字符串（如 `'1 hour'`、`'30m'`），与 [缓存](/zh/core/cache#时长-durationinput) 同一套 `DurationInput`。
+本地 / 单测用 memory；生产多副本把 `store` 换成挂了 Redis 适配器的同一份 `Caching`，否则封禁只在本机生效。`window` / `blockFor` 等时长接受毫秒数或可读字符串（如 `'1 hour'`、`'30m'`），与 [缓存](/zh/core/cache#时长-durationinput) 同一套 `DurationInput`。
 
 请求进来时：若 IP 已封禁 → 默认 **403**；命中蜜罐且满额 → 当场封禁并 403。`http-error` 在响应结束后计数，**撞线当次仍返回原状态码**，下一请求才因封禁变 403。
 
@@ -123,7 +127,7 @@ const abuse = new Abuse({
 
 router.post('/logout', {
   action: async (ctx) => {
-    const hit = await services.cache.deleteLoginToken(token);
+    const hit = await services.user.deleteLoginToken(token);
     if (!hit) {
       await abuse.ipAbuse(ctx.request.ip, 'logout-miss'); // [!code highlight]
     }
@@ -182,11 +186,15 @@ await abuse.userAbuse(userId, 'order-probe');
 被封时默认抛 **403**；要对齐限速语义改成 429，传 `blockedError`。
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 const abuse = new Abuse({
   store,
   strategies: [/* ... */],
   onBlockIP: async (ip, reason, detail) => {
-    services.logger.warn('abuse.block', { ip, reason, ...detail });
+    await logger.withBindings({ ip, reason, ...detail }, async () => {
+      logger.warn('abuse.block');
+    });
   },
 });
 
@@ -214,5 +222,5 @@ await abuse.unblockIP('203.0.113.8');
 
 - [请求限速](/zh/plugins/rate-limit)
 - [滥用防护（WebSocket）](/zh/websocket/abuse)
-- [缓存](/zh/core/cache)（`store` 适配器与 `DurationInput`）
+- [缓存](/zh/core/cache)（共享 `Caching` 与 `DurationInput`）
 - [CSRF 防护](/zh/plugins/csrf)

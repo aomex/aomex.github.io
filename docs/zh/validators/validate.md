@@ -8,7 +8,7 @@ outline: deep
 
 ```typescript
 import { validate } from '@aomex/common';
-import { createUserSchema } from '../schemas/user.schema.js';
+import { createUserSchema } from '@/schemas/user.schema';
 
 const input = { name: 'Ada', email: 'ada@example.com' };
 
@@ -43,7 +43,7 @@ validate 返回 Promise，漏写 await 会把 Promise 当结果用。
 
 ```typescript
 import { validate } from '@aomex/common';
-import { createUserSchema } from '../schemas/user.schema.js';
+import { createUserSchema } from '@/schemas/user.schema';
 
 const input = { name: '', email: 'not-email' };
 

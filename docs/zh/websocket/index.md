@@ -22,10 +22,10 @@ pnpm add @aomex/websocket @aomex/websocket-ws-transport
 // src/ws.ts
 import { WebsocketApp, channels } from '@aomex/websocket';
 import { WsTransport } from '@aomex/websocket-ws-transport';
-import { services } from './services/index.js';
+import { logger } from '@/services/logger.service';
 
 export const ws = new WebsocketApp({ // [!code focus:8]
-  logger: services.logger,
+  logger, // [!code highlight]
   language: { mode: 'fixed', language: 'zh-CN' },
   path: '/ws',
   transport: new WsTransport(),
@@ -35,7 +35,7 @@ export const ws = new WebsocketApp({ // [!code focus:8]
 
 `logger`、`language`、`transport` 都是必填；漏了编译器会拦。
 
-- `logger`：和 Web / Console 传**同一个** `services.logger`。传输层初始化失败、往房间扇出时出错，都会打到这里。
+- `logger`：和 Web / Console 传**同一个** `Logger` 实例。传输层初始化失败、往房间扇出时出错，都会打到这里。
 - `language`：管这条连接上的框架文案（握手失败、非法帧关闭原因、限流 / 校验失败回推的话）。上面用的是 `fixed`——后台、内网、单语种最省事。
 - `mount`：先挂 `channels('./src/channels')`，和 Web 里挂 `routers('./src/routers')` 是同一类事。Channel 怎么写见 [事件路由](/zh/websocket/channel)。
 
@@ -62,12 +62,13 @@ WebSocket 不能自己再开一个端口听——它要借 Web 那个 `http.Serv
 ```typescript
 // src/web.ts —— 真正启动进程的入口
 import { routers, WebApp } from '@aomex/web';
-import { services } from './services/index.js';
-import { ws } from './ws.js';
+import { services } from '@/services';
+import { ws } from '@/ws';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [routers('./src/routers')],
@@ -128,8 +129,10 @@ Socket.IO 客户端则是 `io('http://localhost:3000', { path: '/realtime' })`�
 连接刚要升级时，可以用 `verify` 做粗门槛：入参是普通的 Web 请求对象，能读 Cookie、头、IP。返回 `true` 放行；`false` 或 HTTP 状态码（如 `401`）则拒绝握手。细到某个事件要不要权限，放到 Channel 的 mount 里更合适。
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 export const ws = new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   transport: new WsTransport(),
   verify: (request) => { // [!code focus:3]
@@ -167,8 +170,10 @@ maxPayload: 256 * 1024, // 256KiB，收紧一点
 想在人数变化、入站成败时立刻知道，挂 `onMetric`：有事就回调。回调里抛错只会打 warn，不影响收发。
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 export const ws = new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   transport: new WsTransport(),
   mount: [channels('./src/channels')],
@@ -198,7 +203,7 @@ setInterval(async () => {
 ```typescript
 // src/routers/order.ts
 import { Router } from '@aomex/web';
-import { ws } from '../ws.js';
+import { ws } from '@/ws';
 
 export const router = new Router();
 

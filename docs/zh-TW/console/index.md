@@ -4,33 +4,27 @@ outline: deep
 
 # Console 應用入口
 
-做一個能在終端跑的指令入口：和 Web **共用** services / 驗證器，但舞臺是 `aomex <命令>`。適合遷移、預熱快取、落盤 OpenAPI、Cron——跑完就退出，不必佔 HTTP 埠。
+做一個能在終端跑的指令入口：和 Web **共用** services、logger 與驗證器，但舞臺是 `aomex <命令>`。適合遷移、預熱快取、落盤 OpenAPI、Cron——跑完就退出，不必佔 HTTP 埠。
 
 ```bash
 pnpm add @aomex/console @aomex/common @aomex/logger
 ```
 
 ```typescript
-import { combineServices } from '@aomex/common';
 import { Commander, commanders, ConsoleApp } from '@aomex/console';
-
-const services = await combineServices(
-  {
-    logger: () => import('./services/logger.service.js'),
-  },
-  { eager: ['logger'] },
-);
+import { logger } from '@/services/logger.service';
+import { services } from '@/services';
 
 const commander = new Commander();
 commander.create('hello', {
-  action: async (ctx) => {
-    await ctx.logger.info('hello from console');
+  action: async () => {
+    logger.info('hello from console');
   },
 });
 
 const app = new ConsoleApp({ // [!code focus:6]
   services,
-  logger: services.logger,
+  logger, // [!code highlight]
   language: 'zh-CN',
   mount: [commanders([commander])], // [!code highlight]
 });
@@ -50,7 +44,7 @@ declare module '@aomex/console' {
 npx aomex hello
 ```
 
-ctx.logger 有補全（和 Web 一樣來自你掛的服務 / 中介軟體）。以後加上 options({ ... })，ctx.options 會收成你宣告的形狀。app.run() 返回的是**退出碼**（0 成功），框架不會替你 process.exit——測試裡好斷言。
+業務裡直接用上面引入的 `logger`（與 `ctx.logger` 同一引用；`ctx.logger` 給第三方中介軟體和 app 內中介軟體）。以後加上 options({ ... })，ctx.options 會收成你宣告的形狀。app.run() 返回的是**退出碼**（0 成功），框架不會替你 process.exit——測試裡好斷言。
 
 ::: warning
 失敗時別靜默 return 卻仍是退出碼 0，CI 會當成功；應拋錯或讓 run 收到非零碼。
@@ -71,9 +65,11 @@ await app.run('export', '--out', 'a.csv');
 CLI **沒有** Accept-Language，language 只能是字串（如 `zh-CN`、`en-US`），效果和 Web 的 fixed 一樣：options() 校驗失敗、框架提示都走這一種。別傳 Web 那種 `{ mode, header }` 物件。
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 new ConsoleApp({
   services,
-  logger: services.logger,
+  logger,
   language: 'zh-CN', // [!code highlight]
   mount: [commanders('./src/commanders')],
 });

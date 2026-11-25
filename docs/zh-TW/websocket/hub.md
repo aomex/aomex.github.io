@@ -35,9 +35,10 @@ pnpm add @aomex/websocket-redis-hub
 import { WebsocketApp, channels } from '@aomex/websocket';
 import { WsTransport } from '@aomex/websocket-ws-transport';
 import { RedisHub } from '@aomex/websocket-redis-hub';
+import { logger } from '@/services/logger.service';
 
 export const ws = new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   transport: new WsTransport(),
   hub: new RedisHub({ // [!code focus:5]
@@ -50,7 +51,7 @@ export const ws = new WebsocketApp({
 });
 ```
 
-實際頻道是 `{字首}:a`（發給所有人）和 `{字首}:r:{房間名}`。**所有要互通的程序**（各個 Web 副本、要推送的 Console）必須：同一個 Redis、同一個 `channel` 字首。
+實際頻道是 `{前缀}:a`（發給所有人）和 `{前缀}:r:{房间名}`。**所有要互通的程序**（各個 Web 副本、要推送的 Console）必須：同一個 Redis、同一個 `channel` 字首。
 
 ::: warning
 用了 Socket.IO 傳輸，也**不要**再掛 Socket.IO 官方的 Redis adapter。房間和廣播只認 aomex 的 `hub`，疊兩套等於埋雷。
@@ -62,7 +63,7 @@ export const ws = new WebsocketApp({
 
 ```typescript
 // Console 指令里
-import { ws } from '../ws.js';
+import { ws } from '@/ws';
 
 await ws.room(`order:${orderId}`).send('order.updated', order);
 await ws.all.send('system.notice', { text: '今晚 23:00 维护' });

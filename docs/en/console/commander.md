@@ -7,6 +7,8 @@ outline: deep
 Define Console “verb phrase” commands (e.g. `cache:warm`), not HTTP method + path. Multiple commands can share one `Commander` and prefix—mirrors Web `Router` + `routers()`.
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 import { Commander, commanders, ConsoleApp, options } from '@aomex/console';
 import { rule } from '@aomex/common';
 
@@ -22,13 +24,13 @@ commander.create('warm', {
     }),
   ],
   action: async (ctx) => {
-    await ctx.logger.info(`warming ${ctx.options.key ?? 'all'}`);
+    logger.info(`warming ${ctx.options.key ?? 'all'}`);
   },
 });
 
 commander.create(['flush', 'clear'], {
   action: async (ctx) => {
-    await ctx.logger.info('cache cleared');
+    logger.info('cache cleared');
   },
 });
 

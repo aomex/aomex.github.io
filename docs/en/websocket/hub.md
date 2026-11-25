@@ -35,9 +35,10 @@ Each machine still tracks “which connections are local and which rooms they jo
 import { WebsocketApp, channels } from '@aomex/websocket';
 import { WsTransport } from '@aomex/websocket-ws-transport';
 import { RedisHub } from '@aomex/websocket-redis-hub';
+import { logger } from '@/services/logger.service';
 
 export const ws = new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'en-US' },
   transport: new WsTransport(),
   hub: new RedisHub({ // [!code focus:5]
@@ -62,7 +63,7 @@ Same pattern as the entry page: export `ws` from one file; the Web process `atta
 
 ```typescript
 // inside a Console command
-import { ws } from '../ws.js';
+import { ws } from '@/ws';
 
 await ws.room(`order:${orderId}`).send('order.updated', order);
 await ws.all.send('system.notice', { text: 'Maintenance tonight at 23:00' });

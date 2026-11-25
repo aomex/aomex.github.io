@@ -64,11 +64,12 @@ router.get('/:id', { // [!code focus:14]
 // src/app.ts —— 只创建并导出，不 listen
 import { formatError, routers, WebApp } from '@aomex/web';
 import { rule } from '@aomex/common';
-import { services } from './services/index.js';
+import { services } from '@/services';
+import { logger } from '@/services/logger.service';
 
 export const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:12]
@@ -88,7 +89,7 @@ export const app = new WebApp({
 
 ```typescript
 // src/main.ts —— 进程入口才听端口
-import { app } from './app.js';
+import { app } from '@/app';
 
 app.listen(3000);
 ```
@@ -96,7 +97,7 @@ app.listen(3000);
 ```typescript
 import { writeFile } from 'node:fs/promises';
 import { generateOpenapi } from '@aomex/openapi-generator';
-import { app } from './app.js';
+import { app } from '@/app';
 
 const document = await generateOpenapi({ // [!code focus:11]
   routers: './src/routers',
@@ -177,7 +178,7 @@ export const openapiBinaryFile = middleware.web({ // [!code focus:18]
 Динамическая отдача спеки (свой `/openapi.json`):
 
 ```typescript
-import { app } from '../app.js';
+import { app } from '@/app';
 
 router.get('/openapi.json', {
   docs: { showInOpenapi: false },
@@ -205,12 +206,13 @@ router.get('/openapi.json', {
 // src/cli.ts
 import { openapi } from '@aomex/openapi-generator';
 import { commanders, ConsoleApp } from '@aomex/console';
-import { app } from './app.js';
-import { services } from './services/index.js';
+import { app } from '@/app';
+import { services } from '@/services';
+import { logger } from '@/services/logger.service';
 
 new ConsoleApp({
   services,
-  logger: services.logger,
+  logger,
   language: 'zh-CN',
   mount: [
     openapi({ // [!code focus:18]

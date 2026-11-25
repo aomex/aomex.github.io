@@ -4,7 +4,7 @@ outline: deep
 
 # レスポンス時間
 
-各レスポンスヘッダーにサーバー処理時間（例：X-Response-Time）を書き、ブラウザ・ゲートウェイ・結合テストで遅い API を見る。設定項目なし。載せれば動く。
+各応答ヘッダーにサーバー処理時間（例：X-Response-Time）を書き、ブラウザ・ゲートウェイ・結合テストで遅い API を観測する。設定なし、載せるだけ。
 
 ```bash
 pnpm add @aomex/response-time
@@ -12,16 +12,17 @@ pnpm add @aomex/response-time
 
 ## アクセスログと並べる
 
-`responseTime()` は設定なし。アクセスログの横に置き、リクエスト終了後にヘッダーへ所要時間を書く。Nginx `access_log` / [httpAccessLog](/ja/plugins/access-log) の duration と補完関係（ヘッダーはクライアント/ゲートウェイ、ログはプラットフォーム集計）。本番のアクセスログは依然エッジ優先。このプラグインは「ヘッダーに時間を載せるか」だけを扱う。
+`responseTime()` は設定なし。アクセスログの横に置き、リクエスト終了後に応答ヘッダーへ所要時間を書く。Nginx `access_log` / [httpAccessLog](/ja/plugins/access-log) の duration と補完（ヘッダーはクライアント/ゲートウェイ、ログはプラットフォーム集約）。本番のアクセスログは依然エッジ優先；本プラグインは「応答ヘッダーに時間を載せるか」だけ。
 
 ```typescript
 import { responseTime } from '@aomex/response-time';
 import { httpAccessLog } from '@aomex/access-log';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:5]
@@ -32,27 +33,27 @@ const app = new WebApp({
 });
 ```
 
-process.hrtime を使い、ヘッダーはしばしば 12.345ms の形。失敗レスポンスにも付く。エラー経路では HttpError.headers にマージされることがある。
+process.hrtime 使用。ヘッダーは例として 12.345ms。失敗応答にも付く。エラーパスは HttpError.headers にマージされることがある。
 
-通常の WebMiddleware。ctx の業務型は変えない。Network パネルのレスポンスヘッダーを見ればよく、action に手書き不要。
+通常の WebMiddleware。ctx の業務型は変えない。Network パネルで応答ヘッダーを見ればよく、action で手書き不要。
 
-## レスポンスヘッダー vs アクセスログ
+## 応答ヘッダー vs アクセスログ
 
 | 出力 | 誰向け | 経験 |
 | --- | --- | --- |
-| `X-Response-Time` | ブラウザ、API ゲートウェイ、テストアサーション | ルート変更と無関係、サイト全体同じ挙動 |
-| アクセスログ `duration` | ログ基盤、アラート、ルート別集計 | [HTTP アクセスログ](/ja/plugins/access-log) 参照 |
+| `X-Response-Time` | ブラウザ、API ゲートウェイ、テスト断言 | ルート変更と無関係、全サイト同じ |
+| アクセスログ `duration` | ログ基盤、アラート、ルート集約 | [HTTP アクセスログ](/ja/plugins/access-log) |
 
-オプション表はない：**ヘッダーに時間が要るならオン、不要なら載せない。** 一般に routers の前、アクセスログの近く。
+オプション表なし：**ヘッダーに時間が要るならオン、不要なら載せない。** 通常 routers の前、アクセスログの近く。
 
-| 環境 | 推奨 |
+| 環境 | 目安 |
 | --- | --- |
-| 本番 | 多くは `httpAccessLog()` と一緒にオン |
-| ローカル | コンソールだけ tail ならアクセスログのみでも可 |
+| 本番 | よく `httpAccessLog()` と一緒 |
+| ローカル | コンソール tail だけならアクセスログのみでも可 |
 
-X-Response-Time はエンドツーエンド総時間ではない。手前にゲートウェイ、TLS、クライアント待ちがある。外向き API で情報漏えいが心配ならエッジでヘッダーを剥ぐ。社内/自社フロントなら多くは問題ない。responseTime だけでログに落とさないとき、ピーク時の障害切り分けにはログ集計の duration が依然必要（[HTTP アクセスログ](/ja/plugins/access-log)）。
+X-Response-Time はエンドツーエンド総時間ではない。手前にゲートウェイ、TLS、クライアント待ちがある。公開 API で情報漏えいが心配ならエッジでヘッダー剥がす。内網/自社フロントなら大抵問題なし。responseTime だけでログに残さない場合、ピーク時の切り分けはログ集約の duration も要る（[HTTP アクセスログ](/ja/plugins/access-log)）。
 
-## 次のステップ
+## 次に
 
 - アクセスログ：[HTTP アクセスログ](/ja/plugins/access-log)
 - 分散トレース：[リンクトレース](/ja/plugins/async-trace)

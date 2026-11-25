@@ -2,31 +2,32 @@
 outline: deep
 ---
 
-# Транспорт
+# Транспортный слой
 
-Транспорт отвечает только на одно: **каким протоколом подключается клиент и как выглядит рамка**. Комнаты и межмашинный broadcast — зона [Hub](/ru/websocket/hub). Когда бизнес Channel уже написан, смена транспорта обычно сводится к строке `new WebsocketApp({ transport })`.
+Транспорт отвечает на одно: **каким протоколом клиент подключается и как выглядят кадры**. Комнаты и broadcast между машинами — [Hub](/ru/websocket/hub). После готовых Channel смена транспорта обычно одна строка в `new WebsocketApp({ transport })`.
 
-Сейчас есть две готовые реализации; для старта берите стандартный WebSocket.
+Два готовых варианта; для старта хватит стандартного WebSocket.
 
-| Вам важнее… | Выберите |
+| Если важнее… | Выбор |
 | --- | --- |
-| Нативный браузерный `WebSocket`, шлюз только пробрасывает upgrade, протокол проще | `@aomex/websocket-ws-transport` |
-| Фронт уже на Socket.IO, или нужны его авто-reconnect / long-polling fallback | `@aomex/websocket-socket-io-transport` |
+| Нативный `WebSocket` в браузере, прокси только upgrade, минимум протокола | `@aomex/websocket-ws-transport` |
+| Уже Socket.IO на фронте, авто-reconnect / long-polling fallback | `@aomex/websocket-socket-io-transport` |
 
-## Стандартный WebSocket (сначала доведите до рабочего)
+## Стандартный WebSocket (сначала завести)
 
 ```bash
 pnpm add @aomex/websocket-ws-transport
 ```
 
-`path`, размер одной рамки и `verify` настраиваются на `WebsocketApp` — **не** дублируйте их в `WsTransport`. Аргументы конструктора в основном пробрасываются в низкоуровневую библиотеку `ws`; интервал heartbeat задаёте через `heartbeatInterval` (по умолчанию 30 с; `0` — без heartbeat, удобно в unit-тестах):
+`path`, размер кадра, `verify` — на `WebsocketApp`, **не дублируй** в `WsTransport`. Параметры конструктора в основном пробрасываются в `ws`; heartbeat — `heartbeatInterval` (30 с по умолчанию; `0` — выкл., для тестов):
 
 ```typescript
 import { WebsocketApp, channels } from '@aomex/websocket';
 import { WsTransport } from '@aomex/websocket-ws-transport';
+import { logger } from '@/services/logger.service';
 
 const ws = new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   path: '/ws',
   transport: new WsTransport({ // [!code focus:4]
@@ -37,7 +38,7 @@ const ws = new WebsocketApp({
 });
 ```
 
-В браузере — нативный `WebSocket`, рамка JSON:
+В браузере нативный `WebSocket`, кадры JSON:
 
 ```typescript
 const socket = new WebSocket('ws://localhost:3000/ws');
@@ -53,13 +54,13 @@ socket.send(JSON.stringify({ event: 'ping', data: {} }));
 
 ## Переход на Socket.IO
 
-Меняйте, когда фронт уже зависит от `socket.io-client` или нужна его деградация на плохой сети. **Комнаты по-прежнему идут через Hub aomex** — не вешайте `@socket.io/redis-adapter`, иначе получите два набора broadcast и боль при разборе.
+Когда фронт на `socket.io-client` или нужен fallback в плохой сети. **Комнаты — hub aomex**, не вешай `@socket.io/redis-adapter` — два broadcast'а, боль при отладке.
 
 ```bash
 pnpm add @aomex/websocket-socket-io-transport
 ```
 
-Снова: `path` и максимальный буфер инжектит приложение. Фреймворк намеренно не светит namespace, ack и `volatile` — исходящее едино через `send` Channel / `ws.room`, без двух ментальных моделей. CORS или интервал ping задайте в конструкторе:
+`path` и буферы задаёт приложение. namespace, ack, `volatile` намеренно скрыты — исходящие через Channel / `ws.room().send`. CORS и ping — в конструкторе:
 
 ```typescript
 import { SocketIoTransport } from '@aomex/websocket-socket-io-transport';
@@ -70,7 +71,7 @@ transport: new SocketIoTransport({ // [!code focus:3]
 }),
 ```
 
-В браузере нужен клиент Socket.IO (нативный `WebSocket` не подключится):
+В браузере только клиент Socket.IO (нативный `WebSocket` не подключится):
 
 ```typescript
 import { io } from 'socket.io-client';
@@ -82,12 +83,12 @@ socket.on('echo', (data) => {
 });
 ```
 
-## Что происходит при остановке
+## При остановке
 
-При `ws.attach(app, server)` уже регистрируется хук остановки WebApp: по сигналу рвутся соединения и завершается транспорт, но **переданный** вами `http.Server` сам по себе не закрывается (его закрывает WebApp). Обычно отдельный `process.on('SIGTERM')` ради транспорта не нужен.
+При `ws.attach(app, server)` WebApp регистрирует shutdown: по сигналу рвёт соединения, завершает транспорт, **не** закрывает переданный `http.Server` (его закроет WebApp). Обычно не нужен свой `process.on('SIGTERM')` для транспорта.
 
 ## Дальше
 
-- [Мультимашинный Hub](/ru/websocket/hub) — несколько реплик или пуш из Console
-- [Точка входа](/ru/websocket/)
-- [Маршрутизация событий](/ru/websocket/channel)
+- [Hub](/ru/websocket/hub) — реплики и Console
+- [Вход](/ru/websocket/)
+- [Каналы](/ru/websocket/channel)

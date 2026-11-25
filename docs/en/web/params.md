@@ -73,7 +73,7 @@ export const userIdParamSchema = schema({
 
 ```typescript
 import { params } from '@aomex/web';
-import { userIdParamSchema } from '../schemas/user-id-param.schema.js';
+import { userIdParamSchema } from '@/schemas/user-id-param.schema';
 
 router.get('/users/:id', { // [!code focus:5]
   mount: [params(userIdParamSchema)], // [!code highlight]

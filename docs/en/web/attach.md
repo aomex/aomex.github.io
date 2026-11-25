@@ -86,9 +86,11 @@ Parsing is two layers: **WebApp.body.formData** sets site defaults (per-file siz
 | `rule.file()` | Per-field rules (MIME, size) |
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   body: { // [!code focus:3]

@@ -4,17 +4,17 @@ outline: deep
 
 # Генерация AsyncAPI
 
-OpenAPI описывает HTTP-интерфейсы; для realtime-канала — **AsyncAPI**. На Channel вы уже объявили входящую/исходящую форму через `payload()` / `emit()` — генератор сканирует эти объявления в документ AsyncAPI 3.x для фронта, интеграторов или просмотра в [AsyncAPI UI](/ru/asyncapi/asyncapi-ui).
+OpenAPI описывает HTTP; для realtime-каналов — **AsyncAPI**. Если на Channel уже объявлены вход и выход через `payload()` / `emit()`, генератор собирает из этого документ AsyncAPI 3.x для фронта, партнёров или просмотра в [AsyncAPI UI](/ru/asyncapi/asyncapi-ui).
 
-События без payload / emit в документе дадут пустые куски. Сервис всё равно работает, но контракт неполный — на стыковке партнёр только гадает.
+События без `payload` / `emit` дадут пустые секции в документе. Сервис работает, но контракт неполный — собеседнику остаётся угадывать.
 
 ```bash
 pnpm add @aomex/asyncapi-generator
 ```
 
-## Сначала допишите контракт на Channel
+## Сначала полный контракт на Channel
 
-Вход — `payload()`, выход — `emit()`. Рантайм-валидация, сужение типов и документ — один источник: правите в одном месте, меняется и там, и там.
+Вход — `payload()`, выход — `emit()`. Рантайм-проверка и сужение типов из того же источника, что и документация — правите один раз, меняются оба.
 
 ```typescript
 // src/channels/chat.channel.ts
@@ -48,9 +48,9 @@ channel.on('chat.send', { // [!code focus:18]
 });
 ```
 
-## Генерация прямо из скрипта
+## Прямая генерация в скрипте
 
-`generateAsyncapi` принимает каталог Channel (или массив экземпляров). Версию `docs.asyncapi` задаёте сами (`3.0.0` или `3.1.0`) — генератор её не угадывает:
+`generateAsyncapi` принимает каталог Channel (или массив экземпляров). Версию `docs.asyncapi` задаёте сами (`3.0.0` или `3.1.0`) — генератор не угадывает:
 
 ```typescript
 import { writeFile } from 'node:fs/promises';
@@ -67,7 +67,7 @@ const document = await generateAsyncapi({ // [!code focus:8]
 await writeFile('asyncapi.json', JSON.stringify(document, null, 2));
 ```
 
-Поля вроде `servers`, до которых генератор не дотягивается, правьте Document в `fix`:
+Поля вроде `servers`, которые генератор не заполняет, правьте в `fix` на Document:
 
 ```typescript
 await generateAsyncapi({
@@ -88,17 +88,18 @@ await generateAsyncapi({
 });
 ```
 
-## Запись на диск через Console (для CI)
+## Вывод через Console (для CI)
 
-Тот же приём, что у OpenAPI: повесьте на `ConsoleApp`, в терминале одна команда. `commandName` по умолчанию `asyncapi`; `saveToFile` по умолчанию `asyncapi.json`, можно `.yaml` / `.yml` (формат по расширению).
+Тот же приём, что с OpenAPI: повесьте на `ConsoleApp`, одна команда в терминале. `commandName` по умолчанию `asyncapi`; `saveToFile` по умолчанию `asyncapi.json`, также `.yaml` / `.yml` (формат по расширению).
 
 ```typescript
 import { asyncapi } from '@aomex/asyncapi-generator';
 import { commanders, ConsoleApp } from '@aomex/console';
+import { logger } from '@/services/logger.service';
 
 const app = new ConsoleApp({
   services,
-  logger: services.logger,
+  logger,
   language: 'zh-CN',
   mount: [ // [!code focus:12]
     asyncapi({
@@ -119,10 +120,10 @@ const app = new ConsoleApp({
 npx aomex asyncapi
 ```
 
-При запуске в терминале прокрутятся шаги (найти файлы → разобрать → сохранить → проверить). Из своего скрипта лучше вызывать `generateAsyncapi` выше — без spinner, удобнее ассертить.
+В терминале пойдут шаги (поиск файлов → разбор → сохранение → проверка). В своих скриптах удобнее `generateAsyncapi` выше — без спиннера, проще assert.
 
 ## Дальше
 
-- [AsyncAPI UI](/ru/asyncapi/asyncapi-ui) — листать документ в браузере
-- [Исходящий emit](/ru/websocket/emit) / [Входящий payload](/ru/websocket/payload)
-- [Маршрутизация событий](/ru/websocket/channel)
+- [AsyncAPI UI](/ru/asyncapi/asyncapi-ui) — просмотр документа в браузере
+- [исходящий emit](/ru/websocket/emit) / [входящий payload](/ru/websocket/payload)
+- [маршрутизация событий](/ru/websocket/channel)

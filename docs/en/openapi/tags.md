@@ -64,7 +64,7 @@ For cross-domain endpoints (both order and export), list multiple names in the s
 
 ```typescript
 import { generateOpenapi } from '@aomex/openapi-generator';
-import { app } from './app.js';
+import { app } from '@/app';
 
 await generateOpenapi({
   routers: './src/routers',

@@ -4,34 +4,28 @@ outline: deep
 
 # Console app entry
 
-Build a terminal command entry that **shares** services and validators with Web, but runs as `aomex <command>`. Good for migrations, cache warm-up, OpenAPI export, Cron—exit when done without holding an HTTP port.
+Build a terminal command entry that **shares** services, logger, and validators with Web, but runs as `aomex <command>`. Good for migrations, cache warm-up, OpenAPI export, Cron—exit when done without holding an HTTP port.
 
 ```bash
 pnpm add @aomex/console @aomex/common @aomex/logger
 ```
 
 ```typescript
-import { combineServices } from '@aomex/common';
 import { Commander, commanders, ConsoleApp } from '@aomex/console';
-
-const services = await combineServices(
-  {
-    logger: () => import('./services/logger.service.js'),
-  },
-  { eager: ['logger'] },
-);
+import { logger } from '@/services/logger.service';
+import { services } from '@/services';
 
 const commander = new Commander();
 commander.create('hello', {
-  action: async (ctx) => {
-    await ctx.logger.info('hello from console');
+  action: async () => {
+    logger.info('hello from console');
   },
 });
 
 const app = new ConsoleApp({ // [!code focus:6]
   services,
-  logger: services.logger,
-  language: 'zh-CN',
+  logger, // [!code highlight]
+  language: 'en-US',
   mount: [commanders([commander])], // [!code highlight]
 });
 
@@ -50,7 +44,7 @@ declare module '@aomex/console' {
 npx aomex hello
 ```
 
-`ctx.logger` autocompletes (same as Web—from mounted services / middleware). With `options({ ... })`, `ctx.options` narrows to your declared shape. `app.run()` returns an **exit code** (0 success); the framework does not call `process.exit` for you—easy to assert in tests.
+Use the imported `logger` above in app code (same reference as `ctx.logger`; `ctx.logger` is for third-party and in-app middleware). With `options({ ... })`, `ctx.options` narrows to your declared shape. `app.run()` returns an **exit code** (0 success); the framework does not call `process.exit` for you—easy to assert in tests.
 
 ::: warning
 On failure, do not silently `return` with exit code 0—CI will treat it as success. Throw or ensure `run` sees a non-zero code.
@@ -71,9 +65,11 @@ await app.run('export', '--out', 'a.csv');
 CLI has **no** `Accept-Language`; `language` must be a string (e.g. `zh-CN`, `en-US`), same effect as Web `fixed`: `options()` validation errors and framework messages use that locale. Do not pass Web’s `{ mode, header }` object.
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 new ConsoleApp({
   services,
-  logger: services.logger,
+  logger,
   language: 'zh-CN', // [!code highlight]
   mount: [commanders('./src/commanders')],
 });

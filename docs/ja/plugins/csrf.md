@@ -2,11 +2,11 @@
 outline: deep
 ---
 
-# CSRF 防護
+# CSRF 防御
 
-ブラウザは同一サイトの Cookie を自動で付ける。攻撃者のページがあなたのブラウザに API へ POST させると、**HttpOnly のログイン Cookie も一緒に送られる**——これがクロスサイトリクエストフォージェリ。`@aomex/csrf` は**ダブルサブミット Cookie**：サーバーが読める `csrfToken` Cookie を発行し、フロントが同じ値をリクエストヘッダーに書く。一致したときだけ書き込みを通す。
+ブラウザは同サイト Cookie を自動で付ける。攻撃者のページがあなたの API へ POST を誘導すると、**HttpOnly のログイン Cookie も付いてしまう**——これがクロスサイトリクエストフォージェリ（CSRF）だ。`@aomex/csrf` は**二重送信 Cookie** を使う：サーバーが読み取り可能な `csrfToken` Cookie を発行し、フロントが同じ値をリクエストヘッダーに載せる。一致したときだけ書き込み系を通す。
 
-[Session](/ja/plugins/auth-session-strategy) とほぼ常にセット。Bearer ヘッダーだけ使って Cookie ログインに依存しないなら、通常 CSRF は不要。
+[Session](/ja/plugins/auth-session-strategy) とほぼ常にセット。Bearer ヘッダーだけでログインし Cookie に依存しないなら、通常 CSRF は不要。
 
 ```bash
 pnpm add @aomex/csrf
@@ -14,16 +14,17 @@ pnpm add @aomex/csrf
 
 ## routers の前に載せる
 
-無引数の `csrf()` で足りる。GET/HEAD/OPTIONS は Cookie の発行・再利用だけでヘッダー検証なし。POST など書き込みは Cookie と `x-csrf-token` の一致が必要。不一致は **403**。
+引数なし `csrf()` で足りる：GET/HEAD/OPTIONS は Cookie の発行・継続だけで、ヘッダーは検証しない。POST などの書き込みメソッドは Cookie と `x-csrf-token` が一致しないと **403**。
 
 ```typescript
 import { cors } from '@aomex/cors';
 import { csrf } from '@aomex/csrf';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:5]
@@ -35,18 +36,18 @@ const app = new WebApp({
 ```
 
 ::: warning
-必ず routers の**前**に。検証失敗がエラーミドルウェアに入るとき、csrf が後ろだと発行直後の `Set-Cookie` がブラウザに届かず、フロントがずっと token 欠乏になる。
+必ず routers **の前**に置く。検証失敗がエラーミドルウェア経由になるとき、csrf が後ろだと、いま発行した `Set-Cookie` がブラウザに届かず、フロントがずっと token を持てない。
 :::
 
-ミドルウェアは ctx に `csrfToken`（現在の token 文字列）を載せる。Cookie は**強制**で `httpOnly: false`（ダブルサブミットは JS から読める必要がある）。ほかの属性（`sameSite` / `path` / `maxAge`）は設定可で、デフォルトは `setCookie` と同じ（`SameSite=Strict` を含む）。
+ミドルウェアは ctx に `csrfToken`（現在の token 文字列）を載せる。Cookie は**強制**で `httpOnly: false`（二重送信では JS から読む必要がある）。それ以外（`sameSite` / `path` / `maxAge`）は設定可。デフォルトは `setCookie` と同様（`SameSite=Strict` 含む）。
 
-クロスオリジンでログイン Cookie も付けるときは、CORS で `credentials: true` かつ**明示的な** `origin`、さらに `allowHeaders` で `x-csrf-token` を通す。[CORS](/ja/plugins/cors) と [Session](/ja/plugins/auth-session-strategy) を参照。
+クロスオリジンでログイン Cookie も載せるなら、CORS で `credentials: true` と**明示**の `origin`、さらに `allowHeaders` で `x-csrf-token` を通す。 [CORS](/ja/plugins/cors) と [Session](/ja/plugins/auth-session-strategy) を参照。
 
 ## フロントの付け方
 
-1. まず任意の GET（またはページを開く）。応答に `Set-Cookie: csrfToken=...` が付く
+1. 先に任意の GET（またはページを開く）。応答に `Set-Cookie: csrfToken=...` が付く
 2. `document.cookie`（または cookie ユーティリティ）で値を読む
-3. 書き込みリクエストにヘッダー `x-csrf-token: <同じ値>` を付け、ログイン Cookie も使うなら `credentials: 'include'`
+3. 書き込みリクエストに `x-csrf-token: <同じ値>` と、`credentials: 'include'`（ログイン Cookie も使う場合）
 
 ```typescript
 function readCsrfToken() {
@@ -69,11 +70,11 @@ await fetch('/api/orders', {
 });
 ```
 
-Cookie が無いエンドポイントへいきなり POST すると **403** になるが、応答に新規発行の `Set-Cookie` が付くことがある。フロントが読んでからリトライすればよい。
+Cookie なしのまま最初から POST すると **403** だが、応答には新しい `Set-Cookie` が付くことがある。フロントが読み取ってからリトライすればよい。
 
-## フロントの慣習に合わせる
+## フロントの約束に合わせる
 
-フロントがすでに `x-xsrf-token` を使う、または Cookie 名が `csrfToken` でないときは、コンストラクタ引数で揃える。`httpOnly` は引き続き強制オフ。
+フロントが `x-xsrf-token` を使う、または Cookie 名が `csrfToken` でないときは、コンストラクタ引数で揃える。`httpOnly` は引き続き強制でオフ。
 
 ```typescript
 csrf({
@@ -82,11 +83,11 @@ csrf({
 });
 ```
 
-`sameSite` / `path` / `secure` / `maxAge` は業務 Cookie の方針に合わせる。クロスサイトのフロントでは `sameSite` を `lax` にすることが多い。
+`sameSite` / `path` / `secure` / `maxAge` は業務の Cookie 方針に合わせる。クロスサイトのフロントでは `sameSite` を `lax` にすることが多い。
 
 ## webhook とヘルスチェックを通す
 
-第三者コールバックやロードバランサの探活はブラウザ Cookie がなく、ダブルサブミットにも乗らない。`ignore` でパス単位にスキップする。CSRF を全体で切らない。
+サードパーティコールバックや LB のプローブにはブラウザ Cookie がなく、二重送信も不要。`ignore` でパス単位にスキップする。CSRF を全体で切らない。
 
 ```typescript
 csrf({
@@ -96,10 +97,10 @@ csrf({
 });
 ```
 
-読むのは Header と Cookie だけ。**body は読まない**ので `body()` の解析と干渉しない。デフォルトで検証しないメソッドは GET / HEAD / OPTIONS。`ignoreMethods` を変える必要はほとんどない。
+ヘッダーと Cookie だけを見て** body は読まない**。`body()` 解析と干渉しない。デフォルトで検証しないメソッドは GET / HEAD / OPTIONS。`ignoreMethods` を変えるのは稀。
 
 ## 関連
 
-- [Session ストラテジー](/ja/plugins/auth-session-strategy)
+- [Session 戦略](/ja/plugins/auth-session-strategy)
 - [クロスオリジン CORS](/ja/plugins/cors)
 - [セキュリティヘッダー Helmet](/ja/plugins/helmet)

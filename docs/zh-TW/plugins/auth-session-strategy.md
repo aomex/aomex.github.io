@@ -4,13 +4,13 @@ outline: deep
 
 # Session 策略
 
-瀏覽器端登入態放在 **HttpOnly Cookie** 裡：Cookie 只存不透明 `sessionId`，使用者資料在 `@aomex/cache` 介面卡（memory / Redis）裡。SPA 跨域時還要同時配好 [CORS](/zh-TW/plugins/cors)（帶 Cookie）和 [CSRF](/zh-TW/plugins/csrf)（防跨站寫請求）——少一塊，登入態要麼帶不過去，要麼容易被第三方站點濫用。
+瀏覽器端登入態放在 **HttpOnly Cookie** 裡：Cookie 只存不透明 `sessionId`，使用者資料在共享的 [`Caching`](/zh-TW/core/cache)（memory / Redis）裡。SPA 跨域時還要同時配好 [CORS](/zh-TW/plugins/cors)（帶 Cookie）和 [CSRF](/zh-TW/plugins/csrf)（防跨站寫請求）——少一塊，登入態要麼帶不過去，要麼容易被第三方站點濫用。
 
 適合「同站或可信前端 + 服務端隨時可廢會話」；純移動端 / 機器呼叫更常見 [Bearer](/zh-TW/plugins/auth-bearer-strategy) 或 [JWT](/zh-TW/plugins/auth-jwt-strategy)。
 
 ## 安裝
 
-Session 策略隨 `@aomex/auth` 主包提供；存會話還要 `@aomex/cache`（及生產用的 Redis 介面卡）。跨域 Cookie 場景再裝 CORS / CSRF。
+Session 策略隨 `@aomex/auth` 主包提供；存會話還要 `@aomex/cache`（及生產用的 Redis 適配器）。跨域 Cookie 場景再裝 CORS / CSRF。
 
 ```bash
 pnpm add @aomex/auth @aomex/cache
@@ -36,10 +36,11 @@ import { AuthSessionStrategy } from '@aomex/auth/session';
 import { cors } from '@aomex/cors';
 import { csrf } from '@aomex/csrf';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:8]
@@ -88,14 +89,17 @@ GET 等安全方法預設不校驗 CSRF；首次訪問會先簽發 `csrfToken` C
 ```typescript
 import { Auth } from '@aomex/auth';
 import { AuthSessionStrategy } from '@aomex/auth/session';
+import { Caching } from '@aomex/cache';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 import { body, Router } from '@aomex/web';
 import { rule } from '@aomex/common';
 
+const cache = new Caching(new CacheMemoryAdapter());
+
 const auth = new Auth({
   strategies: {
     session: new AuthSessionStrategy({
-      store: new CacheMemoryAdapter(), // [!code highlight]
+      store: cache, // [!code highlight]
       cookie: {
         maxAge: 7 * 24 * 3600,
         // 生产跨站前端常见：sameSite: 'none', secure: true
@@ -112,7 +116,7 @@ const auth = new Auth({
 });
 ```
 
-生產或多例項請換成 Redis 等外接介面卡，見 [快取](/zh-TW/core/cache)。Cookie 預設名 `sessionId`；`setCookie` 預設 `httpOnly: true`、`sameSite: Strict`（跨站前端要改成 `'none'` 並開 `secure`）。`cookie.name` / `path` / `domain` 與前端域名對齊即可。
+生產或多實例請換成掛了 Redis 等外接適配器的同一份 `Caching`，見 [快取](/zh-TW/core/cache)。Cookie 預設名 `sessionId`；`setCookie` 預設 `httpOnly: true`、`sameSite: Strict`（跨站前端要改成 `'none'` 並開 `secure`）。`cookie.name` / `path` / `domain` 與前端域名對齊即可。
 
 活躍使用者少被迫下線時，開 `sliding`：每次認證成功續期 TTL + Cookie。自定義快取鍵字首用 `generateCacheKey`（預設 `auth:session:${sessionId}`）。需要 `authorize(角色)` 時再寫 `onAuthorize`。
 

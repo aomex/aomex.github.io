@@ -1,8 +1,8 @@
 # サービス層
 
-「DB 照会、外部 API、キャッシュ読み書き」をルート action から分離し、再利用可能な **Service** にまとめる。**combineServices** で型付き `services` 袋を組み、Web、Console、Cron で同じ名前で呼ぶ。
+「DB 照会・外部 API・キャッシュ読み書き」をルート action から切り出し、再利用可能な **Service** にまとめます。**combineServices** で型付き `services` 袋を組み、Web・Console・Cron で同じ名前で呼びます。
 
-業務クラスは Service を継承する。外向きは通常の async メソッドだけ。接続・ウォームアップは onInit、解放は onDestroy（protected のまま、外から直接呼ばせない）。
+業務クラスは `Service` を継承し、外向きは通常の async メソッドだけ。接続・ウォームアップは `onInit`、解放は `onDestroy`（protected のまま、外から直接呼ばない）。
 
 ```typescript
 import { Service } from '@aomex/common';
@@ -11,7 +11,7 @@ export default class UserService extends Service {
   private cache = new Map<number, { name: string }>();
 
   protected override async onInit(): Promise<void> { // [!code highlight]
-    // 预热连接、读配置…
+    // 接続ウォームアップ、設定読み込み…
   }
 
   protected override async onDestroy(): Promise<void> {
@@ -24,116 +24,128 @@ export default class UserService extends Service {
 }
 ```
 
-ファクトリ + `combineServices` で登録。**インフラは eager に入れる**と、アプリ起動直後に接続し、最初の本番リクエストまで初期化を遅らせない：
+ファクトリ + `combineServices` で登録。**プロセス起動と同時に繋ぎたいサービス**は eager に（Prisma / 外部 SDK など）：
 
 ```typescript
 import { combineServices } from '@aomex/common';
 
 export const services = await combineServices( // [!code highlight]
   {
-    user: () => import('./user.service.js'),
-    cache: () => import('./cache.service.js'),
-    logger: () => import('./logger.service.js'),
+    user: () => import('@/services/user.service'),
   },
-  { eager: ['cache', 'logger'] },
+  { eager: ['user'] },
 );
 ```
 
-Web に渡すと、`services` の型は combineServices のキーと各 Service の**公開メソッド**から直接得られる。`await services.user.findById(1)` に引数・戻り値の補完がある。onInit、onDestroy、private フィールドは `services.user` に出ない。同期で書いた Service メソッドも、外からの型は **Promise** 扱い。呼び出しは `await` で統一すればよい。
+Web に渡すと、`services` の型は combineServices のキー名と各 Service の**公開メソッド**から直接決まります：`await services.user.findById(1)` は引数・戻り値が補完されます。`onInit`、`onDestroy`、private フィールドは **services.user に出ません**。同期メソッドでも外から呼ぶ型上は **Promise** として統一し、`await` で書きます。
 
 ```typescript
 import { WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services, // [!code highlight]
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
 });
 ```
 
 ::: tip
-業務コードで `new UserService()` だけして WebApp / ConsoleApp の `services` に渡さないと、停止時にフレームワークが管理できず、接続漏れの原因になる。
+業務内で `new UserService()` だけして WebApp / ConsoleApp の `services` に渡さないと、シャットダウン時にフレームワークが追えず接続漏れの原因になります。
 :::
 
 ルートやミドルウェア内：
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 const user = await services.user.findById(1);
-await services.logger.info('用户已查询', { userId: user?.name });
+logger.info(`用户已查询 ${user?.name ?? ''}`);
 ```
 
-別ファイルから `import { services } from './services/index.js'` でき、モジュール拡張は不要。
+別ファイルでは `import { services } from '@/services'` で十分。モジュール拡張は不要です。
 
 ## 遅延読み込みとテスト注入
 
-本番は `() => import('./xxx.service.js')` で遅延読み込みし、コールドスタートを速くする：
+本番は `() => import('@/services/xxx.service')` で遅延し、コールドスタートを速くします：
 
 ```typescript
-user: () => import('./user.service.js'),
+user: () => import('@/services/user.service'),
 ```
 
-テストでは async ファクトリで偽実装を直接返せる：
+テストでは async ファクトリで偽実装を返せます：
 
 ```typescript
 user: async () => FakeUserService,
 ```
 
 ::: warning
-業務コードを `async () => UserService` にしない。クラスは既に当該モジュールに載っているので遅延の意味がなく、無駄にランタイムメモリを占める。本番は必ず `() => import('./user.service.js')`。上記パターンはテスト注入専用。
+本番で `async () => UserService` と書かないでください。クラスは既にモジュールと一緒にメモリに入り、遅延の意味がなく、無駄にメモリを食います。本番は必ず `() => import('@/services/user.service')`；上記はテスト注入専用です。
 :::
 
-各ファイルを `export default class XxxService` にすると、ローダーが複数 export を推測しなくて済む。
+各ファイルは `export default class XxxService` が一番楽で、loader が複数 export を推測しません。
 
 ## eager
 
-デフォルトは**遅延読み込み**。最初の `await services.xxx` で初めてインスタンス化し `onInit` が走る。`eager` に列挙した名前は `combineServices` が返る**前**に構築される。Redis やログなど「プロセス起動と同時に準備完了」させたいインフラ向け。
+既定は**遅延読み込み**：最初の `await services.xxx` でインスタンス化・`onInit`。`eager` に列挙した名前は `combineServices` 返却前に構築 — 「プロセス起動と同時に接続」向け（Prisma など）。
 
 ```typescript
-{ eager: ['cache', 'logger'] },
+{ eager: ['user', 'prisma'] },
 ```
 
-ローカル試行や最小 CLI では eager を書かなくてもよい。A の `onInit` 内で `await services.cache.xxx` するのに cache が eager でないと、接続は初回の業務呼び出しまで遅れ、起動フェーズで時系列の罠に入りやすい。
+ローカル試行や最小 CLI は eager なしでも可。A の `onInit` 内で `await services.user.xxx` するのに user が eager でないと、初期化は初回業務呼び出しまで遅れ、起動フェーズで順序バグになりやすいです。
 
 ## ライフサイクルフック
 
-Service にしなくても `services` 袋に入れないリソース（モジュールスコープの PrismaClient、プラグイン内部の Redis store など）が、起動時に接続し、停止時に切断が要ることがある。そのときは `registerLifecycle` を使う。登録時にすぐ `onInit` が走り、`WebApp` / `ConsoleApp` 停止時に `onDestroy` が走る。
+`services` 袋に入らないリソース（モジュール级 PrismaClient、プラグイン内 Redis store など）でも、起動時接続・停止時切断が要るときは `registerLifecycle`：登録と同時に `onInit`、WebApp / ConsoleApp シャットダウンで `onDestroy`。
+
+遅延接続（アダプタ、自前クライアント）では「ラッチ + 失敗時クリア」がよくある — 次回再試行しやすく。**自動リトライはしません**：
 
 ```typescript
 import { registerLifecycle } from '@aomex/common';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
+let ready: Promise<void> | undefined;
 
-await registerLifecycle({ // [!code focus:4]
-  onInit: () => prisma.$connect(),
-  onDestroy: () => prisma.$disconnect(),
-});
+function ensureReady() {
+  ready ??= registerLifecycle({ // [!code focus:7]
+    onInit: () => prisma.$connect(),
+    onDestroy: () => prisma.$disconnect(),
+  }).catch((err) => {
+    ready = undefined;
+    throw err;
+  });
+  return ready;
+}
 ```
 
-返り値の関数で**登録を先取り解除**できる（既に停止・解除済みなら何もしない）。`onInit` が失敗すると破棄キューには入らない。レート制限などプラグイン内部も同じフックで store を管理する。業務側で改めて登録する必要は通常ない。
+一度きりの接続（起動スクリプト、モジュールトップレベル）では `await registerLifecycle({ … })` でも可。返却関数で**登録を早めに解除**（停止済み・解除後は無効）。`onInit` 失敗時は破棄キューに入りません。レート制限などプラグイン内部も同じフックを使い、業務側で二重登録は通常不要です。
 
-`combineServices` に入れたクラスは引き続き `onInit` / `onDestroy` で足りる。`registerLifecycle` で二重に包む必要はない。
+`combineServices` に入れたクラスは `onInit` / `onDestroy` のままでよく、`registerLifecycle` を重ねる必要はありません。
 
 ## 複数袋のマージ
 
-大規模リポジトリではドメインごとに combineServices を分け、App にマージする：
+大規模リポジトリでドメインごとに combineServices を分け、App にマージ：
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 const app = new WebApp({
   services: [domainA, domainB], // [!code highlight]
-  logger: domainA.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
 });
 ```
 
-クラス名が `Service` 終わりのとき、[`createRemember`](/ja/core/cache#キャッシュデコレータ) などはサフィックスを除いた名前でキャッシュキーを区別する（UserService → User）。
+クラス名が `Service` 終わりのとき、[`createRemember`](/ja/core/cache#キャッシュデコレータ) などはサフィックス除去後の名前でキャッシュキーを区別します（UserService → User）。
 
-サービス間呼び出しは、クラス内で `import { services } from './index.js'` し、`await services.other.method()` する。クラス内の `this.foo()` はそのまま。**クラスを跨ぐ**ときだけ `await services.other.foo()` を使う。
+サービス間呼び出し：クラス内で `import { services } from '@/services'` し `await services.other.method()`。クラス内 `this.foo()` はそのまま；**クラス跨ぎ**だけ `await services.other.foo()`。
 
 ## 次のステップ
 
-- セッションと `createRemember`：[キャッシュ](/ja/core/cache)
-- サイト全体のログ出口：[ログ](/ja/core/logger)
-- ルートを薄く保つ：[インターフェースルーティング](/ja/web/router)
+- 共有 `Caching`、`createRemember`：[キャッシュ](/ja/core/cache)
+- 全站 `Logger`：[ログ](/ja/core/logger)
+- ルートを薄く：[ルーティング](/ja/web/router)

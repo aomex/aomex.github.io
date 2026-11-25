@@ -18,9 +18,10 @@ pnpm add @aomex/access-log
 import { websocketAccessLog } from '@aomex/access-log/websocket';
 import { WebsocketApp, channels } from '@aomex/websocket';
 import { WsTransport } from '@aomex/websocket-ws-transport';
+import { logger } from '@/services/logger.service';
 
 new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   transport: new WsTransport(),
   mount: [websocketAccessLog(), channels('./src/channels')], // [!code highlight]

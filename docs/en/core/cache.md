@@ -1,22 +1,50 @@
 # Cache
 
-Build a **CacheService**: pick a memory / file / Redis adapter, read and write with `this.cache`, and walk through the full login **session** flow (token → user info)—issue token, read on auth, delete on logout.
+At the composition root build one shared **`Caching`**: pick a memory / file / Redis adapter, then pass the **same instance** to business code and to auth / abuse / OAuth plugins (config name is usually `store`). Walk a login **session** (token → user payload) through issue → read on auth → delete on logout.
 
-Subclass `createAdapter()`; use `protected readonly` plus `this.key(...)` for business prefixes that become `CacheKey` values, then chain `.key(token)` inside methods so strings do not scatter.
+Keep the class name `Caching`—do not rename it to `Cache`, which clashes with the TypeScript DOM / Web Cache API global. Prefer the variable name `cache`. First read/write connects lazily; shutdown disconnects via internal `registerLifecycle`.
+
+`src/cache.ts` **only exports** `cache` and `remember`. Login sessions and business key prefixes live in their own Services, which `import { cache }` from here.
 
 ```typescript
-import { BaseCacheService } from '@aomex/cache';
+// src/cache.ts
+import { Caching, createRemember } from '@aomex/cache';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 
-export default class CacheService extends BaseCacheService { // [!code focus:28]
-  protected readonly loginTokenKey = this.key('login-token', 'v1');
+export const cache = new Caching(new CacheMemoryAdapter()); // [!code highlight]
+export const remember = createRemember(cache);
+```
 
-  protected createAdapter() {
-    return new CacheMemoryAdapter(); // [!code highlight]
-  }
+`get` / `set` / `delete` / `getAndDelete` / `singleFlight` accept a **string or `CacheKey`**. With `get<T>(key)`, the return type is `T | null`; TTL on `set` / `setNX` / `expire` is **`DurationInput`**: milliseconds or a readable string (`'7 days'`, `'30m'`, `'1.5 hours'`)—see below.
+
+Plugins take that instance directly:
+
+```typescript
+import { cache } from '@/cache';
+
+new Abuse({ store: cache, strategies: [/* … */] });
+new AuthSessionStrategy({ store: cache, /* … */ });
+new OAuth2Client({ store: cache, /* … */ });
+```
+
+::: tip
+Do not `new Caching(adapter)` inside each plugin—create once at the composition root and share. For two stores (local memory + shared Redis), build a second instance and call `createRemember` per instance.
+:::
+
+## Session read/write
+
+After login issues a token, write token → user payload; read it back in auth `onLoaded`; delete on logout. Version the `CacheKey` prefix so a schema change invalidates the whole batch in one place—put these methods on a User / Auth Service:
+
+```typescript
+// src/services/user.service.ts
+import { Service } from '@aomex/common';
+import { cache } from '@/cache';
+
+export default class UserService extends Service {
+  protected readonly loginTokenKey = cache.key('login-token', 'v1'); // [!code highlight]
 
   async getLoginToken(token: string) {
-    return this.cache.get<{ userId: number; role: number }>(
+    return cache.get<{ userId: number; role: number }>(
       this.loginTokenKey.key(token),
     );
   }
@@ -25,206 +53,179 @@ export default class CacheService extends BaseCacheService { // [!code focus:28]
     token: string,
     session: { userId: number; role: number },
   ) {
-    await this.cache.set(
-      this.loginTokenKey.key(token),
-      session,
-      '7 days',
-    );
+    await cache.set(this.loginTokenKey.key(token), session, '7 days');
   }
 
   async deleteLoginToken(token: string) {
-    await this.cache.delete(this.loginTokenKey.key(token));
+    return cache.delete(this.loginTokenKey.key(token));
   }
 }
 ```
 
-`get` / `set` / `delete` / `getAndDelete` / `singleFlight` accept **string or `CacheKey`**. With a generic on `get<T>(key)`, the return type is `T | null`; expiry on `set` / `setNX` / `expire`, and on `@remember`'s `duration`, is **`DurationInput`**: milliseconds or readable strings (`'7 days'`, `'30m'`, `'1.5 hours'`)—see below. Method names and parameters on `services.cache.xxx` match what you declare on `CacheService`; change a signature and the compiler nudges routes and auth callbacks too.
-
-Register and warm up (use `eager` in production when switching to Redis):
+From routes / auth:
 
 ```typescript
-await combineServices(
-  {
-    cache: () => import('./cache.service.js'),
-  },
-  { eager: ['cache'] }, // [!code highlight]
-);
-```
-
-::: warning
-In production or with multiple instances, if cache is not in `eager`, the first cache read pays Redis connection latency and tail latency can spike.
-:::
-
-## Session read/write
-
-After login issues a token, write「token → user info」to the cache; read it back in auth `onLoaded`; `delete` on logout. Use a versioned `CacheKey` prefix for key names—change one place on release to invalidate the whole batch when session shape changes.
-
-Business side (login / auth / logout):
-
-```typescript
-// 登录成功后写入
+// after successful login
 const token = auth.strategy('bearer').signature('sha256', user.id);
-await services.cache.setLoginToken(token, {
+await services.user.setLoginToken(token, {
   userId: user.id,
   role: user.role,
 }); // [!code highlight]
 
-// 鉴权 onLoaded 里读取
-const session = await services.cache.getLoginToken(token);
+// in auth onLoaded
+const session = await services.user.getLoginToken(token);
 if (!session) {
   return false;
 }
 
-// 退出登录删掉
-await services.cache.deleteLoginToken(token);
+// on logout
+await services.user.deleteLoginToken(token);
 ```
-
-Keep token issuance and DB lookups in User / Auth services; `CacheService` only stores and retrieves.
 
 ## Choosing an adapter
 
-The adapter decides where data lives: **memory** has zero deps, is in-process, and clears on restart—good for local dev and unit tests; **Redis** shares sessions and rate-limit counters across instances; **file** if you want a bit of disk persistence. Business code usually only changes `createAdapter()`; the read/write API stays the same.
+The adapter decides where data lives: **memory** is zero-dep, in-process, cleared on restart (local + unit tests); **Redis** shares session / counters across instances; **file** adds light disk persistence. Business code usually only changes the adapter passed at construction; the read/write API stays the same.
 
-Local dev and tests with `@aomex/cache/memory`, zero deps, data lost on restart:
+Local / tests with `@aomex/cache/memory`:
 
 ```typescript
+import { Caching } from '@aomex/cache';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 
-protected createAdapter() {
-  return new CacheMemoryAdapter();
-}
+export const cache = new Caching(new CacheMemoryAdapter());
 ```
 
-Production or multi-instance session / rate limiting—swap in `@aomex/cache-redis-adapter` (`ioredis` ships with the package; you typically only change `createAdapter()`):
+Production or multi-instance session / rate limits with `@aomex/cache-redis-adapter` (`ioredis` ships with the package):
 
 ```typescript
+import { Caching } from '@aomex/cache';
 import { CacheRedisAdapter } from '@aomex/cache-redis-adapter';
 
-protected createAdapter() {
-  return new CacheRedisAdapter({ host: '127.0.0.1', port: 6379 });
-}
+export const cache = new Caching(
+  new CacheRedisAdapter({ host: '127.0.0.1', port: 6379 }),
+);
 ```
 
-Single-machine persistence with light disk use: `@aomex/cache/file`.
+Single-node light persistence: `@aomex/cache/file`.
 
-## How keys compose: CacheKey
+## Building keys: CacheKey
 
-`this.key(...)` returns **`CacheKey`**, not a plain string: segments join with `:`, and you can keep chaining `.key` / `.keyHash` / `.toHash()`. `this.cache.get` / `set` and friends accept it directly—no need to `String(...)`.
+`cache.key(...)` (or static `CacheKey.key(...)`) returns a **`CacheKey`**, not a plain string: segments join with `:`, and you can chain `.key` / `.keyHash` / `.toHash()`. `cache.get` / `set` accept it directly—no `String(...)`.
 
 ```typescript
-this.key('user', 1); // user:1
-this.key('user').key(1); // 同上
-this.key('user').keyHash(1); // user:<md5('1')>，前缀可读
-this.key('user', 1).toHash(); // <md5('user:1')>
-this.keyHash('user', 1); // 同上，整键哈希
+cache.key('user', 1); // user:1
+cache.key('user').key(1); // same
+cache.key('user').keyHash(1); // user:<md5('1')>, readable prefix
+cache.key('user', 1).toHash(); // <md5('user:1')>
+cache.keyHash('user', 1); // same, full-key hash
 ```
 
-| Form | What you get |
+| Form | Result |
 | --- | --- |
-| `this.key('a', 1)` | Readable key `a:1` |
-| `prefix.key(id)` | Append another segment on an existing `CacheKey` prefix |
-| `this.key('a').keyHash(id)` | Keep the prefix; **hash only this argument** |
-| `this.key(...).toHash()` / `this.keyHash(...)` | **Full** MD5, no readable prefix |
+| `cache.key('a', 1)` | Readable `a:1` |
+| `prefix.key(id)` | Append one segment to an existing `CacheKey` |
+| `cache.key('a').keyHash(id)` | Keep prefix, **hash only this call’s args** |
+| `cache.key(...).toHash()` / `cache.keyHash(...)` | **Whole** MD5, no readable prefix |
 
-Use hashing when a segment is long, has odd characters, or you do not want plaintext in Redis; for day-to-day keys, a readable prefix makes debugging easier. The old standalone `hash()` is removed—use the patterns above.
+Hash long / odd / secret segments; keep readable prefixes for day-to-day keys. The old standalone `hash()` is gone—use the forms above.
 
 ### Prefixes and versions
 
-`protected readonly` fields centralize business prefixes (e.g. `login-token`); inside methods chain `.key(token)` / `.key(id)` instead of magic strings everywhere. Putting a version in the prefix (`v1` → `v2`) retires old sessions **without renaming keys**:
+Centralize prefixes (e.g. `login-token`) with `protected readonly` on the Service, then `.key(token)` / `.key(id)` in methods. Bumping `v1` → `v2` in the prefix retires old sessions without name clashes:
 
 ```typescript
-protected readonly loginTokenKey = this.key('login-token', 'v2');
+protected readonly loginTokenKey = cache.key('login-token', 'v2');
 ```
 
 ## DurationInput
 
-You no longer need to hand-write `60_000`. `set` / `setNX` / `expire`, and `@remember`'s `duration`, all accept:
+You do not need raw `60_000` everywhere. `set` / `setNX` / `expire`, and `@remember`’s `duration`, accept:
 
-- **number**: milliseconds (same as before)
-- **string**: number + unit, optional space—`'30m'`, `'1 hour'`, `'7 days'`
+- **number**: milliseconds (as before)
+- **string**: digits + unit, spaces optional—`'30m'`, `'1 hour'`, `'7 days'`
 
-Common units: `ms` / `s` (`sec` / `second`) / `m` (`min` / `minute`) / `h` (`hr` / `hour`) / `d` (`day`) / `w` (`week`) / `month` / `y` (`year`). A `month` is 30 days, a `year` is 365 days. You can also `import { parseDuration } from '@aomex/common'` to turn readable durations into milliseconds elsewhere.
+Common units: `ms` / `s` (`sec` / `second`) / `m` (`min` / `minute`) / `h` (`hr` / `hour`) / `d` (`day`) / `w` (`week`) / `month` / `y` (`year`). `month` = 30 days, `year` = 365 days. Or `import { parseDuration } from '@aomex/common'` elsewhere.
 
 ```typescript
-await this.cache.set(key, session, '7 days');
-await this.cache.setNX(lockKey, '1', '30 seconds');
-await this.cache.expire(key, '1 hour');
+await cache.set(key, session, '7 days');
+await cache.setNX(lockKey, '1', '30 seconds');
+await cache.expire(key, '1 hour');
 ```
 
-## exists: just presence
+## exists: presence only
 
-When you only need to know whether a key **is present**—without reading and decoding the value—use `exists`. It returns a `boolean` and accepts a string or `CacheKey`.
+When you only need “is the key there?” without decoding the value, use `exists`. Returns `boolean`; accepts string or `CacheKey`.
 
 ```typescript
-const key = this.loginTokenKey.key(token);
-if (await this.cache.exists(key)) {
-  // session still present — decide whether to get details
+const key = loginTokenKey.key(token);
+if (await cache.exists(key)) {
+  // session still present; decide whether to get details
 }
 ```
 
-Compared to `get`: on a miss, `get` returns `null` (you still judge that yourself) and deserializes the value; `exists` only asks the adapter whether the key is still there. Good for placeholder flags, whether a lock is still held, or probing before pulling a large object.
+Unlike `get` (miss → `null` plus deserialize), `exists` only asks the adapter. Good for markers, locks, or probing before loading a large value.
 
 ::: tip
-Between「exists then get」another client may delete or change the key—do not treat it as a strict transactional condition. For lock grabs and idempotency, still use `setNX` below; for one-shot consume, see `getAndDelete`.
+Between `exists` and `get` another writer may delete or change the key—do not treat it as a transaction. Use `setNX` for locks / idempotency; one-shot consume is `getAndDelete`.
 :::
 
-## getAndDelete: read once and remove
+## getAndDelete: read once
 
-To match Redis `GETDEL` and one-shot credentials, use `getAndDelete`: atomically fetch and delete. Under concurrent callers, only one gets the value; others see `null` (or your default).
+For Redis-style `GETDEL` / one-shot credentials, use `getAndDelete`: atomic get + delete. Concurrent callers: only one gets the value; others see `null` (or your default).
 
-Typical uses: OAuth `state`, email codes, short-lived download tickets—once read, it must be gone so it cannot be replayed.
+Typical uses: OAuth `state`, email codes, short download tickets—once read, it must die to stop replay.
 
 ```typescript
-const ticket = await this.cache.getAndDelete<{ userId: number }>(
-  this.key('email-verify', code),
+const ticket = await cache.getAndDelete<{ userId: number }>(
+  cache.key('email-verify', code),
 );
 if (!ticket) {
-  ctx.throw(400, 'Invalid or already used code');
+  ctx.throw(400, 'invalid or used code');
 }
-// ticket.userId is usable; the key is already gone
+// ticket.userId is usable; the key is gone
 ```
 
-Unlike「`get` then `delete`」, nothing else can read the same key between the two steps; `getAndDelete` finishes in one adapter call. An optional second argument is the default on miss (same typing idea as `get`).
+`get` then `delete` leaves a window for a second reader; `getAndDelete` finishes in one adapter call. Optional second arg is the default on miss (same typing as `get`).
 
 ## setNX and counters
 
-`setNX` writes only when the key is missing—use for distributed locks and idempotent「process once」. TTL must cover worst-case task time or another worker can take the lock after expiry. `increment` / `expire` suit captcha failure counts and sliding-window tallies.
+`setNX` writes only when the key is missing—distributed locks / “handle once”. TTL must cover the worst-case job, or a second worker may grab the lock. `increment` / `expire` fit OTP failure counts and fixed windows.
 
-Lock grab, idempotency (TTL greater than worst-case task time):
+Lock / idempotency (TTL > worst job time):
 
 ```typescript
-const ok = await this.cache.setNX(lockKey, '1', '30 seconds');
+const ok = await cache.setNX(lockKey, '1', '30 seconds');
 if (!ok) {
   return;
 }
 ```
 
-Failed verification attempts: `increment` first, then `expire` on the first hit (or when TTL is not set yet)—same habit as Redis `INCR`. On the memory adapter, `increment` / `decrement` **keep the existing TTL** instead of clearing expiry when the number changes.
+OTP failures: `increment` first, then `expire` when count is 1 (or TTL was never set)—same habit as Redis `INCR`. Memory adapter keeps existing TTL across incr/decr.
 
 ```typescript
-const key = this.key('otp-fail', phone);
-const n = await this.cache.increment(key);
-if (n === 1 || (await this.cache.ttl(key)) === -1) {
-  await this.cache.expire(key, '15 minutes'); // [!code highlight]
+const key = cache.key('otp-fail', phone);
+const n = await cache.increment(key);
+if (n === 1 || (await cache.ttl(key)) === -1) {
+  await cache.expire(key, '15 minutes'); // [!code highlight]
 }
 if (n > 5) {
   ctx.throw(429);
 }
 ```
 
-## singleFlight: run once under concurrency
+## singleFlight: one compute under concurrency
 
-When many callers need the same「compute now」result at once (fetch JWKS, one expensive call) but you do **not** want a long-lived cache entry, use `singleFlight`: the first runs `factory`, the others share the result; **nothing is kept as a long-term cache** after the flight ends—the next call computes again.
+When many callers need the same “compute now” result (JWKS fetch, expensive API) without long-term caching, use `singleFlight`: the first runs `factory`, others wait for the shared result; **nothing is kept after the flight**, so the next call computes again.
 
 ```typescript
-async loadJwks() {
-  return this.cache.singleFlight(this.key('jwks'), async () => { // [!code focus:3]
+async function loadJwks() {
+  return cache.singleFlight(cache.key('jwks'), async () => { // [!code focus:3]
     return fetchJwksFromIdp();
   });
 }
 ```
 
-Versus `@remember`: `remember` = single-flight **plus** writing a long-lived entry for `duration`; `singleFlight` = **share this concurrent wave only**. The lock lasts about 30s and renews while running; waiters see the same error on failure. If the winner crashes without writing a result, waiters re-contend (with a round limit).
+vs `@remember`: `remember` = single-flight + **write with `duration`**; `singleFlight` = **this concurrency wave only**. Lock ~30s with renewals; waiters see the same error on failure. If the winner crashes without writing, waiters compete again (with a round cap).
 
 ::: tip
 Across instances the key must live on a shared adapter (e.g. Redis); in-process memory only protects the current process.
@@ -232,32 +233,27 @@ Across instances the key must live on a shared adapter (e.g. Redis); in-process 
 
 ## Cache decorator
 
-Repeating「get → miss → compute → set」in every method is noisy, and concurrent hits on the same key recompute many times. `createRemember` builds a method decorator `@remember`: cache hit returns immediately; on miss only the original method runs and writes; **for the same key under concurrency, only one execution runs**, the rest wait for the result (placeholder lock ~30s with renewals, same idea as `singleFlight`).
+Repeating get → miss → compute → set is noisy, and concurrent hits on one key recompute many times. `createRemember` builds `@remember`: hit returns immediately; miss runs the original method once and writes; **same key under concurrency runs once**, others wait (~30s placeholder lock, same idea as `singleFlight`).
 
-Bind the decorator to **your** cache service class—pass the **subclass constructor** of `BaseCacheService` (not the base class, not an instance). Defining it in `cache.service.ts` is simplest; business code imports `remember`:
+Bind the decorator to a concrete **`Caching` instance**—`createRemember(cache)`, not an adapter or class constructor. Export it from `cache.ts`, then import `remember` in business Services:
 
 ```typescript
-import { BaseCacheService, createRemember } from '@aomex/cache';
+import { Caching, createRemember } from '@aomex/cache';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 
-export default class CacheService extends BaseCacheService {
-  protected createAdapter() {
-    return new CacheMemoryAdapter();
-  }
-}
-
-export const remember = createRemember(CacheService); // [!code highlight]
+export const cache = new Caching(new CacheMemoryAdapter());
+export const remember = createRemember(cache); // [!code highlight]
 ```
 
-After `BaseCacheService` connects the adapter in `onInit`, remember is wired automatically and torn down on shutdown—you **do not** register it by hand. Still use `eager: ['cache']` in `combineServices`: if cache is not ready, decorated methods **wait**; after shutdown, calls **throw**.
+Connection is lazy inside `Caching`.
 
-### Apply to business methods
+### On a business method
 
-The method must be **async** (return a `Promise`). Passing only a duration means “how long to cache” (`DurationInput`):
+The method must be **async** (return a Promise). Duration alone means “how long to cache” (`DurationInput`):
 
 ```typescript
 import { Service } from '@aomex/common';
-import { remember } from './cache.service.js';
+import { remember } from '@/cache';
 
 class ReportService extends Service {
   @remember('1 minute')
@@ -267,7 +263,7 @@ class ReportService extends Service {
 }
 ```
 
-To customize the key or default value, pass an object. The first `await services.report.find(1)` hits the DB; later calls with the same args within the window read the cache. `duration` is how long the entry lives after write:
+Pass an object for a custom key or default. First `await services.report.find(1)` hits the DB; same args inside the window read cache. `duration` is still the write TTL:
 
 ```typescript
 class ReportService extends Service {
@@ -284,40 +280,40 @@ class ReportService extends Service {
 }
 ```
 
-| Form | Purpose |
+| Form | Role |
 | --- | --- |
 | `@remember('1 minute')` / `@remember(60_000)` | TTL only; default key rule |
-| `duration` | Required (object form); how long to cache |
-| `key: 'fixed-string'` | One key for the whole method (no args, site-wide singleton result) |
-| `key: (...args) => string` | Key from args; `this` is still the business instance |
-| `defaultValue` | When the original method returns `null`, callers see this instead (default `null`) |
+| `duration` | Required in object form; how long to keep |
+| `key: 'fixed'` | One key for the whole method (no args / site singleton) |
+| `key: (...args) => string` | Key from args; `this` is still the instance |
+| `defaultValue` | When the method returns `null`, callers see this (default still `null`) |
 
-### Default key composition
+### Default key shape
 
 Without `key`, the framework uses:
 
-`class name or displayName` + `-` + `method name` + `-` + `JSON.stringify(arguments)`
+`class name or displayName` + `-` + `method name` + `-` + `JSON.stringify(args)`
 
-If you extend `Service` and the class name ends with `Service`, it uses `displayName` without the suffix (`ReportService` → `Report`) so keys are not cluttered. Args go through JSON—**do not pass non-serializable or unstable values** (`Date`, circular refs, new object literals every call) or keys will not match and caching is effectively off. For many or messy args, a custom `key` is safer.
+Classes extending `Service` whose name ends with `Service` use `displayName` without the suffix (`ReportService` → `Report`). Args go through JSON—**avoid non-serializable or jittery values** (`Date`, cycles, fresh object literals), or keys never match. Prefer an explicit `key` when args are messy.
 
-### Concurrency and empty results
+### Concurrency and null results
 
-Concurrent calls on the same key: the first uses `setNX` to reserve and run the original method; the placeholder lasts ~30s and renews while running; others poll until it clears, then read cache (or get `defaultValue`). This prevents cache stampede, not general distributed locking—do not use it as a generic lock. For「share this wave only, no long-lived cache」, use `singleFlight` above.
+The first caller `setNX`s a ~30s placeholder (renewed while running); others poll until it drops, then read cache (or `defaultValue`). This is stampede protection, not a general distributed lock—use `singleFlight` when you only need shared compute without long-term cache.
 
-When the original method returns `null`, **`null` is not written** (so「missing」is not frozen too long); callers see `defaultValue`. To cache an explicit「not found」, design keys yourself or use hand-written `this.cache.set`.
+A `null` return is **not** written (avoids locking “missing” too long); callers see `defaultValue`. To cache an explicit miss, design your own key or call `cache.set` by hand.
 
-### Multiple cache backends
+### Multiple caches
 
-Local memory in one service, shared Redis in another: one `BaseCacheService` subclass each, one `createRemember` each. Scope is per **service class**; there is no `fork()`. Whichever `remember` you attach decides which store is used.
+Local memory plus shared Redis: one `new Caching(adapter)` each, one `createRemember` each. Scope is per **instance**; there is no `fork()`. Whichever `remember` you attach picks the store.
 
 ::: warning
-Use only on **read-heavy, write-light** queries that can go slightly stale. Do not decorate methods with side effects—writes, SMS, stock deductions—cached rows will be stale. When data changes, `cache.delete` the key or bump key version (see key composition above).
+Only decorate **read-heavy, briefly stale-OK** queries. Do not decorate writes, SMS, or inventory decrements—cache would serve stale side effects. On change, `cache.delete` the key or bump the key version (see “Building keys”).
 :::
 
-## Next steps
+## Next
 
-- Service registration and `eager`: [Service layer](/en/core/service)
+- Service registration and lifecycle: [Services](/en/core/service)
 - OAuth `state` and `store`: [OAuth2 client](/en/plugins/oauth2-client)
-- `store` for abuse counters: [Abuse protection](/en/plugins/abuse)
-- Using session in auth: [Auth entry point](/en/plugins/auth)
-- Bearer and token strategies: [Bearer strategy](/en/plugins/auth-bearer-strategy)
+- Abuse `store`: [Abuse protection](/en/plugins/abuse)
+- Sessions in auth: [Auth entry](/en/plugins/auth)
+- Bearer / token strategies: [Bearer strategy](/en/plugins/auth-bearer-strategy)

@@ -50,7 +50,7 @@ rule.mongoDecimal128();
 
 ```typescript
 import { body, response } from '@aomex/web';
-import { userBodySchema } from '../schemas/user.schema.js';
+import { userBodySchema } from '@/schemas/user.schema';
 
 router.post('/users', {
   mount: [body(userBodySchema)], // [!code highlight]

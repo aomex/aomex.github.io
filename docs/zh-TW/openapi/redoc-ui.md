@@ -19,7 +19,7 @@ mount 裡掛 redocUI，團隊開啟 /redoc（預設）即可讀同一份 OpenAPI
 ```typescript
 import { redocUI } from '@aomex/redoc-ui';
 import { generateOpenapi } from '@aomex/openapi-generator';
-import { app } from './app.js';
+import { app } from '@/app';
 
 mount: [ // [!code focus:13]
   redocUI({

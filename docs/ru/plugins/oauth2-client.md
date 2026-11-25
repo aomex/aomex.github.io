@@ -11,7 +11,7 @@ outline: deep
 ```bash
 pnpm add @aomex/oauth2-client
 # peer：@aomex/web @aomex/cache @aomex/common
-# при пресете, например: pnpm add @aomex-contrib/oauth2-google
+# 有预设时再加，例如：pnpm add @aomex-contrib/oauth2-google
 ```
 
 ## Пресеты вендоров (рекомендуется)
@@ -25,9 +25,9 @@ pnpm add @aomex/oauth2-client
 ```typescript
 // src/services/google.service.ts
 import { Service } from '@aomex/common';
-import { CacheMemoryAdapter } from '@aomex/cache/memory';
 import type { WebContext } from '@aomex/web';
 import { GoogleOAuth2Client } from '@aomex-contrib/oauth2-google';
+import { cache } from '@/cache';
 
 export default class GoogleService extends Service {
   protected readonly oauth = new GoogleOAuth2Client({ // [!code focus:8]
@@ -36,7 +36,7 @@ export default class GoogleService extends Service {
     redirectUri: (ctx) => {
       return `${ctx.request.origin}/oauth/google/callback`;
     },
-    store: new CacheMemoryAdapter(),
+    store: cache, // [!code highlight]
   });
 
   oauthRedirect(ctx: WebContext) {
@@ -53,8 +53,8 @@ export default class GoogleService extends Service {
 
 ```typescript
 export const services = await combineServices({
-  google: () => import('./google.service.js'),
-  // github: () => import('./github.service.js'),
+  google: () => import('@/services/google.service'),
+  // github: () => import('@/services/github.service'),
 });
 ```
 
@@ -62,7 +62,7 @@ export const services = await combineServices({
 
 ```typescript
 import { Router } from '@aomex/web';
-import { services } from '../services/index.js';
+import { services } from '@/services';
 
 export const router = new Router({ prefix: '/oauth' });
 
@@ -75,8 +75,8 @@ router.get('/google', {
 router.get('/google/callback', {
   action: async (ctx) => {
     const claims = await services.google.oauthCallback(ctx); // [!code highlight]
-    // без onProfile: уже проверенные claims id_token (sub / email …)
-    // здесь пишите сессию: выдача Bearer / запись Session …
+    // 省略 onProfile 时：已验签的 id_token claims（sub / email …）
+    // 在此写登录态：签发 Bearer / 写 Session …
     ctx.send(claims);
   },
 });
@@ -84,7 +84,7 @@ router.get('/google/callback', {
 
 GitHub аналогично: отдельный `GithubService` с `GitHubOAuth2Client`; у `callback` по умолчанию чаще `{ base, userinfo }`. `redirectUri` через `(ctx) => …` собирает колбэк по origin запроса — удобно при нескольких доменах.
 
-`store` временно держит `state` (и PKCE verifier). При конструкторе через `registerLifecycle` автоматически `connect` / при shutdown `disconnect`. Локально — memory; в проде на нескольких инстансах — Redis-адаптер (скаффолд часто сразу `CacheRedisAdapter`), иначе колбэк может попасть на другую машину без state. TTL state по умолчанию `'10 minutes'` (`stateTtl`, `DurationInput`); при параллельных callback успешен только один, при сбое обмена билета state **не** восстанавливается.
+`store` временно держит `state` (и PKCE verifier). Тип — общий [`Caching`](/ru/core/cache). Локально — memory; в проде на нескольких инстансах — Redis-адаптер, но передавайте тот же `Caching`, иначе колбэк может попасть на другую машину без state. Подключение — лениво через `Caching`. TTL state по умолчанию `'10 minutes'` (`stateTtl`, `DurationInput`); при параллельных callback успешен только один, при сбое обмена билета state **не** восстанавливается.
 
 Для GIS / One Tap с `credential` не берите oauth2-google — пакет `google-identity-login` из таблицы ниже (тоже можно свернуть в Service).
 
@@ -126,9 +126,9 @@ GitHub аналогично: отдельный `GithubService` с `GitHubOAuth2
 
 ```typescript
 import { Service } from '@aomex/common';
-import { CacheMemoryAdapter } from '@aomex/cache/memory';
 import type { WebContext } from '@aomex/web';
 import { OAuth2Client } from '@aomex/oauth2-client';
+import { cache } from '@/cache';
 
 export default class IdpService extends Service {
   protected readonly oauth = new OAuth2Client({ // [!code focus:14]
@@ -140,7 +140,7 @@ export default class IdpService extends Service {
       return `${ctx.request.origin}/oauth/callback`;
     },
     scopes: ['profile'],
-    store: new CacheMemoryAdapter(),
+    store: cache,
     onProfile: async ({ token }) => {
       const res = await fetch('https://idp.example.com/userinfo', {
         headers: { Authorization: `Bearer ${token.access_token}` },
@@ -171,7 +171,7 @@ protected readonly oauth = new OAuth2Client({ // [!code focus:8]
     return `${ctx.request.origin}/oauth/callback`;
   },
   scopes: ['openid', 'email', 'profile'],
-  store: new CacheMemoryAdapter(),
+  store: cache,
   oidc: { issuer: 'https://accounts.example.com' },
 });
 ```

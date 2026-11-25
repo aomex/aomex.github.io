@@ -25,12 +25,16 @@ Put bait events in the `socket-events` strategy’s `events`: strings support `*
 
 ```typescript
 import { Abuse } from '@aomex/abuse';
+import { Caching } from '@aomex/cache';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 import { WebsocketApp, channels } from '@aomex/websocket';
 import { WsTransport } from '@aomex/websocket-ws-transport';
+import { logger } from '@/services/logger.service';
+
+const cache = new Caching(new CacheMemoryAdapter());
 
 const abuse = new Abuse({
-  store: new CacheMemoryAdapter(),
+  store: cache,
   strategies: [
     { // [!code focus:7]
       strategy: 'socket-events',
@@ -43,7 +47,7 @@ const abuse = new Abuse({
 });
 
 new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'en-US' },
   transport: new WsTransport(),
   mount: [

@@ -4,22 +4,22 @@ outline: deep
 
 # Prisma
 
-HTTP 境界で「DB に変なデータ」を止めつつ、表構造と二重の schema を手書きしたくない。`@aomex/prisma` は prisma generate 時に検証用 generated を出し、業務では definePrismaSchema で上書き（パスワード隠蔽、Json 絞り込み等）。**生成ファイルをそのままルート body() に使わない**——definePrismaSchema 解包後の prismaInput / prismaOutput から参照。definePrismaSchema を飛ばして generated 直使いは「表構造」向けで「API 契約」ではない。
+HTTP 境界で「DB に不正データを書かない」ようにしつつ、テーブル構造の二重 schema 手書きを避ける。`@aomex/prisma` は `prisma generate` 時に検証用 generated を出し、業務では definePrismaSchema で上書き（パスワード隠蔽、Json 締め等）。**生成ファイルをそのままルート body() に使わない**——definePrismaSchema 解包後の prismaInput / prismaOutput を統一参照。generated 直利用は「テーブル向け」で「API 契約向け」ではない。
 
-表の Json フィールドは generated が緩いことが多い。Client 型とリクエスト検証を揃えるなら下記 **Json 整合フルフロー**。
+テーブルの Json フィールドは generated デフォルトが緩い。Client 型とリクエスト検証を揃えるなら下記 **Json 全链路**。
 
 ```bash
 pnpm add @aomex/prisma
-# Json 进 Prisma Client 具名类型时（开发依赖）：
+# Json を Prisma Client の名前付き型にする場合（dev 依存）：
 pnpm add -D prisma-json-types-generator
 ```
 
 1. schema.prisma に generator aomex（任意で generator json）  
-2. prisma generate 実行  
+2. prisma generate  
 3. definePrismaSchema + PrismaJson 宣言  
 4. ルートで body(prismaInput.user)、response({ content: prismaOutput.user })
 
-## Json 整合の全工程
+## Json 全链路
 
 **1. schema.prisma**
 
@@ -48,7 +48,7 @@ model user {
 }
 ```
 
-`/// [UserProfile]` は json ジェネレータ向け：Client の profile が下で宣言する `PrismaJson.UserProfile` に対応。
+`/// [UserProfile]` は json ジェネレーター向け：Client で profile は下で宣言する `PrismaJson.UserProfile` に対応。
 
 **2. 生成**
 
@@ -63,7 +63,7 @@ npx prisma generate
 ```typescript
 import { rule, type Validator } from '@aomex/common';
 import { definePrismaSchema } from '@aomex/prisma';
-import { generated } from '../generated/aomex/prisma.js';
+import { generated } from '@/generated/aomex/prisma';
 
 const userProfile = rule.object({
   theme: rule.enum(['dark', 'light']).optional(),
@@ -99,7 +99,7 @@ export const { prismaInput, prismaOutput, prismaEnum } = definePrismaSchema(
 
 ```typescript
 import { body, response, Router } from '@aomex/web';
-import { prismaInput, prismaOutput } from '../schemas/prisma.schema.js';
+import { prismaInput, prismaOutput } from '@/schemas/prisma.schema';
 
 export const router = new Router({ prefix: '/users' });
 
@@ -118,15 +118,15 @@ router.post('/', {
 });
 ```
 
-Json なし・機密フィールドなしなら第 2 引数 {} で generated 既定が使える。
+Json も機密もなければ第二引数 `{}` で generated デフォルトでも可。
 
 ## ルート型と omit / extend
 
-- body(prismaInput.user) 後、ctx.body の profile は { theme?, bio? } | null | undefined 程度であり、裸 JsonValue ではない。
-- PrismaJson.UserProfile と userProfile ルールは**同じ** rule.object 由来——`Validator.Infer<typeof userProfile>` で宣言し、interface 二重持ちを避ける。Json を extend しないと HTTP は何でも POST でき Client は具名型——型と実行時が割れる。
-- prismaInput.user.pick('name', 'profile')、partial() 等は型上サブセットに。PATCH・部分更新向き。
+- body(prismaInput.user) 後、ctx.body の profile は { theme?, bio? } | null | undefined 相当で、裸 JsonValue ではない。
+- PrismaJson.UserProfile と userProfile rule は**同一** rule.object から——`Validator.Infer<typeof userProfile>` で宣言し、interface 二重管理でずれない。Json を extend しないと HTTP は何でも POST でき Client は名前型——型と実行が裂ける。
+- prismaInput.user.pick('name', 'profile')、partial() 等は型で部分集合に。PATCH 向き。
 
-ユーザー作成でフィールド隠蔽・パスワード長は definePrismaSchema の omit / extend：
+ユーザー作成でフィールド隠し・パスワード長は definePrismaSchema 内 omit / extend：
 
 ```typescript
 user: {
@@ -146,28 +146,28 @@ user: {
 },
 ```
 
-## スキーマ変更後の手順と export
+## スキーマ変更後と export
 
-| 手順 | いつ触るか |
+| ステップ | いつ触るか |
 | --- | --- |
-| `generator aomex` output | 生成パスがスキャフォールドと違うとき |
-| `/// [TypeName]` | Json 列追加で Client 具名型が要る |
-| `userProfile` + `PrismaJson` | Json 形状ごとに 1 組 |
-| `definePrismaSchema` `extend` | generated 既定が広い / `password` を隠す |
-| `prisma generate` | `schema.prisma` 変更のたび |
+| `generator aomex` output | 生成パスが脚手架と違うとき |
+| `/// [TypeName]` | Json 追加で Client 名前型が要るとき |
+| `userProfile` + `PrismaJson` | Json 形状ごとに一対 |
+| `definePrismaSchema` `extend` | generated デフォルトが広い / `password` 隠す |
+| `prisma generate` | schema.prisma 変更のたび |
 
 | export | ルートでの典型 |
 | --- | --- |
-| `prismaInput` | `body()`、`pick` / `partial` |
+| `prismaInput` | `body()`、一部 `pick` / `partial` |
 | `prismaOutput` | `response({ content })` |
-| `prismaEnum` | 表 enum に合わせた `rule.enum` |
+| `prismaEnum` | テーブル enum に揃えた `rule.enum` |
 
-ルートの prisma schema 参照は [OpenAPI](/ja/openapi/) に入る。表や Json 変更後：prisma generate → 上書き確認 → [OpenAPI を生成](/ja/openapi/)。generate 忘れは型が古いまま、上書きが新フィールドと合わない。
+ルート参照の prisma schema は [OpenAPI](/ja/openapi/) に入る。表/Json 変更後：prisma generate → 上書き確認 → [OpenAPI 生成](/ja/openapi/)。generate 忘れだと型は古いまま、上書きが新フィールドとずれる。
 
-本パッケージは** HTTP ミドルウェアではない**。`WebApp.mount` は不要。
+本パッケージ**は** HTTP ミドルウェアではない。`WebApp.mount` 不要。
 
 ## 関連
 
 - [バリデータ概要](/ja/validators/)
-- [生成OpenAPI](/ja/openapi/)
-- [OpenAPI を生成](/ja/openapi/)
+- [OpenAPI 生成](/ja/openapi/)
+- [OpenAPI 生成](/ja/openapi/)

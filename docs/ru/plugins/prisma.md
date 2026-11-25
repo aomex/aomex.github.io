@@ -4,22 +4,22 @@ outline: deep
 
 # Prisma
 
-Отсекайте плохие данные на границе HTTP без второй схемы руками. `@aomex/prisma` генерирует артефакты валидации на `prisma generate`; `definePrismaSchema` — override (скрыть пароль, ужесточить Json). **Не** используйте сгенерированные файлы напрямую в `body()` — только `prismaInput` / `prismaOutput` из `definePrismaSchema`. Без `definePrismaSchema` останутся табличные формы, не API-контракты.
+На границе HTTP не пускать «мусор» в БД и не вести вторую ручную schema под таблицы. `@aomex/prisma` при `prisma generate` выдаёт generated для валидации; в коде — definePrismaSchema с переопределениями (скрыть password, ужать Json). **Не** подставляйте generated напрямую в body() роута — только prismaInput / prismaOutput после definePrismaSchema. Прямой generated — про схему таблицы, не про контракт API.
 
-Json-колонки в генерации по умолчанию «свободные»; для Client и валидации запроса — **цепочка выравнивания Json** ниже.
+Поля Json в таблице по умолчанию в generated очень широкие; чтобы тип Client и проверка запроса совпали — **полная цепочка Json** ниже.
 
 ```bash
 pnpm add @aomex/prisma
-# Json 进 Prisma Client 具名类型时（开发依赖）：
+# Именованный тип Json в Prisma Client (dev-зависимость):
 pnpm add -D prisma-json-types-generator
 ```
 
-1. `generator aomex` (и опционально `generator json`) в `schema.prisma`  
-2. `prisma generate`  
-3. `definePrismaSchema` + объявления `PrismaJson`  
-4. Маршруты: `body(prismaInput.user)`, `response({ content: prismaOutput.user })`
+1. В schema.prisma — generator aomex (и опционально generator json)  
+2. prisma generate  
+3. definePrismaSchema + объявления PrismaJson  
+4. На роуте body(prismaInput.user), response({ content: prismaOutput.user })
 
-## Выравнивание Json end-to-end
+## Полная цепочка Json
 
 **1. schema.prisma**
 
@@ -48,7 +48,7 @@ model user {
 }
 ```
 
-`/// [UserProfile]` говорит json-генератору — в Client `profile` → `PrismaJson.UserProfile` ниже.
+`/// [UserProfile]` для json-генератора: в Client поле profile соответствует `PrismaJson.UserProfile` ниже.
 
 **2. Генерация**
 
@@ -56,14 +56,14 @@ model user {
 npx prisma generate
 ```
 
-Не правьте вручную `src/generated/aomex/prisma*`.
+Не правьте `src/generated/aomex/prisma*` вручную.
 
 **3. `src/schemas/prisma.schema.ts`**
 
 ```typescript
 import { rule, type Validator } from '@aomex/common';
 import { definePrismaSchema } from '@aomex/prisma';
-import { generated } from '../generated/aomex/prisma.js';
+import { generated } from '@/generated/aomex/prisma';
 
 const userProfile = rule.object({
   theme: rule.enum(['dark', 'light']).optional(),
@@ -95,11 +95,11 @@ export const { prismaInput, prismaOutput, prismaEnum } = definePrismaSchema(
 );
 ```
 
-**4. Маршруты**
+**4. Роут**
 
 ```typescript
 import { body, response, Router } from '@aomex/web';
-import { prismaInput, prismaOutput } from '../schemas/prisma.schema.js';
+import { prismaInput, prismaOutput } from '@/schemas/prisma.schema';
 
 export const router = new Router({ prefix: '/users' });
 
@@ -118,15 +118,15 @@ router.post('/', {
 });
 ```
 
-Без Json и чувствительных полей второй аргумент `{}` всё ещё работает с дефолтами генерации.
+Без Json и чувствительных полей второй аргумент `{}` — дефолты generated.
 
-## Типы маршрутов, omit, extend
+## Типы роута и omit / extend
 
-- С `body(prismaInput.user)` у `profile` должно быть `{ theme?, bio? } | null | undefined`, не сырой `JsonValue`.
-- `PrismaJson.UserProfile` и правила `userProfile` — **один** `rule.object`; объявляйте `Validator.Infer<typeof userProfile>`, не дублируйте интерфейсы.
-- `prismaInput.user.pick('name', 'profile')`, `partial()` и т.д. сужают PATCH.
+- После body(prismaInput.user) у ctx.body profile — уровень { theme?, bio? } | null | undefined, не голый JsonValue.
+- PrismaJson.UserProfile и rule userProfile — **один** rule.object; объявляйте через `Validator.Infer<typeof userProfile>`, не два interface. Без extend Json в HTTP пустит что угодно, Client — именованный тип: расхождение типов и рантайма.
+- pick / partial на prismaInput.user сужают тип — PATCH, частичные обновления.
 
-Скрытие полей и длина пароля внутри `definePrismaSchema`:
+Создание пользователя: скрыть поля, длина password — omit / extend в definePrismaSchema:
 
 ```typescript
 user: {
@@ -146,28 +146,28 @@ user: {
 },
 ```
 
-## После изменения schema
+## После смены схемы и экспорты
 
 | Шаг | Когда |
 | --- | --- |
-| Вывод `generator aomex` | Путь ≠ scaffold |
-| `/// [TypeName]` | Новое Json-поле — именованный тип в Client |
-| `userProfile` + `PrismaJson` | Одна пара на форму Json |
-| `extend` в `definePrismaSchema` | Генерация слишком широкая / скрыть `password` |
-| `prisma generate` | После каждого изменения `schema.prisma` |
+| output `generator aomex` | Путь генерации ≠ scaffold |
+| `/// [TypeName]` | Новое Json и именованный тип в Client |
+| `userProfile` + `PrismaJson` | Пара на каждую форму Json |
+| `extend` в definePrismaSchema | generated слишком широкий / скрыть `password` |
+| `prisma generate` | После каждого изменения schema.prisma |
 
-| Экспорт | На маршруте |
+| Экспорт | На роуте |
 | --- | --- |
-| `prismaInput` | `body()`, `pick` / `partial` |
+| `prismaInput` | `body()`, pick / partial |
 | `prismaOutput` | `response({ content })` |
-| `prismaEnum` | `rule.enum` по таблице |
+| `prismaEnum` | `rule.enum` как в таблице |
 
-Связанные prisma-schema идут в [OpenAPI](/ru/openapi/); после таблиц/Json: `prisma generate` → overrides → [Генерация OpenAPI](/ru/openapi/). Забыли generate — устаревшие типы.
+Prisma schema на роутах попадает в [OpenAPI](/ru/openapi/). После таблицы/Json: prisma generate → проверить overrides → [генерация OpenAPI](/ru/openapi/). Забыли generate — типы старые, overrides не бьются с новыми полями.
 
-Не HTTP-middleware — нет `WebApp.mount`.
+Пакет **не** HTTP middleware, `WebApp.mount` не нужен.
 
-## Связанное
+## См. также
 
-- [Обзор валидаторов](/ru/validators/)
-- [Генерация OpenAPI](/ru/openapi/)
-- [Генерация OpenAPI](/ru/openapi/)
+- [валидаторы](/ru/validators/)
+- [генерация OpenAPI](/ru/openapi/)
+- [генерация OpenAPI](/ru/openapi/)

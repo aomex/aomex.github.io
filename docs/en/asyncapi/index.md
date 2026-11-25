@@ -95,10 +95,11 @@ Same pattern as OpenAPI: mount on `ConsoleApp`, run one terminal command. Defaul
 ```typescript
 import { asyncapi } from '@aomex/asyncapi-generator';
 import { commanders, ConsoleApp } from '@aomex/console';
+import { logger } from '@/services/logger.service';
 
 const app = new ConsoleApp({
   services,
-  logger: services.logger,
+  logger,
   language: 'en-US',
   mount: [ // [!code focus:12]
     asyncapi({

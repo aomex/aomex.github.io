@@ -75,7 +75,7 @@ socket.onmessage = (ev) => {
 };
 ```
 
-單測或不想掃目錄時，也可以直接塞例項：
+單測或不想掃目錄時，也可以直接塞實例：
 
 ```typescript
 mount: [channels([chatChannel, orderChannel])],

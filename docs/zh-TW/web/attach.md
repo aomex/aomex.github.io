@@ -86,9 +86,11 @@ body({
 | `rule.file()` | 單欄位業務規則（MIME、體積） |
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   body: { // [!code focus:3]

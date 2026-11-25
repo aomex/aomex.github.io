@@ -4,7 +4,7 @@ outline: deep
 
 # 身份認證
 
-先分清兩件事：**這個人是誰**（認證），以及**能不能幹這件事**（授權）。`@aomex/auth` 把多套策略收進同一個 Auth 例項：驗不過身份一般是 **401**，身份有了但許可權不夠是 **403**。前端和監控都能據此判斷「去登入」還是「換賬號 / 升許可權」。
+先分清兩件事：**這個人是誰**（認證），以及**能不能幹這件事**（授權）。`@aomex/auth` 把多套策略收進同一個 Auth 實例：驗不過身份一般是 **401**，身份有了但許可權不夠是 **403**。前端和監控都能據此判斷「去登入」還是「換賬號 / 升許可權」。
 
 給一組業務介面加上「必須先登入」，其中少數介面還要更高角色；登入介面本身不掛鑑權，登進去之後能在 ctx.auth 裡讀到身份。
 
@@ -28,7 +28,7 @@ pnpm add @aomex/auth
 
 ## 一組私有 API：Router 掛 authenticate
 
-`Auth` 例項裡註冊各策略（Bearer / Session / API Key / JWT）；`authenticate(name)` 返回「先驗身份」的中介軟體。一整組介面都要先登入時，掛到 `Router.mount`；驗過以後 `ctx.auth[name]` 可讀身份。
+`Auth` 實例裡註冊各策略（Bearer / Session / API Key / JWT）；`authenticate(name)` 返回「先驗身份」的中介軟體。一整組介面都要先登入時，掛到 `Router.mount`；驗過以後 `ctx.auth[name]` 可讀身份。
 
 ```typescript
 import { Auth } from '@aomex/auth';

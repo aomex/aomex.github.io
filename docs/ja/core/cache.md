@@ -1,22 +1,50 @@
 # キャッシュ
 
-**CacheService** を用意する。memory / file / Redis アダプタを選び、`this.cache` で読み書きする。ログイン **session**（token → ユーザー情報）で「発行・認証読み取り・ログアウト削除」の一連を通す。
+コンポジションルートで共有 **`Caching`** を 1 つ：memory / file / Redis アダプタを選び、業務と認証 / 悪用対策 / OAuth などのプラグインへ**同一インスタンス**を渡します（設定名は多くの場合 `store`）。ログイン **session**（token → ユーザー情報）で「発行・認証読取・ログアウト削除」の一連を通します。
 
-サブクラスは `createAdapter()` を実装する。業務プレフィックスは `protected readonly` と `this.key(...)` で `CacheKey` にまとめ、メソッド内では `.key(token)` を連鎖して文字列を散らさない。
+クラス名は `Caching` のまま、`Cache` に変えない — TypeScript DOM / Web Cache API のグローバル `Cache` と衝突を避けます。インスタンス変数は `cache` 推奨。初回読み書きで遅延接続、停止時は内部 `registerLifecycle` で切断。
+
+`src/cache.ts` は **`cache` と `remember` だけ export**；ログイン session、業務キープレフィックスは各 Service に書き、ここから `import { cache }`。
 
 ```typescript
-import { BaseCacheService } from '@aomex/cache';
+// src/cache.ts
+import { Caching, createRemember } from '@aomex/cache';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 
-export default class CacheService extends BaseCacheService { // [!code focus:28]
-  protected readonly loginTokenKey = this.key('login-token', 'v1');
+export const cache = new Caching(new CacheMemoryAdapter()); // [!code highlight]
+export const remember = createRemember(cache);
+```
 
-  protected createAdapter() {
-    return new CacheMemoryAdapter(); // [!code highlight]
-  }
+`get` / `set` / `delete` / `getAndDelete` / `singleFlight` などは **文字列または `CacheKey`** を受け付けます。`get<T>(key)` にジェネリックを付けると戻り値の型は `T | null`；`set` / `setNX` / `expire` の TTL は **`DurationInput`**：ミリ秒または可読文字列（`'7 days'`、`'30m'`、`'1.5 hours'`）、下記参照。
+
+プラグイン側はこのインスタンスをそのまま渡します：
+
+```typescript
+import { cache } from '@/cache';
+
+new Abuse({ store: cache, strategies: [/* … */] });
+new AuthSessionStrategy({ store: cache, /* … */ });
+new OAuth2Client({ store: cache, /* … */ });
+```
+
+::: tip
+プラグインごとに `new Caching(adapter)` しない — コンポジションルートで 1 回作り共有。複数ストア（ローカル memory + 共有 Redis）のときだけ 2 つ目を作り、それぞれ `createRemember`。
+:::
+
+## session の読み書き
+
+ログインで token 発行後、「token → ユーザー情報」をキャッシュへ。認証 `onLoaded` で読み戻し、ログアウトで delete。キーはバージョン付き `CacheKey` プレフィックス — リリースで session 構造を変えるとき 1 箇所で一括無効化。これらのメソッドは User / Auth など Service に置きます：
+
+```typescript
+// src/services/user.service.ts
+import { Service } from '@aomex/common';
+import { cache } from '@/cache';
+
+export default class UserService extends Service {
+  protected readonly loginTokenKey = cache.key('login-token', 'v1'); // [!code highlight]
 
   async getLoginToken(token: string) {
-    return this.cache.get<{ userId: number; role: number }>(
+    return cache.get<{ userId: number; role: number }>(
       this.loginTokenKey.key(token),
     );
   }
@@ -25,239 +53,207 @@ export default class CacheService extends BaseCacheService { // [!code focus:28]
     token: string,
     session: { userId: number; role: number },
   ) {
-    await this.cache.set(
-      this.loginTokenKey.key(token),
-      session,
-      '7 days',
-    );
+    await cache.set(this.loginTokenKey.key(token), session, '7 days');
   }
 
   async deleteLoginToken(token: string) {
-    await this.cache.delete(this.loginTokenKey.key(token));
+    return cache.delete(this.loginTokenKey.key(token));
   }
 }
 ```
-
-`get` / `set` / `delete` / `getAndDelete` / `singleFlight` などは **文字列または `CacheKey`** を受け付ける。`get<T>(key)` にジェネリックを付けると戻り値の型は `T | null`。`set` / `setNX` / `expire` の有効期限、および `@remember` の `duration` は **`DurationInput`**：ミリ秒または `'7 days'`、`'30m'`、`'1.5 hours'` のような文字列（下記参照）。`services.cache.xxx` のメソッド名・引数は CacheService で宣言したものと一致する。署名を変えるとコンパイラがルートや認証コールバックまで追ってくれる。
-
-登録とウォームアップ（本番で Redis に替えるときは特に eager を推奨）：
-
-```typescript
-await combineServices(
-  {
-    cache: () => import('./cache.service.js'),
-  },
-  { eager: ['cache'] }, // [!code highlight]
-);
-```
-
-::: warning
-本番や複数インスタンスで cache に eager を書かないと、最初のキャッシュ読みで Redis 接続コストが乗り、テールレイテンシが跳ねやすい。
-:::
-
-## session の読み書き
-
-ログインで token を発行したあと、「token → ユーザー情報」をキャッシュに書き込む。認証の onLoaded で読み戻し、ログアウトで delete する。キー名はバージョン付きの `CacheKey` プレフィックスを使う。リリースでセッション構造を変えるとき、1 箇所変えれば一括無効化できる。
 
 業務側（ログイン / 認証 / ログアウト）：
 
 ```typescript
 // 登录成功后写入
 const token = auth.strategy('bearer').signature('sha256', user.id);
-await services.cache.setLoginToken(token, {
+await services.user.setLoginToken(token, {
   userId: user.id,
   role: user.role,
 }); // [!code highlight]
 
 // 鉴权 onLoaded 里读取
-const session = await services.cache.getLoginToken(token);
+const session = await services.user.getLoginToken(token);
 if (!session) {
   return false;
 }
 
 // 退出登录删掉
-await services.cache.deleteLoginToken(token);
+await services.user.deleteLoginToken(token);
 ```
 
-token 発行や DB 照会は User / Auth などの Service に残す。CacheService は格納・取得だけ担う。
+## アダプタ選択
 
-## アダプタの選択
+アダプタがデータの置き場を決めます：**memory** はゼロ依存・プロセス内・再起動で消える（ローカルと単体テスト）；**Redis** は複数インスタンスで session・レート制限カウント共有；少しディスク永続化なら **file**。業務コードは構築時のアダプタを変えることが多く、読み書き API は同じです。
 
-アダプタがデータの置き場所を決める。**memory** は依存ゼロ・プロセス内・再起動で消える。ローカルと単体テスト向け。**Redis** は複数インスタンスで session やレート制限カウントを共有する。少しディスク永続化が要るなら **file**。業務コードは多くの場合 `createAdapter()` だけ変え、読み書き API はそのまま。
-
-ローカル開発・単体テストは `@aomex/cache/memory`。依存なし、再起動でデータ消失：
+ローカル・単体テストは `@aomex/cache/memory`、ゼロ依存、再起動で消失：
 
 ```typescript
+import { Caching } from '@aomex/cache';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 
-protected createAdapter() {
-  return new CacheMemoryAdapter();
-}
+export const cache = new Caching(new CacheMemoryAdapter());
 ```
 
-本番や複数インスタンスで session / レート制限を共有するときは `@aomex/cache-redis-adapter`（`ioredis` はパッケージに同梱。多くは `createAdapter` だけ変える）：
+本番や複数インスタンス共有は `@aomex/cache-redis-adapter`（`ioredis` 同梱）：
 
 ```typescript
+import { Caching } from '@aomex/cache';
 import { CacheRedisAdapter } from '@aomex/cache-redis-adapter';
 
-protected createAdapter() {
-  return new CacheRedisAdapter({ host: '127.0.0.1', port: 6379 });
-}
+export const cache = new Caching(
+  new CacheRedisAdapter({ host: '127.0.0.1', port: 6379 }),
+);
 ```
 
-単機で少し永続化したいなら `@aomex/cache/file` を選べる。
+単機で軽い永続化は `@aomex/cache/file` も可。
 
 ## キーの組み立て：CacheKey
 
-`this.key(...)` が返すのは **`CacheKey`** であり、通常の文字列ではない。断片は `:` で連結でき、`.key` / `.keyHash` / `.toHash()` を続けられる。`this.cache.get` / `set` などはそのまま受け取れる。`String(...)` は不要。
+`cache.key(...)`（または静的 `CacheKey.key(...)`）の戻りは **`CacheKey`** であり plain string ではありません：片段は `:` で連結し、`.key` / `.keyHash` / `.toHash()` を続けられます。`cache.get` / `set` 等はそのまま受け取り、`String(...)` は不要です。
 
 ```typescript
-this.key('user', 1); // user:1
-this.key('user').key(1); // 同上
-this.key('user').keyHash(1); // user:<md5('1')>，前缀可读
-this.key('user', 1).toHash(); // <md5('user:1')>
-this.keyHash('user', 1); // 同上，整键哈希
+cache.key('user', 1); // user:1
+cache.key('user').key(1); // 同上
+cache.key('user').keyHash(1); // user:<md5('1')>，前缀可读
+cache.key('user', 1).toHash(); // <md5('user:1')>
+cache.keyHash('user', 1); // 同上，整键哈希
 ```
 
-| 書き方 | 得られるもの |
+| 書き方 | 結果 |
 | --- | --- |
-| `this.key('a', 1)` | 読めるキー `a:1` |
-| `prefix.key(id)` | 既存の `CacheKey` プレフィックスの後に一段追加 |
-| `this.key('a').keyHash(id)` | プレフィックスはそのまま、**今回の引数だけハッシュ** |
-| `this.key(...).toHash()` / `this.keyHash(...)` | **全体** MD5、読めるプレフィックスなし |
+| `cache.key('a', 1)` | 可読キー `a:1` |
+| `prefix.key(id)` | 既存 `CacheKey` プレフィックスに連結 |
+| `cache.key('a').keyHash(id)` | プレフィックス維持、**今回の引数だけ**ハッシュ |
+| `cache.key(...).toHash()` / `cache.keyHash(...)` | **全体** MD5、可読プレフィックスなし |
 
-断片が長い・変な文字を含む・Redis に平文を出したくないときはハッシュを使う。日常の業務キーは読めるプレフィックスの方が調査しやすい。旧来の単体 `hash()` は廃止され、上記に統一している。
+片段が長い・変な文字・Redis に平文を出したくないときはハッシュ；日常業務キーは可読プレフィックスの方が調査しやすい。旧単独 `hash()` は廃止、上記に統一。
 
 ### プレフィックスとバージョン
 
-`protected readonly` フィールドで業務プレフィックス（例：`login-token`）をまとめ、メソッド内では `.key(token)` / `.key(id)` を連鎖する。各所にマジック文字列を書かない。プレフィックスにバージョン（`v1` → `v2`）を入れると、**名前を衝突させずに**旧 session を捨てられる：
+対応 Service で `protected readonly` に業務プレフィックス（例 `login-token`）を集約し、メソッド内で `.key(token)` / `.key(id)` — 各处魔术文字列を書かない。バージョンをプレフィックスに（`v1` → `v2`）＝**別名で**旧 session を無効化：
 
 ```typescript
-protected readonly loginTokenKey = this.key('login-token', 'v2');
+protected readonly loginTokenKey = cache.key('login-token', 'v2');
 ```
 
 ## 期間 DurationInput
 
-有効期限に `60_000` を直書きしなくてよい。`set` / `setNX` / `expire`、および `@remember` の `duration` は次を受け付ける：
+TTL を `60_000` と手計算しなくてよい。`set` / `setNX` / `expire`、および `@remember` の `duration` は次を受け付けます：
 
 - **number**：ミリ秒（従来どおり）
-- **文字列**：数字 + 単位、スペース任意——`'30m'`、`'1 hour'`、`'7 days'`
+- **string**：数字 + 単位、スペース任意 — `'30m'`、`'1 hour'`、`'7 days'`
 
-よく使う単位：`ms` / `s`（`sec` / `second`）/ `m`（`min` / `minute`）/ `h`（`hr` / `hour`）/ `d`（`day`）/ `w`（`week`）/ `month` / `y`（`year`）。`month` は 30 日、`year` は 365 日。ほかの場所で読める時間をミリ秒にするなら `import { parseDuration } from '@aomex/common'` も使える。
+よく使う単位：`ms` / `s`（`sec` / `second`）/ `m`（`min` / `minute`）/ `h`（`hr` / `hour`）/ `d`（`day`）/ `w`（`week`）/ `month` / `y`（`year`）。`month` は 30 日、`year` は 365 日。他处でも `import { parseDuration } from '@aomex/common'` で可読時間を ms に変換可。
 
 ```typescript
-await this.cache.set(key, session, '7 days');
-await this.cache.setNX(lockKey, '1', '30 seconds');
-await this.cache.expire(key, '1 hour');
+await cache.set(key, session, '7 days');
+await cache.setNX(lockKey, '1', '30 seconds');
+await cache.expire(key, '1 hour');
 ```
 
-## exists：あるかどうかだけ
+## exists：在否だけ知りたい
 
-キーが**あるかどうか**だけ知りたく、値を読み出してデコードする必要がないときは `exists` を使う。戻り値は `boolean` で、文字列または `CacheKey` を受け付ける。
+キーが**あるか**だけ知り、値をデコードして読む必要がないとき `exists`。`boolean` を返し、文字列または `CacheKey` を受け付けます。
 
 ```typescript
-const key = this.loginTokenKey.key(token);
-if (await this.cache.exists(key)) {
-  // セッション存続中。詳細を get するか決める
+const key = loginTokenKey.key(token);
+if (await cache.exists(key)) {
+  // 会话还在，再决定要不要 get 详情
 }
 ```
 
-`get` との違い：未ヒット時の `get` は `null`（自分で判定する）であり、値を逆シリアライズする。`exists` はアダプタに「このキーはまだあるか」とだけ聞く。プレースホルダマーク、ロックをまだ握っているか、大きなオブジェクトを取る前の事前確認向け。
+`get` との違い：未命中は `null`（自分で判定）し、値を逆シリアライズする；`exists` はアダプタに「キーはまだあるか」だけ聞く。プレースホルダ、ロック保持、大きいオブジェクトを get する前の確認向き。
 
 ::: tip
-「先に exists してから get」の間に他プロセスがキーを消したり書き換えたりする可能性がある。厳密なトランザクション条件にしないこと。ロック奪取・べき等は下の `setNX`；一度きりの消費は `getAndDelete`。
+「exists してから get」の間に他がキーを消したり変えたりする — 厳密なトランザクション条件にしない。ロック・冪等は下記 `setNX`；一度きり消費は `getAndDelete`。
 :::
 
-## getAndDelete：読んですぐ消す
+## getAndDelete：読んで即削除
 
-Redis の `GETDEL` と同じく、一度きりの証憑に `getAndDelete` を使う。原子的に取り出して削除する。同時に二つ来ても片方だけ値が取れ、もう片方は `null`（またはデフォルト値）。
+Redis `GETDEL` に合わせ「使い捨て凭証」なら `getAndDelete`：アトミックに取得と削除。並行 2 路では一方だけ値、他方は `null`（または渡した default）。
 
-典型例：OAuth `state`、メール確認コード、短命のダウンロード券——読んだら無効にしてリプレイを防ぐ。
+典型：OAuth `state`、メール验证码、短時間ダウンロード票 — 読んだら必ず無効、リプレイ防止。
 
 ```typescript
-const ticket = await this.cache.getAndDelete<{ userId: number }>(
-  this.key('email-verify', code),
+const ticket = await cache.getAndDelete<{ userId: number }>(
+  cache.key('email-verify', code),
 );
 if (!ticket) {
-  ctx.throw(400, 'コードが無効か使用済みです');
+  ctx.throw(400, '验证码无效或已使用');
 }
-// ticket.userId が使える。キーはもうキャッシュにない
+// ticket.userId 可用；键已不在缓存里
 ```
 
-`get` のあと `delete` だと、その間に別の読み取りが挟まる。`getAndDelete` はアダプタ一回で終わる。第 2 引数は未ヒット時のデフォルト（型は `get` と同じ考え方）。
+「先 `get` 再 `delete`」との違い：その間にもう一度読める；`getAndDelete` はアダプタ層で 1 回。第 2 引数は default（未命中時、型は `get` と同様）。
 
-## setNX とカウンタ
+## setNX とカウント
 
-`setNX` はキーがないときだけ書き込む。分散ロックや冪等な「一度だけ処理」に使う。TTL はタスクの最悪時間をカバーすること。足りないとロック期限後に別 worker が奪う。`increment` / `expire` は認証コード失敗回数や固定ウィンドウ向け。
+`setNX` はキーが無いときだけ書き込み — 分散ロック、冪等「一度だけ処理」。TTL はタスク最悪時間をカバーしないと、期限後に別 worker がロックを取る。`increment` / `expire` は OTP 失敗回数、固定窓カウント向き。
 
-ロック取得・冪等（TTL はタスク最悪時間より大きく）：
+ロック・冪等（TTL > 最悪実行時間）：
 
 ```typescript
-const ok = await this.cache.setNX(lockKey, '1', '30 seconds');
+const ok = await cache.setNX(lockKey, '1', '30 seconds');
 if (!ok) {
   return;
 }
 ```
 
-認証コード失敗回数：先に `increment`、初回（またはまだ TTL がない）に `expire` でウィンドウを張る——Redis の `INCR` と同じ習慣。memory アダプタの増減は**既存 TTL を残し**、数字を変えても期限を消さない。
+認証コード失敗回数：まず `increment`、初回（または未 TTL）で `expire` で窓を切る — Redis `INCR` 慣習と同じ。memory アダプタの増減は**既存 TTL を保持**、数字変更で期限を消さない。
 
 ```typescript
-const key = this.key('otp-fail', phone);
-const n = await this.cache.increment(key);
-if (n === 1 || (await this.cache.ttl(key)) === -1) {
-  await this.cache.expire(key, '15 minutes'); // [!code highlight]
+const key = cache.key('otp-fail', phone);
+const n = await cache.increment(key);
+if (n === 1 || (await cache.ttl(key)) === -1) {
+  await cache.expire(key, '15 minutes'); // [!code highlight]
 }
 if (n > 5) {
   ctx.throw(429);
 }
 ```
 
-## singleFlight：同時実行は一度だけ
+## singleFlight：並行は 1 回だけ実行
 
-同じキーで「今すぐ計算」が同時に必要で（JWKS 取得、高い API）、長期キャッシュに残したくないときは `singleFlight`。最初の呼び出しだけ `factory` を実行し、他は結果を共有する。**フライト終了後に長期キャッシュは残さない**。次の呼び出しは再計算する。
+同一キーで多数が「その場計算」（JWKS 取得、高コスト API 1 回）し、結果を長期キャッシュしたくないとき `singleFlight`：最初だけ `factory`、他は共有結果を待つ；**飛行終了後は長期キャッシュを残さない**、次回は再計算。
 
 ```typescript
-async loadJwks() {
-  return this.cache.singleFlight(this.key('jwks'), async () => { // [!code focus:3]
+async function loadJwks() {
+  return cache.singleFlight(cache.key('jwks'), async () => { // [!code focus:3]
     return fetchJwksFromIdp();
   });
 }
 ```
 
-`@remember` との分担：`remember` = 単飛 + **`duration` で長期キャッシュ**；`singleFlight` = **今回の同時波だけ共有**。ロックは約 30 秒、実行中に更新。失敗時は待機側も同じエラー。実行側が結果を書かず落ちた場合、待機側は再競争する（回数上限あり）。
+`@remember` との分担：`remember` = singleFlight + **`duration` で長期書き込み**；`singleFlight` = **今回の並行共有だけ**、終わったら散る。ロック約 30 秒、実行中は延長；失敗時待ち側は同じエラー。実行者が落ちて結果を書かなければ待ち側は再競合（回数上限あり）。
 
 ::: tip
-複数インスタンスではキーを共有アダプタ（例：Redis）に置く。memory は当プロセスだけを守る。
+複数インスタンスではキーを共有アダプタ（Redis 等）に — singleFlight がプロセス跨ぎで効く。ローカル memory は現プロセスのみ。
 :::
 
 ## キャッシュデコレータ
 
-業務メソッドで「get → なければ計算 → set」を繰り返すのは冗長で、同一キーへの同時リクエストで何度も計算が走る。`createRemember` はメソッドデコレータ `@remember` を作る。ヒットなら即返す。ミスなら元メソッドだけ実行して書き込む。**同一キーが同時に来ても実行は一つ**、他は結果を待つ（プレースホルダロックは `singleFlight` と同じく約 30 秒で更新）。
+業務メソッドで「get → なければ計算 → set」を繰り返すのは冗長、同一キー並行で何度も計算される。`createRemember` が `@remember` メソッドデコレータを作る：ヒットなら即返却；ミスだけ元メソッド実行と書き込み；**同一キー並行は 1 実行**、他は待つ（プレースホルダロックは `singleFlight` と同系で約 30 秒延長）。
 
-デコレータは自分のキャッシュサービスクラスに結ぶ。`BaseCacheService` の **サブクラスコンストラクタ** を渡す（基底クラスやインスタンスは不可）。`cache.service.ts` に書くのが手軽で、業務側は `remember` を import する：
+デコレータは**具体 `Caching` インスタンス**に紐づく — `createRemember(cache)`。アダプタやクラスコンストラクタは不可。`cache.ts` で export 後、業務 Service は `remember` を import：
 
 ```typescript
-import { BaseCacheService, createRemember } from '@aomex/cache';
+import { Caching, createRemember } from '@aomex/cache';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 
-export default class CacheService extends BaseCacheService {
-  protected createAdapter() {
-    return new CacheMemoryAdapter();
-  }
-}
-
-export const remember = createRemember(CacheService); // [!code highlight]
+export const cache = new Caching(new CacheMemoryAdapter());
+export const remember = createRemember(cache); // [!code highlight]
 ```
 
-`BaseCacheService` は `onInit` でアダプタ接続後に remember を自動で付け、シャットダウンで外す。**手動登録は不要**。`combineServices` では引き続き `eager: ['cache']` を推奨。キャッシュ未準備だとデコレートされたメソッドは**待つ**。停止後の呼び出しは**例外**。
+接続は `Caching` の遅延読み込みが担当。
 
-### 業務メソッドへ適用
+### 業務メソッドに載せる
 
-メソッドは **async**（Promise を返す）であること。期間だけ渡すと「キャッシュ保持時間」（`DurationInput`）の意味：
+メソッドは **async**（Promise を返す）。时长だけ渡すと「どれだけキャッシュするか」（`DurationInput`）：
 
 ```typescript
 import { Service } from '@aomex/common';
-import { remember } from './cache.service.js';
+import { remember } from '@/cache';
 
 class ReportService extends Service {
   @remember('1 minute')
@@ -267,7 +263,7 @@ class ReportService extends Service {
 }
 ```
 
-キーやデフォルト値を変えたいときはオブジェクトを渡す。このとき `await services.report.find(1)` の初回は DB へ行き、ウィンドウ内の同引数の再呼び出しはキャッシュを読む。`duration` は書き込み後の有効期限：
+カスタム key や default ならオブジェクト形式；`await services.report.find(1)` 初回は DB、窓内同参はキャッシュ。`duration` は書き込み後の有効期限：
 
 ```typescript
 class ReportService extends Service {
@@ -286,38 +282,38 @@ class ReportService extends Service {
 
 | 書き方 | 役割 |
 | --- | --- |
-| `@remember('1 minute')` / `@remember(60_000)` | 有効期限のみ。キーはデフォルト規則 |
-| `duration` | 必須（オブジェクト形式）。キャッシュ期間 |
-| `key: '固定文字列'` | メソッド全体で一キー（引数なし・サイト単一結果） |
-| `key: (...args) => string` | 引数からキー組み立て。`this` は業務インスタンスのまま |
-| `defaultValue` | 元メソッドが `null` のとき呼び出し側に返す値（デフォルト `null`） |
+| `@remember('1 minute')` / `@remember(60_000)` | TTL のみ；キーは既定規則 |
+| `duration` | 必須（オブジェクト）；キャッシュ期間 |
+| `key: '固定串'` | メソッド全体で 1 キー（無参・全站単一結果） |
+| `key: (...args) => string` | 引数でキー；`this` は業務インスタンス |
+| `defaultValue` | 元メソッドが `null` のとき外に返す値（既定 `null`） |
 
-### デフォルトのキー組み立て
+### 既定キーの組み立て
 
-`key` を書かないとき、フレームワークは次を使う：
+`key` 未指定時、フレームワークは：
 
 `クラス名または displayName` + `-` + `メソッド名` + `-` + `JSON.stringify(引数)`
 
-`Service` を継承しクラス名が `Service` で終わるときは、末尾を除いた `displayName`（`ReportService` → `Report`）でキーに長い接尾辞を載せない。引数は JSON に入る。**直列化できない・揺れる値**（`Date`、循環参照、毎回違うオブジェクトリテラル）を入れるとキーが合わず実質キャッシュ無効。引数が多い・構造が乱雑なら自分で `key` を書く方が安全。
+`Service` 継承でクラス名が `Service` 終わりなら、サフィックス除去の `displayName`（`ReportService` → `Report`）。引数は JSON に入る — **非シリアライズ・揺れる値**（`Date`、循環参照、毎回違うオブジェクトリテラル）を入れるとキーがずれキャッシュ無効。引数が多い・構造が乱れているなら自前 `key` が安定。
 
 ### 並行と空結果
 
-同一キーが同時に来ると、最初の呼び出しが `setNX` でプレースホルダを取って元メソッドを実行する。プレースホルダは約 30 秒、実行中は更新される。他はプレースホルダが消えるまでポーリングし、キャッシュを読む（または `defaultValue`）。キャッシュスタンピード防止用であり、汎用分散ロックではない——業務ロック代わりに使わない。「今回の同時共有だけで長期キャッシュしない」なら上の `singleFlight`。
+同一キー並行時、最初が `setNX` でプレースホルダを置き元メソッド実行、プレースホルダ約 30 秒・実行中延長；他はポーリングでプレースホルダ消失を待ちキャッシュ読み（または `defaultValue`）。キャッシュ stampede 防止用であり、分散ロックの業務意味ではない — 汎用ロックにしない。「今回の並行共有・長期キャッシュなし」は上記 `singleFlight`。
 
-元メソッドが `null` を返したとき **`null` は書き込まない**（「ない」を長く固定しない）。呼び出し側は `defaultValue` を見る。「明示的にない」結果をキャッシュしたいときはキー設計を変えるか、手書きの `this.cache.set` を使う。
+元メソッドが `null` のとき **`null` はキャッシュに書かない**（「無い」を長く固定しない）；呼び出し側は `defaultValue`。「明確に無い」結果をキャッシュしたいなら自前キー設計か手動 `cache.set`。
 
 ### 複数キャッシュ
 
-ローカル memory と共有 Redis を併用するとき、それぞれ `BaseCacheService` サブクラスを用意し、それぞれ `createRemember` を呼ぶ。スコープは**サービスクラス**単位。`fork()` はない。どの `remember` を付けるかでストアが決まる。
+ローカル memory と共有 Redis など：各 `new Caching(adapter)` ごとに `createRemember`。スコープは**インスタンス**単位、`fork()` なし。メソッドに載せた `remember` がどのストアかが決まる。
 
 ::: warning
-**読み多・書き少・短時間の鮮度でよい**クエリにだけ付ける。DB 書き込み・SMS・在庫減算など副作用のあるメソッドには付けない——キャッシュは古いまま。データが変わったら該当キーを `cache.delete` するか、キーのバージョンを上げる（上記のキー組み立てを参照）。
+**読み多・書き少・短い TTL でよい照会**だけに載せる。DB 書き込み・SMS・在庫引きなど副作用ありは載せない — キャッシュは古い結果。データ変更後は `cache.delete` かキーバージョン変更（上記「キーの組み立て」）。
 :::
 
 ## 次のステップ
 
-- サービス登録と eager：[サービス層](/ja/core/service)
+- サービス登録とライフサイクル：[サービス層](/ja/core/service)
 - OAuth `state` と `store`：[OAuth2 クライアント](/ja/plugins/oauth2-client)
-- 乱用カウントの `store`：[乱用対策](/ja/plugins/abuse)
-- 認証での session の使い方：[Auth 統一入口](/ja/plugins/auth)
+- 悪用カウントの `store`：[悪用対策](/ja/plugins/abuse)
+- 認証での session：[統一 Auth](/ja/plugins/auth)
 - Bearer と token 戦略：[Bearer 戦略](/ja/plugins/auth-bearer-strategy)

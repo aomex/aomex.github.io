@@ -6,7 +6,7 @@ outline: deep
 
 [Scalar](https://github.com/scalar/scalar) ベースの API ドキュメントページを載せる。閲覧はモダンで、ページ内試行もできる。契約はファイル出力した openapi.json / yaml、または実行時 `generateOpenapi`。[Swagger UI](/ja/openapi/swagger-ui) / [Redoc UI](/ja/openapi/redoc-ui) と同站併存可。**uriPrefix の衝突に注意**（デフォルト `/scalar`）。
 
-まずは [公式デモ](https://galaxy.scalar.com/) を見てから。契約の出どころ：[生成OpenAPI](/ja/openapi/)。
+まずは [公式デモ](https://galaxy.scalar.com/) を見てから。契約の出どころ：[OpenAPI を生成](/ja/openapi/)。
 
 ```bash
 pnpm add @aomex/scalar-ui
@@ -34,7 +34,7 @@ yaml / yml パスも可。ブラウザ：/scalar。同接頭辞下に openapi.js
 ```typescript
 import { scalarUI } from '@aomex/scalar-ui';
 import { generateOpenapi } from '@aomex/openapi-generator';
-import { app } from './app.js';
+import { app } from '@/app';
 
 mount: [ // [!code focus:12]
   scalarUI({
@@ -101,7 +101,7 @@ scalarUI({
 パブリックにドキュメント UI を晒すと API の地図（試行能力含む）を一緒に渡す。ランダム接頭辞と `enable` / ネットワーク分離をセットで使う。
 :::
 
-動的 `openapi` で本番と同じ `app` を渡し忘れると、ページ上の認可・ラップ形状と実連携がずれる。静的ファイルモードではルート変更後 [生成OpenAPI](/ja/openapi/) で再出力。
+動的 `openapi` で本番と同じ `app` を渡し忘れると、ページ上の認可・ラップ形状と実連携がずれる。静的ファイルモードではルート変更後 [OpenAPI を生成](/ja/openapi/) で再出力。
 
 Swagger / Redoc との比較、併存、シナリオ選定は [ドキュメント UI の選び方](/ja/openapi/choose-ui)。
 
@@ -109,4 +109,4 @@ Swagger / Redoc との比較、併存、シナリオ選定は [ドキュメン�
 
 - [ドキュメント UI の選び方](/ja/openapi/choose-ui)
 - [Swagger UI](/ja/openapi/swagger-ui) · [Redoc UI](/ja/openapi/redoc-ui)
-- [生成OpenAPI](/ja/openapi/)
+- [OpenAPI を生成](/ja/openapi/)

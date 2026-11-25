@@ -4,33 +4,37 @@ outline: deep
 
 # Защита от злоупотреблений
 
-Типичная разведка realtime-канала — перебор «событий, которых вообще не должно быть». `.socket()` из `@aomex/abuse` делает две вещи: проверяет, не забанен ли уже IP; по стратегии `socket-events` считает удары по приманкам и при лимите банит IP.
+В реальном времени часто сканируют несуществующие имена событий. `.socket()` из `@aomex/abuse` делает две вещи: проверяет, заблокирован ли IP; стратегия `socket-events` считает подставные события и банит IP по лимиту.
 
-Состояние бана с HTTP-стороной **общее** (тот же экземпляр `Abuse`, тот же `store`): IP, пойманный HTTP-honeypot, не пройдёт и WebSocket. IP на handshake зависит от `proxyIP` Web-приложения — ошибка настройки значит бан не тех людей.
+Состояние бана **общее** с HTTP (один `Abuse`, один `store`): IP, забаненный honeypot'ом Web, не подключится по WebSocket. IP рукопожатия зависит от `proxyIP` Web-приложения — ошибка = не тот человек.
 
 ```bash
 pnpm add @aomex/abuse
-# 还需已有的 @aomex/cache（及生产用的 Redis 适配器）
+# также нужен @aomex/cache (в проде — Redis-адаптер)
 ```
 
-## Сначала повесьте honeypot имён событий
+## Сначала honeypot имён событий
 
-`new Abuse(...)` возвращает сервис, а не middleware, который сразу кладут в mount. На WebSocket — **`abuse.socket()`**, перед `channels()`. Если в HTTP-приложении уже есть экземпляр, **переиспользуйте его**, второй new не нужен. Локально — memory; на нескольких репликах — Redis-адаптер.
+`new Abuse(...)` — сервис, не middleware напрямую в mount. Для WebSocket — **`abuse.socket()`** перед `channels()`. Если в HTTP уже создавали экземпляр — **переиспользуй**. Локально memory; несколько реплик — Redis.
 
 ::: warning
-Перед вызовом уже должен быть `import '@aomex/websocket'` (регистрация `middleware.socket`).
+Перед вызовом нужен `import '@aomex/websocket'` (регистрация `middleware.socket`).
 :::
 
-Приманки пишите в `events` стратегии `socket-events`: строки с `*` или регулярки (полное совпадение с `ctx.event`). Попадание считает по IP; при лимите — бан. `events` не может быть пустым — проверка уже при create.
+«Приманки» в `events` стратегии `socket-events`: строки с `*`, можно regex (полное совпадение с `ctx.event`). Попадание — счётчик по IP, лимит — бан. `events` не пустой, валидируется при создании.
 
 ```typescript
 import { Abuse } from '@aomex/abuse';
+import { Caching } from '@aomex/cache';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 import { WebsocketApp, channels } from '@aomex/websocket';
 import { WsTransport } from '@aomex/websocket-ws-transport';
+import { logger } from '@/services/logger.service';
+
+const cache = new Caching(new CacheMemoryAdapter());
 
 const abuse = new Abuse({
-  store: new CacheMemoryAdapter(),
+  store: cache,
   strategies: [
     { // [!code focus:7]
       strategy: 'socket-events',
@@ -43,7 +47,7 @@ const abuse = new Abuse({
 });
 
 new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   transport: new WsTransport(),
   mount: [
@@ -53,9 +57,9 @@ new WebsocketApp({
 });
 ```
 
-## Что отвечать после бана
+## Что вернётся после бана
 
-Если IP уже заблокирован или счётчик `socket-events` только что достиг лимита: сначала уходит `{ event: 'error', data: { message } }`, затем соединение закрывается кодом **1008** (Policy Violation) — бан это не мягкий rate limit, сокет не должен продолжать висеть. `errorMessage` — и текст error-кадра, и close reason (транспорт может обрезать слишком длинный reason). Whitelist настраивается на `.socket()`: `bypass` → `true` пропускает проверку:
+IP уже в бане или `socket-events` только что достиг лимита: сначала push `{ event: 'error', data: { message } }`, затем разрыв с кодом **1008** (Policy Violation) — это не мягкий rate limit, соединение не должно висеть. `errorMessage` — текст error-кадра и close reason (слишком длинный reason обрежет транспорт). Белый список в `.socket()` — `bypass` возвращает `true` и пропускает проверку:
 
 ```typescript
 mount: [
@@ -63,7 +67,7 @@ mount: [
     bypass: (ctx) => {
       return ctx.client.request.ip === '127.0.0.1';
     },
-    errorMessage: '已限制访问',
+    errorMessage: 'Доступ ограничен',
   }),
   channels('./src/channels'),
 ],
@@ -71,7 +75,7 @@ mount: [
 
 ## Репорт из Channel
 
-Если стратегии `ip-abuse` / `user-abuse` уже заданы при создании `Abuse`, из action Channel можно звать тот же API (например, поймали спамера). `ctx.client.request` есть с handshake — берите IP напрямую:
+Если при создании `Abuse` настроены `ip-abuse` / `user-abuse`, в action Channel тот же API (например, спам). `ctx.client.request` есть с handshake:
 
 ```typescript
 channel.on('chat.send', {
@@ -85,10 +89,10 @@ channel.on('chat.send', {
 });
 ```
 
-Как объявлять стратегии, `onBanUser` / `blockIP` и прочие API — те же, что на HTTP; path-honeypot и накопление статус-кодов см. [защиту от злоупотреблений](/ru/plugins/abuse) под Web-приложением.
+Объявление стратегий, `onBanUser` / `blockIP` — как на HTTP. Honeypot путей и накопление статусов — [abuse для Web](/ru/plugins/abuse).
 
 ## Дальше
 
-- [Ограничение частоты](/ru/websocket/rate-limit)
-- [Точка входа](/ru/websocket/)
-- [Маршрутизация событий](/ru/websocket/channel)
+- [Rate limit](/ru/websocket/rate-limit)
+- [Вход приложения](/ru/websocket/)
+- [Маршруты событий](/ru/websocket/channel)

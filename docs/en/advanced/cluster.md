@@ -36,11 +36,12 @@ Docker, K8s, managed cloud, PaaS, systemd, Nginx multi-upstream, PM2 `-i`—all 
 
 ```typescript
 import { routers, WebApp } from '@aomex/web';
-import { services } from './services/index.js';
+import { services } from '@/services';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [routers('./src/routers')],
@@ -115,14 +116,15 @@ Put app construction and `listen` inside the `listen` callback (lazy-`import` se
 
 ```typescript
 import { clusterListen, routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 clusterListen({ // [!code focus:18]
   workers: 'max', // 或具体数字，如 4
   listen: async () => {
-    const { services } = await import('./services/index.js');
+    const { services } = await import('@/services');
     const app = new WebApp({
       services,
-      logger: services.logger,
+      logger,
       language: { mode: 'fixed', language: 'zh-CN' },
       proxyIP: { mode: 'detect' },
       mount: [routers('./src/routers')],

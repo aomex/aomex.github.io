@@ -63,7 +63,7 @@ Do not hand-edit `src/generated/aomex/prisma*`.
 ```typescript
 import { rule, type Validator } from '@aomex/common';
 import { definePrismaSchema } from '@aomex/prisma';
-import { generated } from '../generated/aomex/prisma.js';
+import { generated } from '@/generated/aomex/prisma';
 
 const userProfile = rule.object({
   theme: rule.enum(['dark', 'light']).optional(),
@@ -99,7 +99,7 @@ export const { prismaInput, prismaOutput, prismaEnum } = definePrismaSchema(
 
 ```typescript
 import { body, response, Router } from '@aomex/web';
-import { prismaInput, prismaOutput } from '../schemas/prisma.schema.js';
+import { prismaInput, prismaOutput } from '@/schemas/prisma.schema';
 
 export const router = new Router({ prefix: '/users' });
 

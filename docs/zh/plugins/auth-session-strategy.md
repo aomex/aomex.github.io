@@ -4,7 +4,7 @@ outline: deep
 
 # Session 策略
 
-浏览器端登录态放在 **HttpOnly Cookie** 里：Cookie 只存不透明 `sessionId`，用户数据在 `@aomex/cache` 适配器（memory / Redis）里。SPA 跨域时还要同时配好 [CORS](/zh/plugins/cors)（带 Cookie）和 [CSRF](/zh/plugins/csrf)（防跨站写请求）——少一块，登录态要么带不过去，要么容易被第三方站点滥用。
+浏览器端登录态放在 **HttpOnly Cookie** 里：Cookie 只存不透明 `sessionId`，用户数据在共享的 [`Caching`](/zh/core/cache)（memory / Redis）里。SPA 跨域时还要同时配好 [CORS](/zh/plugins/cors)（带 Cookie）和 [CSRF](/zh/plugins/csrf)（防跨站写请求）——少一块，登录态要么带不过去，要么容易被第三方站点滥用。
 
 适合「同站或可信前端 + 服务端随时可废会话」；纯移动端 / 机器调用更常见 [Bearer](/zh/plugins/auth-bearer-strategy) 或 [JWT](/zh/plugins/auth-jwt-strategy)。
 
@@ -36,10 +36,11 @@ import { AuthSessionStrategy } from '@aomex/auth/session';
 import { cors } from '@aomex/cors';
 import { csrf } from '@aomex/csrf';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:8]
@@ -88,14 +89,17 @@ GET 等安全方法默认不校验 CSRF；首次访问会先签发 `csrfToken` C
 ```typescript
 import { Auth } from '@aomex/auth';
 import { AuthSessionStrategy } from '@aomex/auth/session';
+import { Caching } from '@aomex/cache';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 import { body, Router } from '@aomex/web';
 import { rule } from '@aomex/common';
 
+const cache = new Caching(new CacheMemoryAdapter());
+
 const auth = new Auth({
   strategies: {
     session: new AuthSessionStrategy({
-      store: new CacheMemoryAdapter(), // [!code highlight]
+      store: cache, // [!code highlight]
       cookie: {
         maxAge: 7 * 24 * 3600,
         // 生产跨站前端常见：sameSite: 'none', secure: true
@@ -112,7 +116,7 @@ const auth = new Auth({
 });
 ```
 
-生产或多实例请换成 Redis 等外置适配器，见 [缓存](/zh/core/cache)。Cookie 默认名 `sessionId`；`setCookie` 默认 `httpOnly: true`、`sameSite: Strict`（跨站前端要改成 `'none'` 并开 `secure`）。`cookie.name` / `path` / `domain` 与前端域名对齐即可。
+生产或多实例请换成挂了 Redis 等外置适配器的同一份 `Caching`，见 [缓存](/zh/core/cache)。Cookie 默认名 `sessionId`；`setCookie` 默认 `httpOnly: true`、`sameSite: Strict`（跨站前端要改成 `'none'` 并开 `secure`）。`cookie.name` / `path` / `domain` 与前端域名对齐即可。
 
 活跃用户少被迫下线时，开 `sliding`：每次认证成功续期 TTL + Cookie。自定义缓存键前缀用 `generateCacheKey`（默认 `auth:session:${sessionId}`）。需要 `authorize(角色)` 时再写 `onAuthorize`。
 

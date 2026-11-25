@@ -6,7 +6,7 @@ outline: deep
 
 Directory scans, honeypot hits, burst 404s, fake tokens on logout—these are often probing your edges, not ordinary traffic spikes. `@aomex/abuse` **counts** by strategy and, when the limit is hit, **blocks the IP** (or calls you to ban an account). It complements [rate limiting](/en/plugins/rate-limit): rate limits blunt burst QPS; abuse catches probes and business-reported malice.
 
-Counts and block state live on a `@aomex/cache` adapter (memory / Redis, etc.). Share Redis across instances. Relies on `ctx.request.ip`—in production set `proxyIP: { mode: 'detect' }` (or a fixed trust chain), or every request may look like the reverse proxy.
+Counts and block state live on a shared [`Caching`](/en/core/cache) (memory / Redis, etc.). Share Redis across instances. Relies on `ctx.request.ip`—in production set `proxyIP: { mode: 'detect' }` (or a fixed trust chain), or every request may look like the reverse proxy.
 
 ```bash
 pnpm add @aomex/abuse
@@ -21,11 +21,15 @@ The config below mounts two common strategies first: honeypot paths (one hit →
 
 ```typescript
 import { Abuse } from '@aomex/abuse';
+import { Caching } from '@aomex/cache';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
+
+const cache = new Caching(new CacheMemoryAdapter());
 
 const abuse = new Abuse({ // [!code focus:18]
-  store: new CacheMemoryAdapter(),
+  store: cache,
   strategies: [
     {
       strategy: 'honeypot',
@@ -46,7 +50,7 @@ const abuse = new Abuse({ // [!code focus:18]
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'en-US' },
   proxyIP: { mode: 'detect' },
   mount: [abuse.web(), routers('./src/routers')], // [!code highlight]
@@ -123,7 +127,7 @@ const abuse = new Abuse({
 
 router.post('/logout', {
   action: async (ctx) => {
-    const hit = await services.cache.deleteLoginToken(token);
+    const hit = await services.user.deleteLoginToken(token);
     if (!hit) {
       await abuse.ipAbuse(ctx.request.ip, 'logout-miss'); // [!code highlight]
     }
@@ -182,11 +186,15 @@ Probe paths should not hit block logic: pass `bypass` to `.web()`. Ops can tempo
 Blocked requests default to **403**; pass `blockedError` to align with rate-limit semantics (e.g. 429).
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 const abuse = new Abuse({
   store,
   strategies: [/* ... */],
   onBlockIP: async (ip, reason, detail) => {
-    services.logger.warn('abuse.block', { ip, reason, ...detail });
+    await logger.withBindings({ ip, reason, ...detail }, async () => {
+      logger.warn('abuse.block');
+    });
   },
 });
 

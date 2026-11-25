@@ -51,7 +51,7 @@ export const listQuerySchema = schema({
 ```typescript
 // src/routers/user.ts
 import { query, Router } from '@aomex/web';
-import { listQuerySchema } from '../schemas/list-query.schema.js';
+import { listQuerySchema } from '@/schemas/list-query.schema';
 
 const router = new Router();
 

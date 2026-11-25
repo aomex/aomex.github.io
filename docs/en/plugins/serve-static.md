@@ -17,10 +17,11 @@ Static middleware usually sits **before** business routes (try the file first, t
 ```typescript
 import { serveStatic } from '@aomex/serve-static';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'en-US' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:4]

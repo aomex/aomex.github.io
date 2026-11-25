@@ -24,18 +24,16 @@ export default class UserService extends Service {
 }
 ```
 
-用工厂 + combineServices 注册；**基础设施建议写进 eager**，应用一启动就先连上，别等第一条线上请求才初始化：
+用工厂 + combineServices 注册；**需要进程一起来就连上的服务**写进 eager（如 Prisma / 外部 SDK）：
 
 ```typescript
 import { combineServices } from '@aomex/common';
 
 export const services = await combineServices( // [!code highlight]
   {
-    user: () => import('./user.service.js'),
-    cache: () => import('./cache.service.js'),
-    logger: () => import('./logger.service.js'),
+    user: () => import('@/services/user.service'),
   },
-  { eager: ['cache', 'logger'] },
+  { eager: ['user'] },
 );
 ```
 
@@ -43,10 +41,11 @@ export const services = await combineServices( // [!code highlight]
 
 ```typescript
 import { WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services, // [!code highlight]
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
 });
@@ -59,18 +58,20 @@ const app = new WebApp({
 路由或中间件里：
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 const user = await services.user.findById(1);
-await services.logger.info('用户已查询', { userId: user?.name });
+logger.info(`用户已查询 ${user?.name ?? ''}`);
 ```
 
-在别的文件 import { services } from './services/index.js'，不必再给模块做额外增强。
+在别的文件 import { services } from '@/services'，不必再给模块做额外增强。
 
 ## 懒加载与测试注入
 
-正式代码里用 `() => import('./xxx.service.js')` 推迟加载，冷启动更快：
+正式代码里用 `() => import('@/services/xxx.service')` 推迟加载，冷启动更快：
 
 ```typescript
-user: () => import('./user.service.js'),
+user: () => import('@/services/user.service'),
 ```
 
 测试里注入假实现可以写成异步工厂直接返回类：
@@ -80,38 +81,47 @@ user: async () => FakeUserService,
 ```
 
 ::: warning
-业务代码不要写成 `async () => UserService`。类已经跟着当前模块进内存了，懒加载形同虚设，还无端占运行时内存。正式环境一律 `() => import('./user.service.js')`；上面这种写法只留给测试注入。
+业务代码不要写成 `async () => UserService`。类已经跟着当前模块进内存了，懒加载形同虚设，还无端占运行时内存。正式环境一律 `() => import('@/services/user.service')`；上面这种写法只留给测试注入。
 :::
 
 每个文件 `export default class XxxService` 最省心，loader 不用猜多个导出。
 
 ## eager
 
-默认服务是**懒加载**的：第一次 `await services.xxx` 才实例化、跑 `onInit`。`eager` 里列出的名字会在 `combineServices` 返回前就建好——适合 Redis、日志这类「进程一起来就要就绪」的基础设施。
+默认服务是**懒加载**的：第一次 `await services.xxx` 才实例化、跑 `onInit`。`eager` 里列出的名字会在 `combineServices` 返回前就建好——适合「进程一起来就要连上」的业务服务（例如 Prisma）。
 
 ```typescript
-{ eager: ['cache', 'logger'] },
+{ eager: ['user', 'prisma'] },
 ```
 
-本地试跑、极简 CLI 可以不写 eager。若在 A 的 `onInit` 里要 `await services.cache.xxx`，而 cache 没进 eager，连库会拖到第一次业务调用，启动阶段容易踩时序坑。
+本地试跑、极简 CLI 可以不写 eager。若在 A 的 `onInit` 里要 `await services.user.xxx`，而 user 没进 eager，初始化会拖到第一次业务调用，启动阶段容易踩时序坑。
 
 ## 生命周期钩子
 
-有些资源**不必**做成 Service、也不进 `services` 袋（例如模块级 PrismaClient、插件内部的 Redis store），但仍要在进程启动时连上、关停时断开。这时用 `registerLifecycle`：登记时立刻跑 `onInit`，`WebApp` / `ConsoleApp` 关停时再跑 `onDestroy`。
+有些资源不进 `services` 袋（例如模块级 PrismaClient、插件内部的 Redis store），但仍要在进程启动时连上、关停时断开。这时用 `registerLifecycle`：登记时立刻跑 `onInit`，`WebApp` / `ConsoleApp` 关停时再跑 `onDestroy`。
+
+懒连接场景（适配器、自建客户端）常见写法是「门闩 + 失败清空」，方便下次再试——本函数**不会**自动重试：
 
 ```typescript
 import { registerLifecycle } from '@aomex/common';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
+let ready: Promise<void> | undefined;
 
-await registerLifecycle({ // [!code focus:4]
-  onInit: () => prisma.$connect(),
-  onDestroy: () => prisma.$disconnect(),
-});
+function ensureReady() {
+  ready ??= registerLifecycle({ // [!code focus:7]
+    onInit: () => prisma.$connect(),
+    onDestroy: () => prisma.$disconnect(),
+  }).catch((err) => {
+    ready = undefined;
+    throw err;
+  });
+  return ready;
+}
 ```
 
-返回的函数用来**提前取消登记**（已关停或已取消后再调无效果）。`onInit` 失败则不会进入销毁队列。限流等插件内部也会用同一套钩子管 store，业务侧一般不用再为它们登记一遍。
+一次性连上（启动脚本、模块顶层）也可以直接 `await registerLifecycle({ … })`。返回的函数用来**提前取消登记**（已关停或已取消后再调无效果）。`onInit` 失败则不会进入销毁队列。限流等插件内部也会用同一套钩子，业务侧一般不用再为它们登记一遍。
 
 已经放进 `combineServices` 的类继续用 `onInit` / `onDestroy` 即可，不必再套一层 `registerLifecycle`。
 
@@ -120,9 +130,11 @@ await registerLifecycle({ // [!code focus:4]
 大仓按域拆多个 combineServices 再合并交给 App：
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 const app = new WebApp({
   services: [domainA, domainB], // [!code highlight]
-  logger: domainA.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
 });
@@ -130,10 +142,10 @@ const app = new WebApp({
 
 类名以 Service 结尾时，[`createRemember`](/zh/core/cache#缓存装饰器) 等会用去掉后缀后的名字区分缓存键（UserService → User）。
 
-服务之间互相调用：在类里 import { services } from './index.js'，再 await services.other.method() 即可。类内 this.foo() 照常写；只有**跨类**才用 await services.other.foo()。
+服务之间互相调用：在类里 import { services } from '@/services'，再 await services.other.method() 即可。类内 this.foo() 照常写；只有**跨类**才用 await services.other.foo()。
 
 ## 下一步
 
-- 会话、`createRemember`：[缓存](/zh/core/cache)
-- 全站日志出口：[日志](/zh/core/logger)
+- 共享 `Caching`、`createRemember`：[缓存](/zh/core/cache)
+- 全站 `Logger`：[日志](/zh/core/logger)
 - 路由怎么写薄：[接口路由](/zh/web/router)

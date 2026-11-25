@@ -90,7 +90,7 @@ ctx.auth.bearer // { token: string; data: T }
 
 T 是 onLoaded 在成功時返回的物件形狀。authorize('bearer', n) 裡 n 的型別跟著你的 onAuthorize 走。
 
-onAuthorize 可以寫例項方法（用 this.getIdentity()），也可以寫成柯里化——二選一，型別會跟著策略定義走：
+onAuthorize 可以寫實例方法（用 this.getIdentity()），也可以寫成柯里化——二選一，型別會跟著策略定義走：
 
 ```typescript
 onAuthorize: (minRole: number) => {

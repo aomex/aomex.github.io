@@ -14,7 +14,7 @@ Put site-wide copy in `docs.info.description`; group intros in `docs.tags[].desc
 
 ```typescript
 import { generateOpenapi } from '@aomex/openapi-generator';
-import { app } from './app.js';
+import { app } from '@/app';
 
 await generateOpenapi({
   routers: './src/routers',

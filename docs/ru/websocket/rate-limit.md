@@ -2,27 +2,28 @@
 outline: deep
 ---
 
-# Ограничение частоты запросов
+# Ограничение частоты
 
-Кто-то держит соединение и бесконечно делает `send` — WebSocket лимитирует **каждое входящее сообщение** (не число соединений). `websocketRateLimit()` из `@aomex/rate-limit/websocket` вешайте **перед** `channels()`: при превышении ответит рамкой `event: 'error'`, в бизнес **не** зайдёт, соединение останется открытым (не рвём — иначе клиент сразу переподключится и продолжит долбить).
+На WebSocket лимитируется **каждое входящее сообщение**, не число соединений. `websocketRateLimit()` из `@aomex/rate-limit/websocket` — **перед** `channels()`: при превышении push `event: 'error'`, в бизнес не заходим, соединение открыто (не рвём, чтобы не устроить шторм переподключений).
 
 ```bash
 pnpm add @aomex/rate-limit
-# 多副本共享计数时：
+# для общего счёта между репликами:
 pnpm add @aomex/rate-limit-redis-store
 ```
 
-## Сначала остановите спам
+## Сначала остановить спам
 
-Окно — `window` (миллисекунды или читаемые `'10s'` / `'1 minute'`), число — `limit`. По умолчанию счётчик по `ctx.client.request.ip`: несколько соединений с одного IP делят квоту. `ctx.client.request` есть уже на handshake, «пустоты» не бойтесь:
+Окно — `window` (мс или `'10s'` / `'1 minute'`), число — `limit`. По умолчанию счётчик по `ctx.client.request.ip` — несколько соединений с одного IP делят квоту. `ctx.client.request` есть с handshake:
 
 ```typescript
 import { websocketRateLimit } from '@aomex/rate-limit/websocket';
 import { WebsocketApp, channels } from '@aomex/websocket';
 import { WsTransport } from '@aomex/websocket-ws-transport';
+import { logger } from '@/services/logger.service';
 
 new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   transport: new WsTransport(),
   mount: [ // [!code focus:6]
@@ -35,11 +36,11 @@ new WebsocketApp({
 });
 ```
 
-Без параметров по умолчанию — 1 час / 2500 раз, для большинства чатов довольно мягко; вариант «30 за 10 секунд» лучше держит спам-ботов.
+Без параметров — 1 час / 2500, для чата часто мягко. «30 за 10 с» — против ботов.
 
-## Счёт по залогиненному пользователю и списки
+## По пользователю, белый список
 
-Считать по пользователю — напишите свой `id`; `false` значит это сообщение не лимитировать. Для внутренней отладки — `allowList`; для уже забаненных — `denyList` сразу откажет. Текст при превышении — `errorMessage` (по умолчанию i18n «слишком частые запросы»):
+Свой `id` для учёта по логину; `false` — сообщение без лимита. `allowList` для отладки из внутренней сети; `denyList` для уже забаненных. Текст при превышении — `errorMessage` (иначе i18n «слишком часто»):
 
 ```typescript
 websocketRateLimit({ // [!code focus:18]
@@ -58,13 +59,13 @@ websocketRateLimit({ // [!code focus:18]
   denyList: (ctx) => {
     return ctx.client.data['banned'] === true;
   },
-  errorMessage: '发送过于频繁，稍后再试',
+  errorMessage: 'Слишком часто, попробуйте позже',
 });
 ```
 
-## Несколько реплик: Redis
+## Реплики: Redis
 
-Тот же `RateLimitRedisStore`, что и на HTTP. Даже если вложить один экземпляр store, префиксы ключей разные (`aomex-rate-limit:ws:…`) — квота WebSocket не съест HTTP-лимит. Реальный IP зависит от `proxyIP` на Web-приложении (handshake идёт через тот же путь).
+Тот же `RateLimitRedisStore`, что на HTTP. Даже в одном store префикс ключей другой (`aomex-rate-limit:ws:…`), квота не смешивается с HTTP. Реальный IP — `proxyIP` Web-приложения.
 
 ```typescript
 import { RateLimitRedisStore } from '@aomex/rate-limit-redis-store';
@@ -81,6 +82,6 @@ websocketRateLimit({ // [!code focus:8]
 
 ## Дальше
 
-- [Защита от злоупотреблений](/ru/websocket/abuse)
-- [Точка входа](/ru/websocket/)
-- [Маршрутизация событий](/ru/websocket/channel)
+- [Abuse](/ru/websocket/abuse)
+- [Вход](/ru/websocket/)
+- [Каналы](/ru/websocket/channel)

@@ -44,8 +44,8 @@ new WebApp({
 测试或特性开关时，可传具体实例，不必扫目录：
 
 ```typescript
-import { userRouter } from './routers/user.js';
-import { postRouter } from './routers/post.js';
+import { userRouter } from '@/routers/user';
+import { postRouter } from '@/routers/post';
 
 mount: [routers([userRouter, postRouter])],
 ```

@@ -41,11 +41,11 @@ new WebApp({
 });
 ```
 
-測試或特性開關時，可傳具體例項，不必掃目錄：
+測試或特性開關時，可傳具體實例，不必掃目錄：
 
 ```typescript
-import { userRouter } from './routers/user.js';
-import { postRouter } from './routers/post.js';
+import { userRouter } from '@/routers/user';
+import { postRouter } from '@/routers/post';
 
 mount: [routers([userRouter, postRouter])],
 ```

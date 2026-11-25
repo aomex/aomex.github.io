@@ -7,6 +7,8 @@ outline: deep
 給 Console 定義「動詞短語」指令（如 cache:warm），而不是 HTTP 的 method + path。多個指令可共用一個 Commander 和字首；與 Web 的 Router + `routers()` 結構對稱。
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 import { Commander, commanders, ConsoleApp, options } from '@aomex/console';
 import { rule } from '@aomex/common';
 
@@ -22,13 +24,13 @@ commander.create('warm', {
     }),
   ],
   action: async (ctx) => {
-    await ctx.logger.info(`warming ${ctx.options.key ?? 'all'}`);
+    logger.info(`warming ${ctx.options.key ?? 'all'}`);
   },
 });
 
 commander.create(['flush', 'clear'], {
   action: async (ctx) => {
-    await ctx.logger.info('cache cleared');
+    logger.info('cache cleared');
   },
 });
 

@@ -4,14 +4,14 @@ outline: deep
 
 # エラー形式
 
-`ctx.throw` をサイト（またはモジュール）全体で統一 JSON エンベロープにし、デフォルトプレーンテキストにしない：mount に `formatError`、handler で最終 body、content で型と OpenAPI を固定。形状変更はここ。`app.on('error')` で body を直さない——タイミングが遅く、既に書き始めたレスポンスと競合しやすい。
+サイト全体（またはモジュール）の `ctx.throw` を統一 JSON にする：`mount` に `formatError` を掛け、`handler` で最終 body、`content` で型と OpenAPI を固定する。形状の変更はここで行い、`app.on('error')` で body を無理に書き換えない——タイミングが遅く、既に書き出した応答と衝突しやすい。
 
 ```typescript
 import { rule } from '@aomex/common';
 import { formatError, routers, WebApp } from '@aomex/web';
 
 new WebApp({
-  // services / logger / language / proxyIP —— 见 [应用入口](/ja/web/)
+  // services / logger / language / proxyIP —— [アプリ入口](/ja/web/) 参照
   mount: [
     formatError({ // [!code focus:13]
       content: { // [!code highlight]
@@ -29,17 +29,18 @@ new WebApp({
   ],
 });
 ```
-`formatError` は `routers`**の外・手前**にマウント。内側で拾われなければ任意ルートの throw がこの handler へ。
 
-handler 戻り値は content と一致。`ctx.throw(403, { code: 'FORBIDDEN' })` では業務コードは多く `err.code`、文言はサニタイズ済み `err.message`。`statusCodes` 省略時、この層が**すべて** 4xx / 5xx を受け持つ。ルート `response({ statusCode: 400 })` で content 未記述時、ドキュメントは外層 formatError のエラー形状を借りることが多い。formatError なしならクライアントはフレームワークデフォルトのプレーンテキスト。
+`formatError` は `routers` の**外側・手前**に掛ける。内側で捕まえられない限り、任意ルートの throw がこの handler に入る。
 
-引き継ぎ時は既存レスポンスヘッダをクリアし、エラーコードでステータス再設定して新 body を send。`err.raw`、スタック、SQL を handler 返却に入れない——外向きはサニタイズ済み情報のみ。
+handler の戻り値は `content` の形に合わせる。`ctx.throw(403, { code: 'FORBIDDEN' })` では業務コードは多く `err.code`、文言はサニタイズ済み `err.message`。`statusCodes` を省略すると、この層が**すべて**の 4xx / 5xx を扱う。ルートの `response({ statusCode: 400 })` で `content` 未指定のとき、ドキュメント生成は外側 `formatError` のエラー形状を借りることが多い。`formatError` なしではクライアントはフレームワーク既定のプレーンテキストエラー。
 
-## モジュール内側エンベロープ
+引き継ぎ時は現在の応答ヘッダーをクリアし、エラーコードに合わせてステータスを付け直して新 body を send する。`err.raw`、スタック、SQL を handler の戻り値に入れない——外部にはサニタイズ済み情報だけ。
 
-グローバル formatError はサイトデフォルト。**/admin** や公開 API サブドメインで別フィールド名（`error` / `detail` で `code` / `message` 以外）なら、該当 `Router({ mount: [formatError(...)] })` に内層を追加。オニオン内側が先に catch。`/admin/*` は内層、他は外層。
+## モジュール内側のエンベロープ
 
-/admin で別フィールド名：
+グローバル `formatError` がサイト既定の形。`/admin` や公開 API サブドメインで別フィールド名（`error` / `detail` で `code` / `message` 以外）なら、対応する `Router({ mount: [formatError(...)] })` にもう一層。オニオンの内側が先に throw を捕まえ、そのプレフィックス配下は内側、他は外側。
+
+/admin で別フィールド名のとき、Router 内にもう一層：
 
 ```typescript
 import { formatError, Router } from '@aomex/web';
@@ -63,13 +64,14 @@ const adminRouter = new Router({ // [!code focus:18]
   ],
 });
 ```
-オニオンで**内側が先に catch**：`/admin/*` は内層形状、他ルートはグローバル。
 
-## statusCodes で部分受け持ち
+オニオンでは**内側が先に catch**：`/admin/*` は内側の形、他ルートはグローバル兜底。
 
-`statusCodes` で**この層**が処理する HTTP コードを限定（多くは 400、422 など検証系のみ）。他 4xx / 5xx は外層 handler へ。「検証だけ統一 JSON、業務 403 はグローバル」の分担。
+## statusCodes で部分的に引き受け
 
-検証系だけ管轄：
+`statusCodes` は**この層**の `formatError` が扱う HTTP コードを限定する（よく 400、422 など検証系だけ）。他 4xx / 5xx は外側へバブル。「検証だけ統一 JSON、業務 403 はグローバル」の分担に向く。
+
+検証系だけここで、他は外層へ：
 
 ```typescript
 formatError({ // [!code highlight]
@@ -86,22 +88,24 @@ formatError({ // [!code highlight]
   },
 }),
 ```
-## ルート throw との連携
 
-ルートで `ctx.throw(status, …)` が能動的終了。欠損 **404**、業務検証 **400**、権限 **403** など。第二引数は文字列か `code` 付きオブジェクト。formatError handler が `err` からコードと文言を content に組み立てる。
+## ルートの throw との組み合わせ
+
+ルートで `ctx.throw(status, …)` によりリクエストを終了しエラーチェーンへ：リソースなし **404**、業務検証 **400**、権限 **403** など。第二引数は文字列または `code` 付きオブジェクト。`formatError` の handler が `err` からコードと文言を取り `content` に組み込む。
 
 ```typescript
 ctx.throw(404);
 ctx.throw(400, 'name required');
 ctx.throw(403, { code: 'FORBIDDEN' });
 ```
-業務で既にヘッダや body を誤書きしたあと throw するなら formatError に任せて丸ごと差し替え。action でエラー JSON を半分組み立てない。
 
-成功体とエラー体をさらに `{ success, data, statusCode }` で包み外側 HTTP 固定 200 なら [レスポンスエンベロープ](/ja/web/envelope)（formatError と併用が多い）。
+誤ってヘッダや body を書いたあと throw する場合は `formatError` に任せて丸ごと置き換え、action でエラー JSON を半分だけ組み立てない。
+
+成功体・失敗体をさらに `{ success, data, statusCode }` で包み、外側 HTTP を 200 固定にするなら [レスポンスのエンベロープ](/ja/web/envelope)（`formatError` と併用が多い）。
 
 ## 次のステップ
 
-- [レスポンスエンベロープ](/ja/web/envelope)（統一外殻と HTTP 200）
-- [レスポンス制約](/ja/web/response)（ルートごと 400/404 等）
-- [アプリケーション入口](/ja/web/)（services / logger / language 等）
+- [レスポンスのエンベロープ](/ja/web/envelope)（統一外殻と HTTP 200）
+- [レスポンスの制約](/ja/web/response)（ルートごとに 400/404 などを宣言）
+- [アプリ入口](/ja/web/)（services / logger / language などグローバル設定）
 - [WebApp.language](/ja/web/#language)（検証・エラー文言の言語）

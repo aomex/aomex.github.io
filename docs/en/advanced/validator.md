@@ -48,7 +48,7 @@ Smoke-test with [manual validation](/en/validators/validate)—no HTTP required:
 
 ```typescript
 import { validate } from '@aomex/common';
-import { EmployeeIdValidator } from './employee-id.validator.js';
+import { EmployeeIdValidator } from '@/validators/employee-id.validator';
 
 await validate('E123456', new EmployeeIdValidator()); // pass
 // await validate('bad', new EmployeeIdValidator()); // throws
@@ -127,7 +127,7 @@ Class only, no `register`: types might look fine (if you augmented manually) but
 `register` only, no `declare module`: it runs but you lose completion and drift toward `any`.
 :::
 
-Registration is a **side effect**: it must run before any `rule.employeeId()`. Common pattern: `import '../validators/employee-id.validator.js'` at the top of a schema file, or one import in `web.ts` / `cli.ts`.
+Registration is a **side effect**: it must run before any `rule.employeeId()`. Common pattern: `import '@/validators/employee-id.validator'` at the top of a schema file, or one import in `web.ts` / `cli.ts`.
 
 ## Step 4: OpenAPI shape
 
@@ -151,7 +151,7 @@ protected override toDocument(): OpenAPI.SchemaObject {
 
 ```typescript
 // src/schemas/staff.schema.ts
-import '../validators/employee-id.validator.js';
+import '@/validators/employee-id.validator';
 import { schema, rule } from '@aomex/common';
 
 export const staffSchema = schema({
@@ -162,7 +162,7 @@ export const staffSchema = schema({
 
 ```typescript
 import { body } from '@aomex/web';
-import { staffSchema } from '../schemas/staff.schema.js';
+import { staffSchema } from '@/schemas/staff.schema';
 
 router.post('/staff', {
   mount: [body(staffSchema)],
@@ -210,7 +210,7 @@ Usage: `rule.employeeId().allowLowerE()`.
 
 ## Product copy in `deny`
 
-You can `import { i18n } from '../i18n/index.js'` in `deny` and call `i18n.t('errors.badEmployeeId')`. Framework `language` covers built-in validation messages; product copy is separate—see [Product i18n](/en/advanced/i18n).
+You can `import { i18n } from '@/i18n'` in `deny` and call `i18n.t('errors.badEmployeeId')`. Framework `language` covers built-in validation messages; product copy is separate—see [Product i18n](/en/advanced/i18n).
 
 ## Full file layout
 

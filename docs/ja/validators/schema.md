@@ -4,7 +4,7 @@ outline: deep
 
 # schema
 
-「ユーザー、注文、ページング」といったフィールド表を再利用可能な単位にまとめ、`src/schemas/xxx.schema.ts` に置く。ルートでは body(schema) / query(schema)、テストでは `validate(input, schema)`——同じルール、同じ `Validator.Infer` 型でコピペを減らす。
+「ユーザー・注文・ページング」などのフィールド表を再利用ユニットにまとめ、`src/schemas/xxx.schema.ts` に置く。ルートでは body(schema) / query(schema)、テストでは `validate(input, schema)`——同じ規則、同じ `Validator.Infer` 型でコピペを減らす。
 
 ```typescript
 // src/schemas/user.schema.ts
@@ -23,7 +23,7 @@ export type User = Validator.Infer<typeof userSchema>;
 ```typescript
 // src/routers/users.ts
 import { body, Router } from '@aomex/web';
-import { userSchema } from '../schemas/user.schema.js';
+import { userSchema } from '@/schemas/user.schema';
 
 export const router = new Router();
 
@@ -36,26 +36,26 @@ router.post('/register', {
 });
 ```
 
-フィールド上の optional / default などは引き続き [共通チェーン](./chain)；以下は主に **schema 自体**のメソッド。
+フィールドの optional / default 等は [共通チェーン](./chain) のまま；以下は主に **schema 自身**のメソッド。
 
-- `Validator.Infer<typeof userSchema>` は検証通過後のオブジェクト型；ctx.body 狭化後と揃える。
-- pick / omit / extend は**新しい** schema を生成し、型も新規；OpenAPI コンポーネント名は自動継承されない。コンポーネントに載せるならそれぞれ asName(...)。
-- partial() 後は各フィールドが optional；引数なし partial() で schema 内に transform があると型上呼べないことがある——`partial('name', 'bio')` に切り替える。
-- required() は逆に必須化；フィールドに default がある場合、締めても欠落時はデフォルト。
+- `Validator.Infer<typeof userSchema>` は検証通過後のオブジェクト型。狭化後の ctx.body と揃える。
+- pick / omit / extend は**新しい** schema を返し、型も新規。OpenAPI コンポーネント名は自動継承しない。コンポーネント化する形状は各自 `asName(...)`。
+- partial() で各フィールドが optional に。無引数 partial() で schema 内に transform があると型上呼べない場合あり——`partial('name', 'bio')` を使う。
+- required() で逆に必須化。フィールドに default があると、必須化後も欠落は default へ。
 
-| メソッド | いつ使うか |
+| メソッド | いつ使う |
 | --- | --- |
-| `schema({ ... })` | 初めて単位にまとめる |
-| `asName('User')` | OpenAPI `components.schemas` で `$ref` |
-| `pick('email', 'password')` | ログインは 2 フィールドだけ |
-| `omit('password')` | 外向け DTO、登録で `id` を渡させない |
-| `extend({ nickname: rule.string() })` | アカウントにフィールド追加 |
+| `schema({ ... })` | 最初のユニット化 |
+| `asName('User')` | OpenAPI `components.schemas` で `$ref` したい |
+| `pick('email', 'password')` | ログインは二フィールドだけ |
+| `omit('password')` | 対外 DTO、登録で `id` 不可 |
+| `extend({ nickname: rule.string() })` | 登録でアカウントにフィールド追加 |
 | `partial()` / `partial('name')` | PATCH、下書き |
-| `required()` / `required('name')` | 下書きから本提出 |
+| `required()` / `required('name')` | 下書きを本提出に |
 
 ### asName(name)
 
-名前は pick / omit / extend / partial / required の**結果に自動では伝わらない**——コンポーネントに載せる形状ごとに再度付ける。
+名前は後続の pick / omit / extend / partial / required 結果に**自動では伝播しない**——コンポーネント庫に入れる形状ごとに再度指定。
 
 ```typescript
 export const userSchema = schema({
@@ -70,17 +70,17 @@ export const publicUserSchema = userSchema.omit('password').asName('PublicUser')
 ### pick / omit
 
 ```typescript
-import { userSchema } from '../schemas/user.schema.js';
+import { userSchema } from '@/schemas/user.schema';
 
 userSchema.pick('email', 'password');
 userSchema.omit('password');
 ```
 
-登録 API で body(userSchema) のまま omit('id') を忘れると、クライアントが主キーを変えられる——作成用 schema は別途派生する。
+登録で body(userSchema) のまま omit('id') を忘れると、クライアントが主キーを変えられる——作成用 schema を別派生に。
 
 ### extend
 
-同名は渡した方が優先；フィールド表でも別 schema でも渡せる。
+同名は渡した側が優先。フィールド表でも別 schema でも可。
 
 ```typescript
 export const accountSchema = schema({
@@ -93,12 +93,12 @@ export const registerSchema = accountSchema.extend({ // [!code highlight]
 });
 ```
 
-extend 後に新形状への asName を忘れると、OpenAPI はインラインのままで $ref に不利。
+extend 後に新形状へ asName を忘れると、OpenAPI はインラインの塊のまま——$ref に不利。
 
 ### partial / required
 
 ```typescript
-import { userSchema } from '../schemas/user.schema.js';
+import { userSchema } from '@/schemas/user.schema';
 
 userSchema.pick('name', 'email', 'bio').partial(); // [!code highlight]
 
@@ -107,7 +107,7 @@ draftSchema.required();
 draftSchema.required('name', 'email');
 ```
 
-引数なし partial() で schema 内に transform があると型または実行が詰まることがある——`partial('name', 'bio')` にする。
+無引数 partial() で transform 付きフィールドがあると型または実行が詰まることがある——`partial('name', 'bio')` を使う。
 
 ### リスト例：ページング query
 
@@ -120,14 +120,14 @@ export const listQuerySchema = schema({ // [!code highlight]
 });
 ```
 
-page / pageSize に default がある：クライアントは省略可；ログでは「未送信」がデフォルト値として見える。
+page / pageSize に default あり：クライアント省略可。ログの「未传」は default 表示。
 
-Web ルートでは body / query を載せられれば手書き validate + 400 自前投げは避ける——型とエラーエンベロープが揃う。
+Web ルートでは body / query を掛けられるなら手書き validate + 自前 400 を避ける——型とエラー envelope が揃う。
 
-エラーメッセージの言語はアプリの language に従う。[Web](/ja/web/#language) · [Console](/ja/console/#language) を参照。
+エラーメッセージの言語はアプリ `language` に従う。[Web](/ja/web/#language) · [Console](/ja/console/#language)。
 
-## 次のステップ
+## 次に
 
-- [手動バリデーション](./validate)（スクリプト・単体テストで同じ schema）
+- [手動検証](./validate)（スクリプト・単体テストで同じ schema）
 - [object](./rules/object) / [array](./rules/array) / [oneOf](./rules/one-of)
-- [リクエストボディ](/ja/web/body) / [クエリパラメータ](/ja/web/query)
+- [リクエスト body](/ja/web/body) / [クエリ](/ja/web/query)

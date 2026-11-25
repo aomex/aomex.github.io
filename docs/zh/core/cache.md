@@ -1,22 +1,50 @@
 # 缓存
 
-做一个 **CacheService**：选 memory / file / Redis 适配器，用 this.cache 读写；用登录 **session**（token → 用户信息）跑通「签发、鉴权读、退出删」整条链。
+组合根建一份共享的 **`Caching`**：选 memory / file / Redis 适配器，业务与鉴权 / 滥用 / OAuth 等插件都传**同一实例**（配置名常见 `store`）。用登录 **session**（token → 用户信息）跑通「签发、鉴权读、退出删」整条链。
 
-子类实现 createAdapter()；业务前缀用 `protected readonly` + `this.key(...)` 收成 `CacheKey`，方法里再 `.key(token)` 往下拼，避免散落字符串。
+类名保持 `Caching`、不要改成 `Cache`：避免和 TypeScript DOM / Web Cache API 的全局 `Cache` 撞名。实例变量推荐叫 `cache`。首次读写时懒连接，关停时经内部 `registerLifecycle` 断开。
+
+`src/cache.ts` **只导出** `cache` 与 `remember`；登录会话、业务键前缀等写在各自 Service 里，从这里 `import { cache }`。
 
 ```typescript
-import { BaseCacheService } from '@aomex/cache';
+// src/cache.ts
+import { Caching, createRemember } from '@aomex/cache';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 
-export default class CacheService extends BaseCacheService { // [!code focus:28]
-  protected readonly loginTokenKey = this.key('login-token', 'v1');
+export const cache = new Caching(new CacheMemoryAdapter()); // [!code highlight]
+export const remember = createRemember(cache);
+```
 
-  protected createAdapter() {
-    return new CacheMemoryAdapter(); // [!code highlight]
-  }
+`get` / `set` / `delete` / `getAndDelete` / `singleFlight` 等接受 **字符串或 `CacheKey`**。`get<T>(key)` 带上泛型后，返回值类型上是 `T | null`；`set` / `setNX` / `expire` 的过期时间是 **`DurationInput`**：毫秒数或可读字符串（`'7 days'`、`'30m'`、`'1.5 hours'`），见下文。
+
+插件侧直接传这份实例：
+
+```typescript
+import { cache } from '@/cache';
+
+new Abuse({ store: cache, strategies: [/* … */] });
+new AuthSessionStrategy({ store: cache, /* … */ });
+new OAuth2Client({ store: cache, /* … */ });
+```
+
+::: tip
+别在各插件里各自 `new Caching(adapter)`——应组合根创建一次后共享。多套存储（本机 memory + 共享 Redis）时再建第二份实例，并各自 `createRemember`。
+:::
+
+## session 读写
+
+登录签发 token 后，把「token → 用户信息」写入缓存；鉴权 onLoaded 里读回；退出时 delete。键名用带版本的 `CacheKey` 前缀，发版换会话结构时改一处即可整批失效——这些方法放在 User / Auth 等 Service 里：
+
+```typescript
+// src/services/user.service.ts
+import { Service } from '@aomex/common';
+import { cache } from '@/cache';
+
+export default class UserService extends Service {
+  protected readonly loginTokenKey = cache.key('login-token', 'v1'); // [!code highlight]
 
   async getLoginToken(token: string) {
-    return this.cache.get<{ userId: number; role: number }>(
+    return cache.get<{ userId: number; role: number }>(
       this.loginTokenKey.key(token),
     );
   }
@@ -25,115 +53,88 @@ export default class CacheService extends BaseCacheService { // [!code focus:28]
     token: string,
     session: { userId: number; role: number },
   ) {
-    await this.cache.set(
-      this.loginTokenKey.key(token),
-      session,
-      '7 days',
-    );
+    await cache.set(this.loginTokenKey.key(token), session, '7 days');
   }
 
   async deleteLoginToken(token: string) {
-    await this.cache.delete(this.loginTokenKey.key(token));
+    return cache.delete(this.loginTokenKey.key(token));
   }
 }
 ```
-
-`get` / `set` / `delete` / `getAndDelete` / `singleFlight` 等接受 **字符串或 `CacheKey`**。`get<T>(key)` 带上泛型后，返回值类型上是 `T | null`；`set` / `setNX` / `expire` 的过期时间是 **`DurationInput`**：毫秒数或可读字符串（`'7 days'`、`'30m'`、`'1.5 hours'`），见下文。`services.cache.xxx` 的方法名、参数跟你在 CacheService 里声明的一致，改签名时编译器会追着路由和鉴权回调改。
-
-注册并预热（生产换 Redis 时尤其建议 eager）：
-
-```typescript
-await combineServices(
-  {
-    cache: () => import('./cache.service.js'),
-  },
-  { eager: ['cache'] }, // [!code highlight]
-);
-```
-
-::: warning
-生产或多实例时 cache 没写 eager，首个读缓存的请求还要付连 Redis 的时间，尾延迟容易抖。
-:::
-
-## session 读写
-
-登录签发 token 后，把「token → 用户信息」写入缓存；鉴权 onLoaded 里读回；退出时 delete。键名用带版本的 `CacheKey` 前缀，发版换会话结构时改一处即可整批失效。
 
 业务侧（登录 / 鉴权 / 退出）：
 
 ```typescript
 // 登录成功后写入
 const token = auth.strategy('bearer').signature('sha256', user.id);
-await services.cache.setLoginToken(token, {
+await services.user.setLoginToken(token, {
   userId: user.id,
   role: user.role,
 }); // [!code highlight]
 
 // 鉴权 onLoaded 里读取
-const session = await services.cache.getLoginToken(token);
+const session = await services.user.getLoginToken(token);
 if (!session) {
   return false;
 }
 
 // 退出登录删掉
-await services.cache.deleteLoginToken(token);
+await services.user.deleteLoginToken(token);
 ```
-
-签发 token、查库这类逻辑留在 User / Auth 等 Service；CacheService 只负责存取。
 
 ## 适配器选择
 
-适配器决定数据落在哪：**memory** 零依赖、进程内、重启清空，适合本机和单测；**Redis** 多实例共享 session、限流计数；需要一点磁盘持久化可看 **file**。业务代码通常只改 `createAdapter()`，读写 API 不变。
+适配器决定数据落在哪：**memory** 零依赖、进程内、重启清空，适合本机和单测；**Redis** 多实例共享 session、限流计数；需要一点磁盘持久化可看 **file**。业务代码通常只改构造时传入的适配器，读写 API 不变。
 
-本地开发、单测用 @aomex/cache/memory，零依赖，重启丢数据：
+本地开发、单测用 `@aomex/cache/memory`，零依赖，重启丢数据：
 
 ```typescript
+import { Caching } from '@aomex/cache';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 
-protected createAdapter() {
-  return new CacheMemoryAdapter();
-}
+export const cache = new Caching(new CacheMemoryAdapter());
 ```
 
-生产或多实例共享 session / 限流时换 `@aomex/cache-redis-adapter`（`ioredis` 已随包装好，一般只改 createAdapter）：
+生产或多实例共享 session / 限流时换 `@aomex/cache-redis-adapter`（`ioredis` 已随包装好）：
 
 ```typescript
+import { Caching } from '@aomex/cache';
 import { CacheRedisAdapter } from '@aomex/cache-redis-adapter';
 
-protected createAdapter() {
-  return new CacheRedisAdapter({ host: '127.0.0.1', port: 6379 });
-}
+export const cache = new Caching(
+  new CacheRedisAdapter({ host: '127.0.0.1', port: 6379 }),
+);
 ```
 
-单机要一点持久化可选 @aomex/cache/file。
+单机要一点持久化可选 `@aomex/cache/file`。
 
 ## 键怎么拼：CacheKey
 
-`this.key(...)` 返回的是 **`CacheKey`**，不是普通字符串：片段用 `:` 拼接，可以继续 `.key` / `.keyHash` / `.toHash()`。`this.cache.get` / `set` 等直接吃它，不必再 `String(...)`。
+`cache.key(...)`（或静态 `CacheKey.key(...)`）返回的是 **`CacheKey`**，不是普通字符串：片段用 `:` 拼接，可以继续 `.key` / `.keyHash` / `.toHash()`。`cache.get` / `set` 等直接吃它，不必再 `String(...)`。
 
 ```typescript
-this.key('user', 1); // user:1
-this.key('user').key(1); // 同上
-this.key('user').keyHash(1); // user:<md5('1')>，前缀可读
-this.key('user', 1).toHash(); // <md5('user:1')>
-this.keyHash('user', 1); // 同上，整键哈希
+cache.key('user', 1); // user:1
+cache.key('user').key(1); // 同上
+cache.key('user').keyHash(1); // user:<md5('1')>，前缀可读
+cache.key('user', 1).toHash(); // <md5('user:1')>
+cache.keyHash('user', 1); // 同上，整键哈希
 ```
 
 | 写法 | 得到什么 |
 | --- | --- |
-| `this.key('a', 1)` | 可读键 `a:1` |
+| `cache.key('a', 1)` | 可读键 `a:1` |
 | `prefix.key(id)` | 在已有 `CacheKey` 前缀后再拼一段 |
-| `this.key('a').keyHash(id)` | 前缀保留，**只哈希本次参数** |
-| `this.key(...).toHash()` / `this.keyHash(...)` | **整段** MD5，无可读前缀 |
+| `cache.key('a').keyHash(id)` | 前缀保留，**只哈希本次参数** |
+| `cache.key(...).toHash()` / `cache.keyHash(...)` | **整段** MD5，无可读前缀 |
 
 片段过长、含奇怪字符、或不想在 Redis 里露出明文时用哈希；日常业务键留可读前缀更方便排查。旧的单独 `hash()` 已去掉，统一走上面几条。
 
 ### 前缀与版本
 
-`protected readonly` 字段集中业务前缀（如 `login-token`），方法里再 `.key(token)` / `.key(id)`，别在各处手写魔术字符串。把版本号写进前缀（`v1` → `v2`）等于**不重名地**废弃旧 session：
+在对应 Service 里用 `protected readonly` 集中业务前缀（如 `login-token`），方法里再 `.key(token)` / `.key(id)`，别在各处手写魔术字符串。把版本号写进前缀（`v1` → `v2`）等于**不重名地**废弃旧 session：
 
 ```typescript
-protected readonly loginTokenKey = this.key('login-token', 'v2');
+protected readonly loginTokenKey = cache.key('login-token', 'v2');
 ```
 
 ## 时长 DurationInput
@@ -146,9 +147,9 @@ protected readonly loginTokenKey = this.key('login-token', 'v2');
 常用单位：`ms` / `s`（`sec` / `second`）/ `m`（`min` / `minute`）/ `h`（`hr` / `hour`）/ `d`（`day`）/ `w`（`week`）/ `month` / `y`（`year`）。`month` 按 30 天、`year` 按 365 天。也可直接 `import { parseDuration } from '@aomex/common'`，在别处把可读时长换成毫秒。
 
 ```typescript
-await this.cache.set(key, session, '7 days');
-await this.cache.setNX(lockKey, '1', '30 seconds');
-await this.cache.expire(key, '1 hour');
+await cache.set(key, session, '7 days');
+await cache.setNX(lockKey, '1', '30 seconds');
+await cache.expire(key, '1 hour');
 ```
 
 ## exists：只要有没有
@@ -156,8 +157,8 @@ await this.cache.expire(key, '1 hour');
 只想知道某个键**在不在**、不必把值读出来解码时，用 `exists`。返回 `boolean`，同样接受字符串或 `CacheKey`。
 
 ```typescript
-const key = this.loginTokenKey.key(token);
-if (await this.cache.exists(key)) {
+const key = loginTokenKey.key(token);
+if (await cache.exists(key)) {
   // 会话还在，再决定要不要 get 详情
 }
 ```
@@ -175,8 +176,8 @@ if (await this.cache.exists(key)) {
 常见场景：OAuth `state`、邮件验证码、短时下载票——读到就必须作废，防止重放。
 
 ```typescript
-const ticket = await this.cache.getAndDelete<{ userId: number }>(
-  this.key('email-verify', code),
+const ticket = await cache.getAndDelete<{ userId: number }>(
+  cache.key('email-verify', code),
 );
 if (!ticket) {
   ctx.throw(400, '验证码无效或已使用');
@@ -193,7 +194,7 @@ if (!ticket) {
 抢锁、幂等（TTL 要大于任务最坏耗时）：
 
 ```typescript
-const ok = await this.cache.setNX(lockKey, '1', '30 seconds');
+const ok = await cache.setNX(lockKey, '1', '30 seconds');
 if (!ok) {
   return;
 }
@@ -202,10 +203,10 @@ if (!ok) {
 验证码错误次数：先 `increment`，首次（或尚未设过期）再 `expire` 拉开窗口——与 Redis `INCR` 习惯一致。memory 适配器的自增 / 自减会**保留已有 TTL**，不会因为改数字把过期清掉。
 
 ```typescript
-const key = this.key('otp-fail', phone);
-const n = await this.cache.increment(key);
-if (n === 1 || (await this.cache.ttl(key)) === -1) {
-  await this.cache.expire(key, '15 minutes'); // [!code highlight]
+const key = cache.key('otp-fail', phone);
+const n = await cache.increment(key);
+if (n === 1 || (await cache.ttl(key)) === -1) {
+  await cache.expire(key, '15 minutes'); // [!code highlight]
 }
 if (n > 5) {
   ctx.throw(429);
@@ -217,8 +218,8 @@ if (n > 5) {
 同一 key 上很多人同时要「现算」一份结果（拉 JWKS、打一次贵接口），又不想把结果长期塞进缓存时，用 `singleFlight`：第一个进 `factory`，其余等共享结果；**飞行结束后不留长期缓存**，下次再调会重新算。
 
 ```typescript
-async loadJwks() {
-  return this.cache.singleFlight(this.key('jwks'), async () => { // [!code focus:3]
+async function loadJwks() {
+  return cache.singleFlight(cache.key('jwks'), async () => { // [!code focus:3]
     return fetchJwksFromIdp();
   });
 }
@@ -234,22 +235,17 @@ async loadJwks() {
 
 业务方法里反复写「先 get → 没有再算 → set」很啰嗦，同一 key 并发打进来还会算很多次。`createRemember` 做出一个方法装饰器 `@remember`：命中直接返回；未命中才跑原方法并写入；**同一 key 并发时只让一个执行**，其余等结果（占位锁与 `singleFlight` 同一套约 30 秒续期）。
 
-装饰器要绑在你自己的缓存服务类上——传入 `BaseCacheService` **子类构造函数**（不能传基类、不能传实例）。写在 `cache.service.ts` 里最省事，业务侧直接 import `remember`：
+装饰器绑在**具体 `Caching` 实例**上——`createRemember(cache)`，不能传适配器或类构造函数。在 `cache.ts` 里导出后，业务 Service 直接 import `remember`：
 
 ```typescript
-import { BaseCacheService, createRemember } from '@aomex/cache';
+import { Caching, createRemember } from '@aomex/cache';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 
-export default class CacheService extends BaseCacheService {
-  protected createAdapter() {
-    return new CacheMemoryAdapter();
-  }
-}
-
-export const remember = createRemember(CacheService); // [!code highlight]
+export const cache = new Caching(new CacheMemoryAdapter());
+export const remember = createRemember(cache); // [!code highlight]
 ```
 
-`BaseCacheService` 在 `onInit` 连上适配器后会自动挂好这条 remember，关停时卸下——你**不用**再手调登记。`combineServices` 里仍建议 `eager: ['cache']`：缓存还没就绪时，被装饰的方法会**等**；已经关停后再调会**抛错**。
+连接由 `Caching` 懒加载负责。
 
 ### 挂到业务方法
 
@@ -257,7 +253,7 @@ export const remember = createRemember(CacheService); // [!code highlight]
 
 ```typescript
 import { Service } from '@aomex/common';
-import { remember } from './cache.service.js';
+import { remember } from '@/cache';
 
 class ReportService extends Service {
   @remember('1 minute')
@@ -304,11 +300,11 @@ class ReportService extends Service {
 
 同一 key 打进来时，第一个用 `setNX` 占位去跑原方法，占位键大约 30 秒、执行中会续期；其它调用轮询等到占位消失，再读缓存（或拿到 `defaultValue`）。这是防缓存击穿用的，不是分布式锁业务语义——别拿它当通用锁。只要「这次并发共享、不长期缓存」，直接用上面的 `singleFlight`。
 
-原方法返回 `null` 时**不会**把 `null` 写进缓存（避免把「没有」锁死太久）；调用方看到的是 `defaultValue`。真要缓存「明确没有」这类结果，需要你自己设计键或换手写 `this.cache.set`。
+原方法返回 `null` 时**不会**把 `null` 写进缓存（避免把「没有」锁死太久）；调用方看到的是 `defaultValue`。真要缓存「明确没有」这类结果，需要你自己设计键或换手写 `cache.set`。
 
 ### 多套缓存
 
-本机 memory 一套、共享 Redis 一套时：各写一个 `BaseCacheService` 子类，再各调一次 `createRemember`。作用域按**服务类**区分，没有 `fork()`。业务方法上挂哪份 `remember`，就进哪套存储。
+本机 memory 一套、共享 Redis 一套时：各 `new Caching(adapter)` 一次，再各调一次 `createRemember`。作用域按**实例**区分，没有 `fork()`。业务方法上挂哪份 `remember`，就进哪套存储。
 
 ::: warning
 只挂**读多写少、可短暂过期**的查询。写库、发短信、扣库存这类有副作用的方法别加——缓存里会是旧结果。数据变了要失效时，自己 `cache.delete` 对应键，或换 key 版本（见上文「键怎么拼」）。
@@ -316,7 +312,7 @@ class ReportService extends Service {
 
 ## 下一步
 
-- 服务注册与 eager：[服务层](/zh/core/service)
+- 服务注册与生命周期：[服务层](/zh/core/service)
 - OAuth `state` 与 `store`：[OAuth2 客户端](/zh/plugins/oauth2-client)
 - 滥用计数的 `store`：[滥用防护](/zh/plugins/abuse)
 - 鉴权里怎么用 session：[统一入口 Auth](/zh/plugins/auth)

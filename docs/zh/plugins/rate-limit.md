@@ -23,10 +23,11 @@ pnpm add @aomex/rate-limit-redis-store
 ```typescript
 import { rateLimit } from '@aomex/rate-limit';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:7]

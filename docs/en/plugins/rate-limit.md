@@ -23,10 +23,11 @@ If the edge already limits by IP, you do not need another full-site `rateLimit()
 ```typescript
 import { rateLimit } from '@aomex/rate-limit';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'en-US' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:7]

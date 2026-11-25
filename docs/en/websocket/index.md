@@ -22,10 +22,10 @@ Keep `WebsocketApp` in its own file and `export` it. The HTTP entry, routes, and
 // src/ws.ts
 import { WebsocketApp, channels } from '@aomex/websocket';
 import { WsTransport } from '@aomex/websocket-ws-transport';
-import { services } from './services/index.js';
+import { logger } from '@/services/logger.service';
 
 export const ws = new WebsocketApp({ // [!code focus:8]
-  logger: services.logger,
+  logger, // [!code highlight]
   language: { mode: 'fixed', language: 'en-US' },
   path: '/ws',
   transport: new WsTransport(),
@@ -35,7 +35,7 @@ export const ws = new WebsocketApp({ // [!code focus:8]
 
 `logger`, `language`, and `transport` are required—TypeScript will stop you if any are missing.
 
-- `logger`: pass the **same** `services.logger` as Web / Console. Transport init failures and room fan-out errors land here.
+- `logger`: pass the **same** `Logger` instance as Web / Console. Transport init failures and room fan-out errors land here.
 - `language`: framework copy on this connection (handshake failure, illegal-frame close reason, rate-limit / validation pushbacks). The snippet uses `fixed`—simplest for backends, intranet, and single-locale apps.
 - `mount`: start with `channels('./src/channels')`, the same idea as `routers('./src/routers')` on Web. How to write Channels: [Event channels](/en/websocket/channel).
 
@@ -62,12 +62,13 @@ WebSocket does not open a second listen port—it upgrades the same `http.Server
 ```typescript
 // src/web.ts — real process entry
 import { routers, WebApp } from '@aomex/web';
-import { services } from './services/index.js';
-import { ws } from './ws.js';
+import { services } from '@/services';
+import { ws } from '@/ws';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'en-US' },
   proxyIP: { mode: 'detect' },
   mount: [routers('./src/routers')],
@@ -128,8 +129,10 @@ The two choices are independent: change transport without changing Hub; scale ou
 Right before upgrade, `verify` is a coarse gate: the argument is a normal Web request object (Cookie, headers, IP). Return `true` to allow; `false` or an HTTP status (e.g. `401`) to reject. Per-event auth belongs on Channel mount.
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 export const ws = new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'en-US' },
   transport: new WsTransport(),
   verify: (request) => { // [!code focus:3]
@@ -167,8 +170,10 @@ maxPayload: 256 * 1024, // 256KiB, tighten a bit
 For immediate feedback on population changes or inbound success/failure, hang `onMetric`: it fires when something happens. Errors thrown in the callback only warn—they do not break send/receive.
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 export const ws = new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'en-US' },
   transport: new WsTransport(),
   mount: [channels('./src/channels')],
@@ -198,7 +203,7 @@ On connect the framework only auto-joins a room named `client.id` (“push to th
 ```typescript
 // src/routers/order.ts
 import { Router } from '@aomex/web';
-import { ws } from '../ws.js';
+import { ws } from '@/ws';
 
 export const router = new Router();
 

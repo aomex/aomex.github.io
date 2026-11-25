@@ -14,7 +14,7 @@ outline: deep
 
 ```typescript
 import { generateOpenapi } from '@aomex/openapi-generator';
-import { app } from './app.js';
+import { app } from '@/app';
 
 await generateOpenapi({
   routers: './src/routers',

@@ -2,27 +2,28 @@
 outline: deep
 ---
 
-# Заголовки безопасности Helmet
+# Helmet (безопасные заголовки)
 
-Добавляет к ответам для браузера разумный набор HTTP security-заголовков (clickjacking, MIME sniffing и т.д.) и снижает типичные фронтовые риски. Для чистого JSON API опционально; при H5, админке, док-сайте обычно вешают по умолчанию, а CSP ужесточают под реальные ресурсы.
+Добавляет разумный набор HTTP security headers для ответов в браузер (clickjacking, MIME-sniffing и т.д.) и снижает типичные риски фронта. Чистый JSON API — по желанию; при H5, админке, док-сайте обычно вешают по умолчанию, CSP сужают под реальные ресурсы.
 
-На базе upstream [helmet](https://github.com/helmetjs/helmet); опции совпадают с HelmetOptions, детали — в [документации helmet](https://helmetjs.github.io/).
+Основано на [helmet](https://github.com/helmetjs/helmet); опции совпадают с HelmetOptions, детали — в [документации helmet](https://helmetjs.github.io/).
 
 ```bash
 pnpm add @aomex/helmet
 ```
 
-## Стандартный набор на WebApp
+## Полный набор по умолчанию в WebApp
 
-Безаргументный `helmet()` включает дефолтный набор браузерных security-заголовков upstream; при HTML, док-сайте, админке обычно кладут в `WebApp.mount`, для чистого JSON API можно не ставить.
+Без аргументов `helmet()` добавляет дефолтный набор браузерных заголовков upstream. При HTML, док-сайте, админке — в `WebApp.mount`. Только JSON API можно пропустить.
 
 ```typescript
 import { helmet } from '@aomex/helmet';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:4]
@@ -32,15 +33,15 @@ const app = new WebApp({
 });
 ```
 
-Вместе с [CORS](/ru/plugins/cors) оба ставьте перед routers; заголовки можно добавить и на reverse proxy, in-app удобнее переключать по среде.
+С [CORS](/ru/plugins/cors) — оба перед routers. Заголовки можно и на reverse proxy; в приложении проще переключать по среде.
 
-Возвращает обычный WebMiddleware, бизнес-поля ctx не трогает. В DevTools → Network → Response Headers видны X-Content-Type-Options, X-Frame-Options и т.д. (конкретный набор зависит от дефолтов helmet и подопций).
+Обычный WebMiddleware, бизнес-поля ctx не трогает. В DevTools → Network → заголовки ответа: X-Content-Type-Options, X-Frame-Options и др. (набор зависит от дефолтов helmet и вложенных настроек).
 
-## CSP и ветки по среде
+## CSP и ветвление по среде
 
-Когда есть фронтовые страницы, поверх безаргументного набора ужесточайте `contentSecurityPolicy`: белый список CDN / доменов скриптов. Если у Swagger / ReDoc не поднимаются inline-скрипты, в разработке или на doc-маршрутах временно `contentSecurityPolicy: false`.
+При фронтовых страницах ужесточайте `contentSecurityPolicy` поверх безаргументного набора: allowlist CDN/скриптов. Не заводятся inline в Swagger/ReDoc — временно `contentSecurityPolicy: false` в dev или на doc-роутах.
 
-Прод: ужесточённый CSP (скелет, правьте под реальные ресурсы):
+Прод, ужесточённый CSP (скелет, под свои ресурсы):
 
 ```typescript
 helmet({
@@ -54,7 +55,7 @@ helmet({
 });
 ```
 
-Локально меньше трения, в проде жёстче — часто ветвят по среде:
+Локально меньше трения, в проде жёстче — часто так:
 
 ```typescript
 const security =
@@ -67,15 +68,15 @@ mount: [security, cors(), routers('./src/routers')];
 
 | Среда | Рекомендация |
 | --- | --- |
-| Прод (админка / H5) | включить, CSP сверить со списком фронтовых ресурсов |
-| Прод (только JSON, без HTML) | опционально; если шлюз уже ставит заголовки — можно опустить |
-| Локально | док-сайт / Swagger могут с `contentSecurityPolicy: false` |
+| Прод (админка / H5) | Включить, CSP сверить со списком ресурсов фронта |
+| Прод (только JSON, без HTML) | Опционально; если шлюз уже ставит заголовки — можно не дублировать |
+| Локально | Для док-сайта / Swagger допустимо `contentSecurityPolicy: false` |
 
-Если скопировать жёсткий CSP-шаблон и забыть CDN / домены скриптов — белый экран и куча CSP в консоли. Выключить CSP в проде «для простоты» расширяет поверхность inline-скриптов — против цели ужесточения. Helmet **не заменяет** [CORS](/ru/plugins/cors): кросс-домен настраивается отдельно.
+Скопировали строгий шаблон и забыли CDN/скрипты — белый экран и CSP в консоли. Ослабили CSP «для удобства» в проде — расширили inline, против цели ужесточения. Helmet **не заменяет** [CORS](/ru/plugins/cors).
 
 ## Дальше
 
 - Кросс-домен: [CORS](/ru/plugins/cors)
-- Cookie-вход и защита от подделки: [CSRF](/ru/plugins/csrf)
-- UI публичной документации API: [Swagger UI](/ru/openapi/swagger-ui), [Redoc UI](/ru/openapi/redoc-ui)
-- Куда вешать middleware: [Middleware](/ru/core/middleware)
+- CSRF при cookie-входе: [CSRF](/ru/plugins/csrf)
+- UI API-доков: [Swagger UI](/ru/openapi/swagger-ui), [Redoc UI](/ru/openapi/redoc-ui)
+- Где вешать middleware: [middleware](/ru/core/middleware)

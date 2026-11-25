@@ -4,7 +4,7 @@ outline: deep
 
 # リクエストボディ
 
-POST / PUT / PATCH の JSON やフォーム本文を mount の `body()` とバリデータで宣言。通過後 `ctx.body` の型が絞られる。形が違うと **400**、大きすぎると **413**（[Web アプリケーション入口](/ja/web/) の body.payload / body.formData で調整）。
+POST / PUT / PATCH の JSON やフォーム本文を定義する：`mount` に `body()` を掛け、バリデータでフィールドを記述する。通過後は `ctx.body` の型が絞られる。形状が合わなければ **400**、サイズ超過なら **413**（[Web アプリ入口](/ja/web/) の `body.payload` / `body.formData` を参照）。
 
 ```typescript
 import { rule } from '@aomex/common';
@@ -25,22 +25,25 @@ router.post('/users', { // [!code focus:13]
   },
 });
 ```
-よくある Content-Type：application/json、application/x-www-form-urlencoded、text/*。`rule.file()` があると multipart/form-data。
 
-`body({ username: rule.string(), age: rule.int().optional() })` のあと `ctx.body.username` は string、age は number | undefined。`body(createPostSchema.partial())` は PATCH で各フィールド optional だがルールは POST と共用。ルート `body(rule.array(...))` や `body(rule.oneOf([...]))` なら `ctx.body` は配列全体かユニオン。`body()` なしで `ctx.body` を検証済み入力にしない。
+よくある Content-Type：`application/json`、`application/x-www-form-urlencoded`、`text/*`。`rule.file()` があるときは `multipart/form-data` でパースされる。
 
-自前で req ストリームを JSON.parse しない——フレームワーク解析済み `ctx.body` と衝突し、クォータもバラける。
+`body({ username: rule.string(), age: rule.int().optional() })` のあと、`ctx.body.username` は string、`age` は `number | undefined`。PATCH では `body(createPostSchema.partial())` で各フィールドが optional になり、ルールは POST と共有。ルート直下で `body(rule.array(...))` や `body(rule.oneOf([...]))` なら、`ctx.body` は配列全体かユニオン型。`body()` を掛けていないのに `ctx.body` を検証済み入力として使わない。
 
-## アプリ級 JSON 上限
+`req` を自前で読んで `JSON.parse` しない——フレームワークが既にパースした `ctx.body` と衝突し、クォータも揃わない。
 
-`WebApp.body.payload.maxSize` は**サイト全体**の JSON/テキスト体上限。巨大ボディは `body()` 検証前に拒否され **413**。公開 API・webhook でメモリを守るときはここ。ルート schema では「そもそも読み切れない」サイズは防げない。
+## アプリ全体の JSON 上限
 
-公開 API / webhook で巨大ボディ防止：
+`WebApp.body.payload.maxSize` は**サイト全体**の JSON / テキストボディサイズを制限する。大きすぎるリクエストは `body()` 検証の前に拒否され **413** になる。公開 API や公網 webhook でメモリを守るときはここで上限を設定する。ルートレベルの schema では「そもそもパースできない」ケースは止められない。
+
+公開 API / webhook で大きなボディを防ぐ：
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   body: { // [!code focus:3]
@@ -49,11 +52,12 @@ new WebApp({
   mount: [routers('./src/routers')],
 });
 ```
-## ルート配列ボディ
 
-クライアントが**ルートを配列 JSON** にする（ID バッチ、イベントリスト）場合、`{ items: [...] }` ではなく `body(rule.array(...))` や schema 全体を渡すと `ctx.body` は配列型。
+## ルートが配列のボディ
 
-バッチ ID、webhook 配列体：
+クライアントが `{ items: [...] }` ではなく**ルート JSON を配列**で送ることもある（一括 ID、イベント一覧）。`body()` に `rule.array(...)` やスキーマ全体を渡すと、通過後 `ctx.body` は配列型になる。
+
+一括 ID・webhook の配列ボディ：
 
 ```typescript
 router.post('/batch-delete', {
@@ -63,9 +67,10 @@ router.post('/batch-delete', {
   },
 });
 ```
-## oneOf 排他形状
 
-同一 URL に `type` 分岐など複数 JSON 形状があり、同時に一つだけマッチさせたい。`rule.oneOf([...])` は順に試し、ちょうど1つ成功で合法。2つ通る/どれもダメは **400**。
+## oneOf で排他的な形状
+
+同一 URL に `type` で分岐する複数 JSON が来るが、常にどれかひとつだけ一致させたいとき、`rule.oneOf([...])` が各候補を順に試し、ちょうど一つだけ通れば合法。二つ通る・どれもダメなら **400**。
 
 ```typescript
 router.post('/events', { // [!code focus:13]
@@ -82,9 +87,10 @@ router.post('/events', { // [!code focus:13]
   },
 });
 ```
+
 ## 作成と PATCH
 
-作成は完全 schema、部分更新は同 schema の `.partial()`：PATCH で各フィールド optional、ルールは POST と共有。`src/schemas/*.schema.ts` に寄せればルートは1定義参照。フィールド変更を二箇所で揃える必要がなくなる。
+作成は完全な schema、部分更新は同じ schema の `.partial()`：PATCH では各フィールドが optional になり、ルールは POST と共有。`src/schemas/*.schema.ts` に切り出せば、ルートは定義を一箇所参照するだけで、フィールド変更を二重メンテしない。
 
 ```typescript
 // src/schemas/post.schema.ts
@@ -98,7 +104,7 @@ export const createPostSchema = schema({
 
 ```typescript
 import { body } from '@aomex/web';
-import { createPostSchema } from '../schemas/post.schema.js';
+import { createPostSchema } from '@/schemas/post.schema';
 
 router.post('/posts', { // [!code focus:6]
   mount: [body(createPostSchema)], // [!code highlight]
@@ -114,13 +120,14 @@ router.patch('/posts/:id', {
   },
 });
 ```
+
 ::: warning
-`partial()` では空オブジェクト `{}` も通る——「最低1フィールド必須」なら action で追加判定。クライアントが Content-Type を忘れると空 body が `{}` 扱いになり、全部 optional だと「何も変更なし」で黙って通る。
+`partial()` では空オブジェクト `{}` も検証を通る——「少なくとも一フィールド必須」なら action で追加判定する。クライアントが Content-Type を忘れると空 body が `{}` 扱いになり、すべて optional だと何も更新していないのに通ってしまう。
 :::
 
 ## ファイル付き
 
-アバター・添付は `rule.file()`。[ファイルアップロード](/ja/web/attach) 参照：
+アバター・添付は `rule.file()`。詳細は [ファイルアップロード](/ja/web/attach)：
 
 ```typescript
 router.post('/avatar', { // [!code focus:12]
@@ -137,18 +144,19 @@ router.post('/avatar', { // [!code focus:12]
   },
 });
 ```
+
 | 書き方 | 結果 |
 | --- | --- |
-| `{ avatar: rule.file() }` | 単一ファイル。フィールド名 = フォーム name |
-| `{ photos: rule.array(rule.file()).length({ max: 5 }) }` | 同名複数 part、最大5 |
-| ネストに `rule.file()` | multipart 平坦名と合わないことが多い |
+| `{ avatar: rule.file() }` | 単一ファイル。フィールド名 = フォームの name |
+| `{ photos: rule.array(rule.file()).length({ max: 5 }) }` | 同名フィールドで複数 part、最大 5 個 |
+| ネストオブジェクト内の `rule.file()` | multipart のフラットなフィールド名と合わないことが多い |
 
-フィールド maxSize とアプリ formData は**厳しい方**。413 は両層。
+フィールドごとの `maxSize` とアプリの formData は**より厳しい方**が効く。413 のときは両方の設定を確認する。
 
-巨大フィルタを POST + `body()` に移すなら、ドキュメントとキャッシュ方針を明記。GET 冪等の約束のままにしない。
+大きなフィルタ条件を POST + `body()` に移すなら、ドキュメントとキャッシュ方針を GET のままと誤解させないこと。
 
 ## 次のステップ
 
 - [ファイルアップロード](/ja/web/attach)
-- [レスポンス制約](/ja/web/response)
-- [Web アプリケーション入口](/ja/web/)：body サイトクォータ
+- [レスポンスの制約](/ja/web/response)
+- [Web アプリ入口](/ja/web/)：ボディのサイト全体クォータ

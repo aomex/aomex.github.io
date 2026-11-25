@@ -7,6 +7,8 @@ outline: deep
 把终端里的 --page 1 -d 2024-01-01 收成 **ctx.options**，规则和 Web 同一套 rule。校验失败**非零退出**；docs 会进 --help。argv 是扁平字符串通道，复杂结构优先拆成扁平字段。
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 import { rule } from '@aomex/common';
 import { Commander, options } from '@aomex/console';
 
@@ -31,7 +33,7 @@ commander.create('export', {
   action: async (ctx) => {
     const { out, date, limit, verbose } = ctx.options;
     if (verbose) {
-      await ctx.logger.info('export start', { out, date, limit });
+      logger.info(`export start out=${out} date=${date} limit=${limit}`);
     }
     await exportCsv({ out, date, limit });
   },
@@ -61,6 +63,8 @@ ctx.options 与字段表一一对应：limit 是 number（不是字符串），v
 数据库迁移、批处理脚本常需要「方向、步数、只演练不写入」这类开关。用 `rule.boolean()` / `rule.enum()` 声明在 options 里，手跑和 CI 传同一套 `--dry-run`，校验失败直接非零退出，比 action 里 parse 字符串可靠。
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 commander.create('migrate', {
   mount: [
     options({ // [!code highlight]
@@ -72,7 +76,7 @@ commander.create('migrate', {
   action: async (ctx) => {
     const { direction, steps, dryRun } = ctx.options;
     if (dryRun) {
-      await ctx.logger.info('dry-run', { direction, steps });
+      logger.info(`dry-run direction=${direction} steps=${steps ?? ''}`);
       return;
     }
     await runMigrate({ direction, steps });

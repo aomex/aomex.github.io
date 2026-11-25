@@ -22,9 +22,11 @@ export const withRequestId = middleware.mixin<{
 用 `middleware.mixin<{ … }>` 宣告你在 ctx 上新增的欄位後，**更靠後的中介軟體和同一條路由的 action** 裡，補全會出現這些屬性；漏寫泛型、只在執行時賦值，編譯器仍會把它們當不存在。
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 // action 里
 async (ctx) => { // [!code highlight]
-  await services.logger.info('请求', { requestId: ctx.requestId });
+  logger.info(`请求 ${ctx.requestId}`);
   return { ok: true };
 };
 ```
@@ -38,11 +40,12 @@ async (ctx) => { // [!code highlight]
 ```typescript
 import { WebApp } from '@aomex/web';
 import { routers } from '@aomex/web';
-import { withRequestId } from './middlewares/request-id.js';
+import { withRequestId } from '@/middlewares/request-id';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:2]

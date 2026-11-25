@@ -56,7 +56,7 @@ rule.decimal().default('0');
 
 ### strict(is?: boolean)
 
-**什麼時候用：** 內部已傳 Decimal 例項；對外 HTTP 一般保持預設收字串。
+**什麼時候用：** 內部已傳 Decimal 實例；對外 HTTP 一般保持預設收字串。
 
 ```typescript
 import { rule } from '@aomex/common';

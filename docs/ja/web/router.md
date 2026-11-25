@@ -2,9 +2,9 @@
 outline: deep
 ---
 
-# インターフェースルーティング
+# HTTP ルート
 
-`src/routers` をドメインごとに分割。各ファイルが Router を export し get / post で action 登録。WebApp `mount` で `routers('./src/routers')` を一括マウント。
+`src/routers` をドメインごとに分割し、各ファイルが `Router` を export。`get` / `post` で action を登録し、`WebApp` の `mount` で `routers('./src/routers')` を一括掛け。
 
 ```typescript
 // src/routers/user.ts
@@ -29,7 +29,8 @@ router.get('/users/count', {
   },
 });
 ```
-アプリへマウント：
+
+アプリへ：
 
 ```typescript
 import { routers, WebApp } from '@aomex/web';
@@ -39,15 +40,17 @@ new WebApp({
   mount: [routers('./src/routers')], // [!code highlight]
 });
 ```
-テストや機能フラグではインスタンスを直接渡し、ディレクトリスキャンしなくてよい：
+
+テストやフィーチャフラグではディレクトリスキャンせずインスタンスを渡せる：
 
 ```typescript
-import { userRouter } from './routers/user.js';
-import { postRouter } from './routers/post.js';
+import { userRouter } from '@/routers/user';
+import { postRouter } from '@/routers/post';
 
 mount: [routers([userRouter, postRouter])],
 ```
-単一ルート mount に query() / body() / params() / response() があると action の ctx に型がマージ。**メソッド級** mount はその API のみ。**ルート級** `Router({ mount: [...] })` はファイル内全メソッドに効く。
+
+単一ルートの `mount` に `query()` / `body()` / `params()` / `response()` があると、action の `ctx` に対応型がマージされる。**メソッドレベル** mount はその API のみ。**ルートレベル** `Router({ mount: [...] })` はファイル内すべてのメソッドに効く。
 
 ```typescript
 router.get('/users', { // [!code focus:11]
@@ -64,13 +67,14 @@ router.get('/users', { // [!code focus:11]
 
 router.get('/users/:id', {
   action: (ctx) => {
-    ctx.tenant; // 类型上不存在
+    ctx.tenant; // 型上存在しない
   },
 });
 ```
+
 ## prefix
 
-`Router({ prefix })` はファイル内**全**パスに固定接頭辞。毎回 `/users` を書かなくてよい。`/v1` → `/v2` やドメイン分割は構築引数1箇所。
+`Router({ prefix })` はファイル内**すべて**のパスに固定プレフィックスを付ける。各 `router.get` で `/users` を書き直す手間を省く。`/v1` → `/v2` やドメイン分割はコンストラクタ引数一箇所で済む。
 
 ```typescript
 import { rule } from '@aomex/common';
@@ -91,15 +95,16 @@ router.get('/:id', {
   },
 });
 ```
-最終パス = prefix + 登録 uri（余分なスラッシュは正規化）。404 調査で `router.get('/:id')` だけ見ず prefix を足したフルパスを確認。
 
-OpenAPI のドメイン分けは `Router({ docs: { tags: ['User'] } })`。単一ルート `docs.summary` で上書き可。
+最終パス = prefix + 登録 uri（余分なスラッシュは正規化）。404 調査では `router.get('/:id')` だけでなく prefix を含むフルパスを見る。
 
-## ルート級 mount
+OpenAPI のドメイン分けは `Router({ docs: { tags: ['User'] } })`；単一ルートの `docs.summary` で上書き可能。
 
-`Router({ mount: [...] })` はファイル全メソッドにミドルウェア。グループ全体ログイン、監査、query デフォルトに。各 `router.get` で繰り返すより楽。
+## ルートレベル mount
 
-ファイル全体ログイン・監査：
+`Router({ mount: [...] })` はファイル全体のミドルウェア：グループ全体のログイン、監査、共通 query の default など。各 `router.get` に繰り返すよりここが楽。
+
+ファイル全体にログイン・監査：
 
 ```typescript
 new Router({
@@ -107,15 +112,16 @@ new Router({
   mount: [auth.authenticate('bearer')],
 });
 ```
-ルート級 mount はファイル内**全**メソッド。公開と要ログインを同じ Router に詰めない——公開はファイル分割かメソッド級 mount / skip。
 
-## 単一ルート mount、docs、disabled
+ルートレベル mount はファイル内**すべて**に効く。公開 API と要ログインを同じ Router に詰めない——公開は別ファイルかメソッドレベル mount / skip。
 
-**メソッド級 mount** は1ルートのみ：入参検証、単一 API 認証など。ルート級と重なるときはルート級→メソッド級の順。
+## メソッドレベル mount、docs、disabled
 
-**disabled** は実行時**未登録**（マッチしない、action 不入り）。環境変数や機能フラグで未完成 API を切る。本番に 501 を残すより安全。
+**メソッドレベル mount** は 1 本のルートのみ：入参検証（query / body / params / response）、単 API 認証など。ルートレベルと重なるときはルートレベル → メソッドレベルの順。
 
-**docs** は OpenAPI 説明（`summary` 等）。`Router({ docs: { tags } })` がグループ分け。単一 docs でタイトル上書き。[response()](/ja/web/response) と一緒に契約へスキャン。
+**disabled** はランタイムでそのルートを**登録しない**（マッチしない、action に入らない）。環境変数やフラグで未完成 API を止めるのに。本番で 501 を残すより安全。
+
+**docs** は OpenAPI の説明（`summary` など）。`Router({ docs: { tags } })` がグループ；単一ルートの docs はタイトル・説明を上書き。[response()](/ja/web/response) と一緒に契約へスキャンされる。
 
 ```typescript
 import { rule } from '@aomex/common';
@@ -127,15 +133,16 @@ router.get('/users', { // [!code focus:11]
     query({ page: rule.int().min(1).default(1) }),
     response({ statusCode: 200, content: rule.array({ id: rule.int() }) }),
   ],
-  docs: { summary: '用户列表' }, // [!code highlight]
+  docs: { summary: 'ユーザー一覧' }, // [!code highlight]
   action: async (ctx) => {
     ctx.send([]);
   },
 });
 ```
-OpenAPI メタデータは [OpenAPI プラグイン](/ja/openapi/)。
 
-単一路径パラメータ：
+OpenAPI メタデータは [OpenAPI の生成](/ja/openapi/) · [Tags](/ja/openapi/tags)。
+
+単一パスパラメータ：
 
 ```typescript
 router.get('/users/:id', {
@@ -145,22 +152,23 @@ router.get('/users/:id', {
   },
 });
 ```
-`params()` なしでは `ctx.request.params` はすべて文字列。"1" と 1 が混ざりやすい。
+
+`params()` なしでは `ctx.request.params` はすべて文字列で、`"1"` と `1` が混ざりやすい。
 
 ## HTTP メソッド
 
-各 `router.<method>(uri, { ... })` が1動詞。登録順はマッチに影響せず、静的セグメントとリテラルパスが `:param` より優先。
+各 `router.<method>(uri, { ... })` が HTTP 動詞を束縛。登録順はマッチに影響せず、静的セグメントとリテラルパスは `:param` より優先。
 
 | メソッド | 説明 |
 | --- | --- |
 | `get` | `GET`；**HEAD** は同名 `GET` とマッチ共有 |
 | `post` / `put` / `patch` / `delete` | 対応動詞 |
 | `all` | 上記すべて |
-| `customize` | 動詞配列を自分で選ぶ |
+| `customize` | 動詞配列を任意指定 |
 
-`customize` は同一パスで複数動詞（GET 検証、POST 受領など）。標準 get/post を2本登録するとルートが増え保守がつらい。サードパーティ webhook、ヘルス兼 probe でよく使う：
+`customize` は同パスで複数動詞（GET 検証、POST 受領など）。標準 `get` / `post` を二重登録するとルートが増え保守も悪い。サードパーティ webhook、ヘルスチェック兼 probe でよく使う：
 
-Webhook は customize：
+サードパーティ webhook：
 
 ```typescript
 router.customize(['GET', 'POST'], '/webhook', { // [!code highlight]
@@ -169,19 +177,20 @@ router.customize(['GET', 'POST'], '/webhook', { // [!code highlight]
   },
 });
 ```
-## パス記法
 
-登録 uri で**リテラルセグメント**が `:param` より優先。`/users/count` は `/:id` に飲まれない。
+## パスの書き方
+
+登録 uri では**リテラル段**が `:param` より優先。`/users/count` は `/:id` に飲まれない。命名パラメータのキーは `params()` のフィールドと一致させる。
 
 | 書き方 | 意味 |
 | --- | --- |
-| `/users/:id` | 名前付きパラメータ `id` |
-| `/users/count` と `/users/:id` 共存 | リテラル優先。`:id` が count を食わない。順序では救えない。静的なら静的で書く |
+| `/users/:id` | 命名パラメータ `id` |
+| `/users/count` と `/users/:id` 共存 | リテラル優先；`:id` は `count` を取らない。登録順に頼らず、書ける静的段は静的で |
 
-glob スキャンは Router export だけにすると「登録されない」調査が楽。
+glob スキャンでは Router export だけにすると「登録されない」原因を追いやすい。
 
 ## 次のステップ
 
-- [Web アプリケーション入口](/ja/web/)：WebApp とサイト mount
-- [クエリ文字列](/ja/web/query)：GET フィルタとページング
+- [Web アプリ入口](/ja/web/)：WebApp とサイト全体の mount
+- [クエリ文字列](/ja/web/query)：GET のフィルタとページング
 - [パスパラメータ](/ja/web/params)、[リクエストボディ](/ja/web/body)

@@ -22,9 +22,11 @@ export const withRequestId = middleware.mixin<{
 用 `middleware.mixin<{ … }>` 声明你在 ctx 上新增的字段后，**更靠后的中间件和同一条路由的 action** 里，补全会出现这些属性；漏写泛型、只在运行时赋值，编译器仍会把它们当不存在。
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 // action 里
 async (ctx) => { // [!code highlight]
-  await services.logger.info('请求', { requestId: ctx.requestId });
+  logger.info(`请求 ${ctx.requestId}`);
   return { ok: true };
 };
 ```
@@ -38,11 +40,12 @@ async (ctx) => { // [!code highlight]
 ```typescript
 import { WebApp } from '@aomex/web';
 import { routers } from '@aomex/web';
-import { withRequestId } from './middlewares/request-id.js';
+import { withRequestId } from '@/middlewares/request-id';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:2]

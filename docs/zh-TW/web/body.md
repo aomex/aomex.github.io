@@ -39,9 +39,11 @@ router.post('/users', { // [!code focus:13]
 開放 API / webhook 防大包：
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   body: { // [!code focus:3]
@@ -102,7 +104,7 @@ export const createPostSchema = schema({
 
 ```typescript
 import { body } from '@aomex/web';
-import { createPostSchema } from '../schemas/post.schema.js';
+import { createPostSchema } from '@/schemas/post.schema';
 
 router.post('/posts', { // [!code focus:6]
   mount: [body(createPostSchema)], // [!code highlight]

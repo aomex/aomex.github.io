@@ -95,10 +95,11 @@ await generateAsyncapi({
 ```typescript
 import { asyncapi } from '@aomex/asyncapi-generator';
 import { commanders, ConsoleApp } from '@aomex/console';
+import { logger } from '@/services/logger.service';
 
 const app = new ConsoleApp({
   services,
-  logger: services.logger,
+  logger,
   language: 'zh-CN',
   mount: [ // [!code focus:12]
     asyncapi({

@@ -2,18 +2,18 @@
 outline: deep
 ---
 
-# レスポンスエンベロープ
+# レスポンスのエンベロープ
 
-チームによっては**成功も失敗も同じ JSON 外殻**（例 `{ success, data, statusCode }`）にし、外側 HTTP は **200** 固定、実コードは body 内。`WebApp.envelope` が flush 前に body とステータスを宣言構造へラップする。
+成功・失敗を同じ JSON ラッパ（例：`{ success, data, statusCode }`）に揃え、外側の HTTP を **200** に固定し、実際の業務コードを body に載せたいとき、`WebApp.envelope` が flush 前に body とステータスを包む。
 
-ルートでは今までどおり `ctx.send(201, …)` / `ctx.throw(400, …)`。ラップは flush 段階。各 action で外殻を手書きしない。
+ルートではこれまで通り `ctx.send(201, …)` / `ctx.throw(400, …)`。ラッピングは書き出し段階で行われ、各 action で外殻を手書きする必要はない。
 
 ```typescript
 import { rule } from '@aomex/common';
 import { envelope, formatError, routers, WebApp } from '@aomex/web';
 
 new WebApp({
-  // services / logger / language / proxyIP —— 见 [应用入口](/ja/web/)
+  // services / logger / language / proxyIP —— [アプリ入口](/ja/web/) 参照
   envelope: { // [!code focus:7]
     content: {
       success: envelope.success, // [!code highlight]
@@ -35,30 +35,31 @@ new WebApp({
   ],
 });
 ```
+
 設定後：
 
-- `ctx.send(201, { id: 1 })` → HTTP **200**、body は `{ success: true, statusCode: 201, data: { id: 1 } }` 相当
-- `ctx.throw(400, …)`（formatError と併用）→ HTTP **200**、`success: false`、`data` にエラー JSON。実 **400** は `statusCode` スロット
+- `ctx.send(201, { id: 1 })` → HTTP **200**、body は `{ success: true, statusCode: 201, data: { id: 1 } }` のような形
+- `ctx.throw(400, …)`（`formatError` と併用）→ HTTP **200**、`success: false`、`data` にエラー JSON。実際の **400** は `statusCode` スロット
 
-クライアントは body 内の成否を見る。**HTTP ステータスだけ信用しない**（リダイレクト・無内容は例外、下記）。
+クライアントは body の成否を見る。**HTTP ステータスだけでは判断しない**（リダイレクト・ボディなし応答は後述）。
 
-## 内蔵スロット
+## 組み込みスロット
 
-`content` は宣言ツリー。葉は内蔵スロットか `envelope.slot`、通常オブジェクトのネスト可。`rule.string()` を直置きしない——実行時の値源がない。
+`content` は宣言ツリー。葉は組み込みスロットか `envelope.slot`、通常オブジェクトのネストも可。`rule.string()` を直置きしない——実行時の値の出所がない。
 
 | スロット | 実行時の意味 |
 | --- | --- |
-| `envelope.success` | 元ステータスが `< 400` か（業務的成功） |
-| `envelope.payload` | ラップ前 body（json / string / null） |
-| `envelope.statusCode` | ラップ前 HTTP コード（書き出し後外側は依然 200） |
+| `envelope.success` | 元ステータスが `< 400` か（業務上の成功） |
+| `envelope.payload` | ラップ前のレスポンス body（json / string / null） |
+| `envelope.statusCode` | ラップ前の HTTP ステータス（書き出し後の外側は依然 200） |
 
-`data`、`result`、`payload` などキー名は任意。内蔵スロットをどのキーに付けるかで決まる。
+フィールド名を `data` / `result` / `payload` のどれにするかは任意。組み込みスロットをどのキーに掛けるかで決まる。
 
 ## カスタムスロットとネスト
 
-バージョン、トレースなど固定/派生値は `envelope.slot(schema, get)`。`schema` は OpenAPI；`get(vars, ctx)` の第1引数は `{ success, payload, statusCode }`、第2引数はリクエストコンテキスト（`WebContext` に `WebApp.Props` を足したもの。`onError` と同じ面——pathname、headers、services など）。
+バージョン・トレース ID など固定または派生値には `envelope.slot(schema, get)`：`schema` は OpenAPI 用。`get(vars, ctx)` の第一引数は `{ success, payload, statusCode }`、第二引数はリクエストコンテキスト（`WebContext` に `WebApp.Props` を足したもの。`onError` と同じ——pathname、headers、services など）。
 
-定数だけなら引数は省略してよい：
+定数だけなら第二引数を省略できる：
 
 ```typescript
 envelope: {
@@ -73,7 +74,7 @@ envelope: {
 },
 ```
 
-現在のリクエストから取るときは第2引数 `ctx`：
+現在のリクエストから取るときは第二引数 `ctx` を使う：
 
 ```typescript
 envelope: {
@@ -88,39 +89,39 @@ envelope: {
 },
 ```
 
-`get` の戻り値は `schema` の推論型に揃える。閉じたオブジェクトに余分なキーがあると型エラーになる。
+`get` の戻り値は `schema` の推論型に一致させる。閉じたオブジェクトに余分なフィールドがあると型エラーになる。
 
-## formatError、response() との関係
+## formatError・response() との関係
 
-- **[formatError](/ja/web/errors)**：`ctx.throw` を統一エラー JSON にしてから `envelope.payload` へ。併用推奨。formatError なしだとデフォルトプレーンテキストエラーも payload に入る（JSON 文字列値になり得る）。
-- **[response()](/ja/web/response)**：「真の」ステータスで成功/失敗体形状を宣言。ラップは action の send/throw の書き方は変えず、書き出し直前の外殻だけ変える。OpenAPI では成否枝が 200 下のラップ schema に収まる（下記）。特定のステータスだけ**ラップしない**ときは、該当 `response({ skipEnvelope: true })` に登録する（次節）。
+- **[formatError](/ja/web/errors)**：`ctx.throw` を統一エラー JSON にまとめ、それが `envelope.payload` として外殻に入る。併用推奨。`formatError` なしでは既定のプレーンテキストエラーも payload に入り（JSON 文字列値になる）。
+- **[response()](/ja/web/response)**：依然として「実際の」ステータスで成功/失敗 body を宣言。ラップは action の send/throw を変えず、書き出し前の外殻だけ変える。OpenAPI では成否分支が 200 のラップ schema に収束（下記）。特定ステータスだけ**ラップしない**場合は `response({ skipEnvelope: true })`（次節）。
 
-業務は `send(201)`、`throw(404)` のまま。型とルート宣言を「常に 200」に書き換える必要はない。
+業務コードは `send(201)`、`throw(404)` のまま。型とルート宣言を「常に 200」に書き換える必要はない。
 
 ::: tip
-ラップ時、body が既に JSON 文字列で `Content-Type` が `application/json`（例：ミドルウェア内で手動 `JSON.stringify`）のとき、フレームワークは先に `JSON.parse` してから `envelope.payload` に入れ、`data` がエスケープだらけの一塊にならないようにする。
+ラップ時、body が既に JSON 文字列で `Content-Type` が `application/json`（例：ミドルウェアで手動 `JSON.stringify`）のとき、フレームワークは先に `JSON.parse` してから `envelope.payload` に入れ、`data` がエスケープだらけのテキストになるのを防ぐ。
 :::
 
 ## ラップしない場合
 
-次は**そのまま**書き出し。外殻なし、200 にもしない：
+次の応答は**そのまま**書き出し、外殻なし・200 への強制変換もなし：
 
-| 場合 | 理由 |
+| 状況 | 理由 |
 | --- | --- |
-| **3xx** リダイレクト | Location 等を JSON 外殻にできない |
-| **204 / 205 / 304** など無 body | もともと body がない |
-| **SSE**（`text/event-stream`） | ストリーミング。1 JSON にバッファできない |
-| **Buffer / Stream** 体 | バイナリ・ストリームダウンロード |
+| **3xx** リダイレクト | Location などの意味を JSON 外殻にできない |
+| **204 / 205 / 304** などコンテンツなし | body 自体がない |
+| **SSE**（`text/event-stream`） | ストリーミング。一式を JSON にバッファできない |
+| **Buffer / Stream** 体 | バイナリ・ストリームダウンロードに JSON ラップは不適 |
 
-通常の json / string / null（明示 send なしのデフォルト 404 含む）はラップ対象。
+通常の json / string / null（明示 send しない既定 404 含む）はラップ対象。
 
-[ETag](/ja/plugins/etag) を有効にしているとき：ラップで body が書き換わると、フレームワークは**元の ETag を除去**し、ダイジェストがラップ前の内容を指したまま残らないようにする。
+[ETag](/ja/plugins/etag) 併用時：ラップで body が書き換わるとフレームワークは**元の ETag を削除**し、ラップ前の内容に対応したダイジェストが残らないようにする。
 
-## 意図的にラップをスキップ
+## ラップを明示的にスキップ
 
-サイト全体で envelope を有効にしつつ、一部の出口だけ**裸のレスポンス**（ダウンロード、旧クライアント互換、HTML ドキュメントなど）にする方法は二通りある。
+サイト全体で envelope を有効にしつつ、個別出口だけ**素の応答**（ダウンロード、レガシークライアント、HTML など）にする方法は二つ。
 
-**業務ルートは `response({ skipEnvelope: true })` を優先**：その宣言の `statusCode` だけスキップする。他のステータスは従来どおりラップ。実行時と OpenAPI は一致する。
+**業務ルートは `response({ skipEnvelope: true })` を優先**：その `statusCode` だけスキップ。他は依然ラップ。ランタイムと OpenAPI が一致。
 
 ```typescript
 import { rule } from '@aomex/common';
@@ -144,11 +145,11 @@ router.get('/export.csv', { // [!code focus:14]
 });
 ```
 
-上記では成功 200 は裸 CSV。検証失敗の 400 はサイト全体の外殻のまま（formatError 経由で payload に入る）。
+上の例：成功 200 は素の CSV。検証失敗 400 はサイト全体の外殻（`formatError` 経由で payload）。
 
-同じルートに `response()` を複数載せ、それぞれ `skipEnvelope` の要否を決められる——例えば成功だけラップ、エラーは裸、あるいはその逆も。
+同一路由に `response()` を複数掛け、それぞれ `skipEnvelope` を決められる——成功だけラップ、エラーは素、など。
 
-**インフラ向けレスポンス**（Swagger / Redoc ページ、裸の OpenAPI JSON）では action 内で `ctx.response.skipEnvelope = true` が使える：最終ステータスに関係なく今回の書き出しを無条件にスキップする。業務 API は上記の `response({ skipEnvelope })` を優先し、ドキュメントにもステータスが登録されるようにする。
+**インフラ応答**（Swagger / Redoc ページ、素の OpenAPI JSON）は action で `ctx.response.skipEnvelope = true`：最終ステータスに関係なく今回の書き出しを無条件スキップ。業務 API は上記 `response({ skipEnvelope })` を優先し、ドキュメントにも載せやすい。
 
 ```typescript
 action: async (ctx) => {
@@ -159,15 +160,15 @@ action: async (ctx) => {
 
 ## OpenAPI
 
-`generateOpenapi` / Console `openapi()` に **envelope 設定済みの同じ `WebApp`（`app`）** を渡すと、ジェネレータが `app` のラップ設定を読む：他 `response` / `formatError` 注入後、ドキュメントの 2xx と 4xx·5xx·default を **HTTP 200** のラップ schema に集約（成否は `oneOf`、`success` は `true` / `false` 固定が多い）；**3xx、204 など無 body のステータス**と、`response({ skipEnvelope: true })` で登録したステータスは**保持**する——実行時のスキップ規則と一致する。
+`generateOpenapi` / Console の `openapi()` に**envelope 設定済みの同じ `WebApp`（`app`）**を渡すと、生成器は `app` のラップ設定を読む。他の `response` / `formatError` 注入のあと、ドキュメントの 2xx と 4xx·5xx·default を **HTTP 200** のラップ schema に収める（成否はよく `oneOf`、`success` を `true` / `false` で固定）。**3xx、204 などコンテンツなし**と `response({ skipEnvelope: true })` で登録したステータスは**維持**——ランタイムのスキップ規則と一致。
 
-同一 operation で「skip の 200」とラップが必要な成否枝が共存するとき、生成器はその `200` の `application/json` 上で裸 schema とラップ schema を `oneOf` にし、他の media（`text/html` など）はそのまま残す。
+同一 operation に「skip の 200」とラップ対象の成否分支があると、その `200` の `application/json` で素 schema とラップ schema を `oneOf` に。他 media（`text/html` など）はそのまま。
 
-`envelope.description` は集約後の `200` レスポンス説明へ。`mount` 配列を手で二重に渡さない。`app` を落とすと契約は「201 + 裸 body」、本番は「200 + 外殻」のまま。[生成OpenAPI](/ja/openapi/) 参照。
+`envelope.description` は収束後の `200` 応答の説明に載る。`mount` 配列を手で二重に渡さない。`app` を渡し忘れると契約は「201 + 素 body」、本番は「200 + 外殻」のまま。詳細は [OpenAPI の生成](/ja/openapi/)。
 
 ## 次のステップ
 
-- [エラー形式](/ja/web/errors)：`formatError` と payload
-- [レスポンス制約](/ja/web/response)：真のステータスと内側 content
-- [生成OpenAPI](/ja/openapi/)：契約のスキャン
-- [Web アプリケーション入口](/ja/web/)：`WebApp` 他必須項目
+- [エラー形式](/ja/web/errors)：`formatError` とラップの payload
+- [レスポンスの制約](/ja/web/response)：ルートで実ステータスと内側 content を宣言
+- [OpenAPI の生成](/ja/openapi/)：契約のスキャン方法
+- [Web アプリ入口](/ja/web/)：`WebApp` のその他必須項目

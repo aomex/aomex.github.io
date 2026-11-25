@@ -50,7 +50,7 @@ channel.on('chat.send', { // [!code focus:18]
 
 ## 腳本里直接生成
 
-`generateAsyncapi` 接受 Channel 目錄（或例項陣列）。`docs.asyncapi` 版本必須你自己寫（`3.0.0` 或 `3.1.0`），生成器不會猜：
+`generateAsyncapi` 接受 Channel 目錄（或實例陣列）。`docs.asyncapi` 版本必須你自己寫（`3.0.0` 或 `3.1.0`），生成器不會猜：
 
 ```typescript
 import { writeFile } from 'node:fs/promises';
@@ -95,10 +95,11 @@ await generateAsyncapi({
 ```typescript
 import { asyncapi } from '@aomex/asyncapi-generator';
 import { commanders, ConsoleApp } from '@aomex/console';
+import { logger } from '@/services/logger.service';
 
 const app = new ConsoleApp({
   services,
-  logger: services.logger,
+  logger,
   language: 'zh-CN',
   mount: [ // [!code focus:12]
     asyncapi({

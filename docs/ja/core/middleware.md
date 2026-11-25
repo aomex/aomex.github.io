@@ -1,8 +1,8 @@
 # ミドルウェア
 
-サイト全体やルートグループに「リクエスト进来時に処理し、業務完了後も後片付けできる」層を載せ、下流 action が ctx のフィールド（例 `requestId`）を使えるようにする。
+サイト全体またはあるグループの API に「リクエスト入り口で処理し、業務のあとにも片付けできる」ロジックを載せ、下流 action が ctx に載せたフィールド（例：requestId）を使えるようにします。
 
-ミドルウェアは関数1つ：`await next()` を忘れると下に進まない。`next` の前後にロジックを書ける。
+ミドルウェアは 1 本の関数です。`await next()` を忘れないでください — そうして初めてリクエストが下へ進みます。`next` の前後にそれぞれロジックを書けます。
 
 ```typescript
 import { middleware } from '@aomex/common';
@@ -14,33 +14,38 @@ export const withRequestId = middleware.mixin<{
   await next();
 });
 ```
+
 ::: warning
-後続ミドルウェアと業務は `await next()` に依存。認証失敗で切りたいなら呼ばなくてよいが、うっかり抜けると未処理 Promise に。必ず **`await next()`**。
+後続のミドルウェアと業務はすべて `await next()` に依存します。認証失敗で打ち切るときは呼ばなくてよいですが、うっかり抜けないでください。**必ず `await next()`** — さもないと下流の非同期エラーが未処理 Promise になりやすいです。
 :::
 
-`middleware.mixin<{ … }>` で ctx に足すフィールドを宣言すると、**それより後のミドルウェアと同一ルート action** で補完が効く。ジェネリックなしで実行時だけ代入すると、TypeScript は存在しない扱い。
+`middleware.mixin<{ … }>` で ctx に足すフィールドを宣言すると、**それより後のミドルウェアと同じルートの action** で補完が効きます。ジェネリックなしでランタイムだけ代入すると、コンパイラは存在しない扱いです。
 
 ```typescript
-// action 里
+import { logger } from '@/services/logger.service';
+
+// action 内
 async (ctx) => { // [!code highlight]
-  await services.logger.info('请求', { requestId: ctx.requestId });
+  logger.info(`请求 ${ctx.requestId}`);
   return { ok: true };
 };
 ```
-複数ミドルウェアの mixin フィールドは型上1つの ctx にマージ。実行時だけ ctx に載せ、mixin ジェネリックを書かないと動くが TS は助けてくれない。リネーム漏れが出やすい。
+
+複数ミドルウェアがそれぞれ mixin したフィールドは、型上は同一 ctx にマージされます。ランタイムだけフィールドを載せ、 mixin ジェネリックを書かないと動きますが TypeScript は助けてくれず、リネーム漏れが起きやすいです。
 
 ## WebApp.mount
 
-`WebApp.mount` はサイト全体のオニオン列：CORS、アクセスログ、formatError、`routers(...)` が配列順。`await next()` の前後で後続ルート全体を包める。
+`WebApp.mount` はサイト全体のオニオン列です。CORS、アクセスログ、formatError、`routers(...)` が配列順に実行されます。前ほど外側で、`await next()` の前後に後続ルート全体を包めます。
 
 ```typescript
 import { WebApp } from '@aomex/web';
 import { routers } from '@aomex/web';
-import { withRequestId } from './middlewares/request-id.js';
+import { withRequestId } from '@/middlewares/request-id';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:2]
@@ -49,23 +54,25 @@ const app = new WebApp({
   ],
 });
 ```
-CORS、サイト全体 requestId、アクセスログなど「毎リクエスト必要」なものは `WebApp.mount` / `ConsoleApp.mount`。
+
+「毎リクエスト」系（CORS、全站 requestId、アクセスログ）は `WebApp.mount` / `ConsoleApp.mount` に置きます。
 
 ## Router.mount
 
-URL グループで同じロジック（一括認証、監査、プレフィックス配下 formatError）なら `Router({ mount })`。本ファイルのパスだけ。WebApp で全サイトを包む必要はない。
+URL グループ全体で同じロジック（統一認証、監査、prefix 配下の formatError）なら `Router({ mount })` — このファイルのパスだけに効き、WebApp で全站を包む必要はありません。
 
 ```typescript
 import { Router } from '@aomex/web';
 
-// 某一组资源都要登录（auth 为项目里配好的 Auth 实例）
+// あるリソース群はすべてログイン必須（auth はプロジェクトの Auth インスタンス）
 new Router({ prefix: '/admin', mount: [auth.authenticate('bearer')] });
 ```
-リソース種別ごとの認証は Router.mount。公開 API は別 Router（同じ Router で skip だらけにしない）。
 
-## 単一ルート mount
+一類のリソースの統一認証は Router.mount；公開 API は別 Router に分けてください（同一 Router で skip だらけにしない）。
 
-単一ルートの `mount` はその action の前だけ。ルート固有の body/query、厳しい authorize、公開と混在する Router の例外。日常は組み込み query / body / cors / auth を優先。どこでも手書き middleware 不要。
+## 単一ルートの mount
+
+単一ルートの `mount` はその action の前だけ実行：そのルート固有の body/query、より厳しい authorize、公開 API と混在するときの例外。日常の検証は組み込み query / body / cors / auth を優先し、むやみに手書き middleware は不要です。
 
 ```typescript
 import { rule } from '@aomex/common';
@@ -83,32 +90,34 @@ router.post('/login', { // [!code focus:11]
   },
 });
 ```
+
 ## skip で特定リクエストを迂回
 
-一部パスや環境でミドルウェア全体を走らせたくない（ヘルスチェック認証免除、テスト環境で層 OFF）とき、既存ミドルウェアに `.skip(...)`：条件が `true` なら即 `next()`、元ロジックは実行しない——`mount` 複製より楽。
+少数パスや環境でミドルウェア列全体を走らせたくないとき（ヘルスチェック免認証、テスト環境である層オフ）、既存ミドルウェアに `.skip(...)` をチェーン：条件が `true` ならそのまま `next()`、元ロジックは実行しない — `mount` を複製するより保守が少ないです。
 
-**関数**（リクエストごと）か **`boolean`**（コンパイル時に決め打ち）を渡せる：
+**関数**（リクエストごとに動的）でも **`boolean`**（コンパイル時に固定）でも渡せます：
 
 ```typescript
 const authMaybe = auth.authenticate('bearer').skip((ctx) => { // [!code highlight]
   return ctx.request.pathname === '/health';
 });
 
-// 测试环境整层关掉：不必再包一层函数
+// テスト環境で層ごとオフ：関数で包む必要なし
 const accessLogMaybe = accessLog().skip(process.env['NODE_ENV'] === 'test');
 
-// 临时禁用某层（等价于挂 mount 时先拿掉）
+// 一時的にある層無効（mount から外すのと同義）
 someMiddleware.skip(true);
 ```
+
 ::: warning
-`.skip()` は **Props 型を変えない**：認証を skip しても型上 `ctx.auth` は「ある」まま。action で未ログイン分岐は自分で。公開が多いなら「無認証 Router」に分ける方が、認証チェーンに skip を並べるよりよい。
+`.skip()` は **Props 型を変えません**。認証を skip しても型上 `ctx.auth` は「ある」まま；action 内で未ログイン分岐は自分で。公開 API が多いなら認証チェーンに skip を並べるより**無認証 Router を分ける**方がよいです。
 :::
 
-## dependsOn で上流の型だけ借りる
+## dependsOn で上流の型を借りる
 
-ミドルウェア実装で**上流が既に載せた層**（認証、`userId` 付きミドルウェアなど）を前提に、`fn` でそのフィールドを補完したいが上流を再実行したくない——`middleware.dependsOn(上流).web(...)` / `.mixin(...)` / `.console(...)`。
+ミドルウェア実装で**上流にある層が載っている前提**（認証、`userId` 付きミドルウェアなど）で、そのフィールドを `fn` 内で補完したいが、上流を再実行したくない — `middleware.dependsOn(upstream).web(...)` / `.mixin(...)` / `.console(...)` を使います。
 
-`dependsOn` は**型だけ**：実行時に渡したミドルウェアは呼ばれない。実際の実行は mount 順の前の層。
+`dependsOn` は **型だけ** 参加します。ランタイムでは渡したミドルウェアは呼ばれません；実行は mount 順の手前の層に依存します。
 
 ```typescript
 import { middleware } from '@aomex/common';
@@ -118,14 +127,15 @@ const withUser = middleware.web<{ userId: number }>(async (ctx, next) => {
   await next();
 });
 
-// 假定上游已挂 withUser：这里能补全 ctx.userId，但不会再跑一遍 withUser
+// 上流に withUser 済み前提：ctx.userId が補完されるが withUser は再実行しない
 export const loadProfile = middleware.dependsOn(withUser).web(async (ctx, next) => { // [!code highlight]
   const profile = await services.user.getProfile(ctx.userId);
   ctx.send(profile);
   await next();
 });
 ```
-マウント時は上流を前に置く：
+
+マウント時は上流を前に：
 
 ```typescript
 router.get('/me', {
@@ -133,16 +143,17 @@ router.get('/me', {
   action: async () => {},
 });
 ```
-ファクトリ / `async` ファクトリも可（`combineServices` の遅延読み込みに似るが、ここでも型だけ）。`dependsOn` はチェーン可。フィールドは積み上がる。
+
+ファクトリ / `async` ファクトリも可（`combineServices` の遅延読み込みと同様、ここでも型だけ）。`dependsOn` はチェーン可能で、フィールドは重なります。
 
 ::: tip
-`Middleware.Infer<typeof loadProfile>` は `dependsOn` で借りた Props を**含まない**——外向きには「ctx に足していない」見え方。型借用は `fn`（と直後の1回 `.skip(ctx => …)`）内の `ctx` だけ。
+`Middleware.Infer<typeof loadProfile>` は **`dependsOn` で借りた Props を含みません** — 外向きには「自分は ctx にフィールドを足していない」ように見えます。型借用は `fn`（と直後の 1 回 `.skip(ctx => …)`）内の `ctx` にだけ効きます。
 :::
 
-日常は組み込み query、body、cors、各種 auth。OpenAPI / CLI ヘルプへ書くなら [カスタムミドルウェア](/ja/advanced/middleware)。
+日常は組み込み query、body、cors、各種 auth を優先。OpenAPI / CLI ヘルプに書き込むなら [カスタムミドルウェア](/ja/advanced/middleware)。
 
 ## 次のステップ
 
 - 検証と 400 文言：[リクエストボディ](/ja/web/body)、[クエリ文字列](/ja/web/query)
-- 認証ミドルウェア：[統一認証 Auth](/ja/plugins/auth)
+- 認証ミドルウェア：[統一 Auth](/ja/plugins/auth)
 - OpenAPI / Help フック：[カスタムミドルウェア](/ja/advanced/middleware)

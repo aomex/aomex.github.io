@@ -2,36 +2,29 @@
 outline: deep
 ---
 
-# Точка входа Console
+# Точка входа Console-приложения
 
-Сделайте точку входа для команд в терминале: **общие** services и валидаторы с Web, но сценарий — `aomex <команда>`. Подходит для миграций, прогрева кэша, выгрузки OpenAPI, Cron — процесс завершается и не занимает HTTP-порт.
-
+Соберите entry для команд в терминале: те же services, logger и валидаторы, что у Web, но сцена — `aomex <команда>`. Подходит для миграций, прогрева кэша, выгрузки OpenAPI, Cron — отработал и вышел, без занятого HTTP-порта.
 
 ```bash
 pnpm add @aomex/console @aomex/common @aomex/logger
 ```
 
 ```typescript
-import { combineServices } from '@aomex/common';
 import { Commander, commanders, ConsoleApp } from '@aomex/console';
-
-const services = await combineServices(
-  {
-    logger: () => import('./services/logger.service.js'),
-  },
-  { eager: ['logger'] },
-);
+import { logger } from '@/services/logger.service';
+import { services } from '@/services';
 
 const commander = new Commander();
 commander.create('hello', {
-  action: async (ctx) => {
-    await ctx.logger.info('hello from console');
+  action: async () => {
+    logger.info('hello from console');
   },
 });
 
 const app = new ConsoleApp({ // [!code focus:6]
   services,
-  logger: services.logger,
+  logger, // [!code highlight]
   language: 'zh-CN',
   mount: [commanders([commander])], // [!code highlight]
 });
@@ -51,15 +44,15 @@ declare module '@aomex/console' {
 npx aomex hello
 ```
 
-ctx.logger имеет завершение (как и в Интернете, оно происходит от подключенного вами сервиса/промежуточного программного обеспечения). После добавления options({ ... }) ctx.options будет собран в объявленной вами форме. app.run() возвращает **код выхода** (0 успешно), фреймворк не будет обрабатывать .exit за вас — это легко проверить в тестах.
+В бизнес-коде используйте импортированный `logger` (тот же объект, что `ctx.logger`; `ctx.logger` — для стороннего middleware и middleware внутри app). После `options({ ... })` `ctx.options` сойдётся с объявленной формой. `app.run()` возвращает **код выхода** (0 — успех); фреймворк сам `process.exit` не вызывает — удобно в тестах.
 
 ::: warning
-В случае неудачи не возвращайтесь молча, но все равно получите код выхода 0, CI будет считать это успешным; выдать ошибку или позволить запуску получить ненулевой код.
+При ошибке не делайте тихий return с кодом 0 — CI посчитает успехом. Бросайте исключение или добейтесь ненулевого кода от run.
 :::
 
-## запуск указывает подкоманду
+## run с явной подкомандой
 
-` app.run()`Отвечает за синтаксический анализ и выполнение инструкции и возврат кода выхода. Если никакие параметры не передаются,` process.argv `Читаем (и в терминале` npx aomex cache:warm `Одинаковый); вы также можете напрямую передать имя команды и параметры в скрипт теста или оркестрации, не меняя argv:
+`app.run()` разбирает и выполняет одну команду, возвращает код выхода. Без аргументов читает `process.argv` (как `npx aomex cache:warm` в терминале). В тестах и скриптах можно передать имя команды и флаги без подмены argv:
 
 ```typescript
 await app.run();
@@ -67,35 +60,37 @@ await app.run('cache:warm');
 await app.run('export', '--out', 'a.csv');
 ```
 
-## язык
+## language
 
-CLI **не** Accept-Language, язык может быть только строкой (например,` zh-CN `,` en-US `), эффект тот же, что и в Web: проверка options() не удалась, и все подсказки платформы используют этот метод. Не передавайте это в Интернет`{ mode, header }` объект.
+У CLI **нет** Accept-Language: `language` — только строка (`zh-CN`, `en-US` и т.д.), как fixed в Web: ошибки `options()` и системные подсказки на этом языке. Не передавайте объект `{ mode, header }` как в Web.
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 new ConsoleApp({
   services,
-  logger: services.logger,
+  logger,
   language: 'zh-CN', // [!code highlight]
   mount: [commanders('./src/commanders')],
 });
 ```
 
-Пишите дефис в коде языка, не пишите его ` zh_CN `. Для согласования по заголовку запроса см. [Запись веб-приложения · язык](/ru/web/#language). Собственные записи бизнеса по-прежнему отображаются как [Дополнительно: приложение i18n](/ru/advanced/i18n).
+Код языка с дефисом, не `zh_CN`. Согласование по заголовку в Web — [точка входа Web · language](/ru/web/#language). Свои фразы продукта — [продвинутое: i18n приложения](/ru/advanced/i18n).
 
-## Сравнить с Web
+## Сравнение с Web
 
-| | Интернет | Консоль |
+| | Web | Console |
 | --- | --- | --- |
-| соответствовать | метод + путь | имя команды |
-| входить | запрос/тело/параметры | ` options()` |
-| язык | Возможен торг по запросу | можно только исправить |
-| жизненный цикл | прослушивание + отключение сигнала | ` run` Просто назовите это день |
+| Совпадение | method + path | имя команды |
+| Ввод | query / body / params | `options()` |
+| Язык | можно по запросу | только фиксированный |
+| Жизненный цикл | listen + сигналы | завершение после `run` |
 
-Бизнес-сервисы и middleware миксинов можно навешивать с обеих сторон. Обычно действия «Эксплуатация и обслуживание» размещаются в Консоли. Проверьте базу данных и перенесите сторонние сервисы/так же, как и Веб. Не позволяйте HTTP и CLI поддерживать по одному набору каждый.
+Бизнес-сервисы и mixin-middleware работают в обоих сценах. Операционные задачи чаще в Console. Доступ к БД и внешним API — в services/, как в Web, без двух параллельных наборов.
 
 ## Дальше
 
-- [Маршрутизация команд](/ru/console/commander)
-- [Параметры ввода](/ru/console/options)
-- [Генерация OpenAPI](/ru/openapi/)
-- [Крон](/ru/plugins/cron)
+- [маршрутизация команд](/ru/console/commander)
+- [входные параметры](/ru/console/options)
+- [генерация OpenAPI](/ru/openapi/)
+- [Cron](/ru/plugins/cron)

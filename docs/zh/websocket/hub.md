@@ -35,9 +35,10 @@ pnpm add @aomex/websocket-redis-hub
 import { WebsocketApp, channels } from '@aomex/websocket';
 import { WsTransport } from '@aomex/websocket-ws-transport';
 import { RedisHub } from '@aomex/websocket-redis-hub';
+import { logger } from '@/services/logger.service';
 
 export const ws = new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   transport: new WsTransport(),
   hub: new RedisHub({ // [!code focus:5]
@@ -62,7 +63,7 @@ export const ws = new WebsocketApp({
 
 ```typescript
 // Console 指令里
-import { ws } from '../ws.js';
+import { ws } from '@/ws';
 
 await ws.room(`order:${orderId}`).send('order.updated', order);
 await ws.all.send('system.notice', { text: '今晚 23:00 维护' });

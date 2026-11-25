@@ -24,9 +24,10 @@ pnpm add @aomex/websocket-ws-transport
 ```typescript
 import { WebsocketApp, channels } from '@aomex/websocket';
 import { WsTransport } from '@aomex/websocket-ws-transport';
+import { logger } from '@/services/logger.service';
 
 const ws = new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   path: '/ws',
   transport: new WsTransport({ // [!code focus:4]

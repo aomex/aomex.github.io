@@ -2,31 +2,32 @@
 outline: deep
 ---
 
-# 転送層
+# トランスポート層
 
-転送層が答えるのは一件だけです：**クライアントがどのプロトコルで接続し、フレームがどんな形か**。部屋やマシンを跨いだブロードキャストは扱いません。それは [Hub](/ja/websocket/hub) の仕事です。業務 Channel を書いたあと、転送の切り替えは通常 `new WebsocketApp({ transport })` の一行だけで足ります。
+トランスポートが答えるのは一つ：**クライアントがどのプロトコルで接続し、フレームがどう見えるか**。ルームやマシン間ブロードキャストは [Hub](/ja/websocket/hub) の管轄。Channel の業務ができたあと、差し替えは通常 `new WebsocketApp({ transport })` の一行。
 
-いま既製実装は二系統あります。入門はまず標準 WebSocket で十分です。
+今は二つの実装。入門は標準 WebSocket でよい。
 
-| 重視すること… | 選ぶもの |
+| 重視する点 | 選択 |
 | --- | --- |
-| ブラウザネイティブ `WebSocket`、ゲートウェイが upgrade を転送するだけ、プロトコルは単純なほどよい | `@aomex/websocket-ws-transport` |
-| フロントがすでに Socket.IO、または自動再接続 / ロングポーリングのフォールバックが要る | `@aomex/websocket-socket-io-transport` |
+| ブラウザ原生 `WebSocket`、ゲートウェイは upgrade 転送のみ、プロトコルはシンプルに | `@aomex/websocket-ws-transport` |
+| フロントが Socket.IO、自動再接続 / ロングポーリング降格が必要 | `@aomex/websocket-socket-io-transport` |
 
-## 標準 WebSocket（まずこちらで通す）
+## 標準 WebSocket（まず通す）
 
 ```bash
 pnpm add @aomex/websocket-ws-transport
 ```
 
-`path`、単フレームサイズ、`verify` はすべて `WebsocketApp` で配ります。`WsTransport` に二度書かないでください。コンストラクタ引数は主に下位の `ws` ライブラリへ透かすオプションです。ハートビートを触るときだけ `heartbeatInterval` を書きます（既定 30 秒；`0` で心拍オフ、単体テストでよく使います）：
+`path`、単フレームサイズ、`verify` は `WebsocketApp` 側。**`WsTransport` に二重設定しない**。コンストラクタ引数は主に底層 `ws` への透過。ハートビートは `heartbeatInterval`（デフォルト 30 秒；`0` でオフ、単体テスト向け）：
 
 ```typescript
 import { WebsocketApp, channels } from '@aomex/websocket';
 import { WsTransport } from '@aomex/websocket-ws-transport';
+import { logger } from '@/services/logger.service';
 
 const ws = new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   path: '/ws',
   transport: new WsTransport({ // [!code focus:4]
@@ -37,7 +38,7 @@ const ws = new WebsocketApp({
 });
 ```
 
-ブラウザ側はネイティブ `WebSocket`、フレームは JSON です：
+ブラウザは原生 `WebSocket`、フレームは JSON：
 
 ```typescript
 const socket = new WebSocket('ws://localhost:3000/ws');
@@ -51,15 +52,15 @@ socket.onmessage = (ev) => {
 socket.send(JSON.stringify({ event: 'ping', data: {} }));
 ```
 
-## Socket.IO に換える
+## Socket.IO へ差し替え
 
-フロントがすでに `socket.io-client` に依存している、または劣悪なネットワーク向けのフォールバックが必要なときだけ換えます。**部屋は引き続き aomex の Hub** です。`@socket.io/redis-adapter` を載せないでください。二系統のブロードキャストになり、切り分けが苦しくなります。
+フロントが既に `socket.io-client`、または劣悪なネットワークで降格が要るとき。**ルームは引き続き aomex の Hub**。`@socket.io/redis-adapter` は**掛けない**——二重ブロードキャストで地獄。
 
 ```bash
 pnpm add @aomex/websocket-socket-io-transport
 ```
 
-同じく：`path` と最大バッファはアプリが注入します。フレームワークは意図的に namespace、ack、`volatile` を露出していません——送信は Channel / `ws.room` の `send` に統一し、二系統の考え方を避けます。CORS や ping 間隔を変えるときはコンストラクタに書きます：
+`path`、最大バッファはアプリが注入。namespace、ack、`volatile` は意図的に非公開——送信は Channel / `ws.room` の `send` に統一。CORS や ping 間隔はコンストラクタで：
 
 ```typescript
 import { SocketIoTransport } from '@aomex/websocket-socket-io-transport';
@@ -70,7 +71,7 @@ transport: new SocketIoTransport({ // [!code focus:3]
 }),
 ```
 
-ブラウザ側は Socket.IO クライアント必須です（ネイティブ `WebSocket` では繋がりません）：
+ブラウザは Socket.IO クライアント必須（原生 `WebSocket` では接続不可）：
 
 ```typescript
 import { io } from 'socket.io-client';
@@ -82,12 +83,12 @@ socket.on('echo', (data) => {
 });
 ```
 
-## シャットダウン時に起きること
+## シャットダウン時
 
-`ws.attach(app, server)` の時点で WebApp にシャットダウンフックが登録済みです。シグナルを受けると接続を蹴り、転送を片付けますが、渡した `http.Server` までは閉じません（Server は WebApp 自身が閉じます）。転送層のために改めて `process.on('SIGTERM')` を書く必要は通常ありません。
+`ws.attach(app, server)` 時に WebApp にシャットダウンフック登録：シグナルで接続を切り、トランスポートを片付けるが、渡した `http.Server` 自体は**閉じない**（Server は WebApp が閉じる）。通常トランスポート用に `process.on('SIGTERM')` を重ね書きしない。
 
 ## 次のステップ
 
-- [マルチマシン Hub](/ja/websocket/hub) —— 複数レプリカや Console からも送りたいとき
-- [アプリケーション入口](/ja/websocket/)
-- [イベントルーティング](/ja/websocket/channel)
+- [マルチインスタンス Hub](/ja/websocket/hub) — レプリカや Console からも push
+- [アプリ入口](/ja/websocket/)
+- [イベントルート](/ja/websocket/channel)

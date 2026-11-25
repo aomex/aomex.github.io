@@ -2,42 +2,43 @@
 outline: deep
 ---
 
-# Мультимашинный Hub
+# Hub для нескольких машин
 
-Hub помнит «кто в какой комнате» и «как раздать broadcast». Memory Hub по умолчанию знает только соединения **текущего Node-процесса** — для локальной разработки этого достаточно.
+Hub хранит «кто в какой комнате» и как разослать broadcast. Память по умолчанию знает только соединения **текущего процесса Node** — для локальной разработки хватает.
 
-Когда обязательно нужен Redis Hub?
+Когда нужен Redis Hub?
 
-- В проде несколько Web-реплик, пользователь может попасть на разные машины
-- Console (или другой процесс) тоже вызывает `ws.room(...).send` к браузерам, ещё висящим на Web-процессе
+- Несколько реплик Web в проде, пользователь попадает на разные машины
+- Console (или другой процесс) должен `ws.room(...).send` браузерам на Web-процессах
 
-Транспорт (ws / Socket.IO) и Hub **независимы**: смена клиентского протокола ≠ смена Hub; мультимашина — только Hub.
+Транспорт (ws / Socket.IO) и Hub **независимы**: смена протокола клиента не требует смены Hub; для multi-instance меняют только Hub.
 
-Доставка по-прежнему best-effort: успешный Redis `PUBLISH` не значит, что каждая машина уже раздала, тем более что браузер уже показал сообщение.
+Доставка best-effort: успешный Redis `PUBLISH` ≠ fanout на всех машинах ≠ сообщение уже на экране.
 
-## По умолчанию хватает: MemoryHub
+## По умолчанию: MemoryHub
 
-Без `hub` автоматически берётся memory-реализация. На одной машине и для локальной стыковки так и оставляйте — `new WebsocketApp({ ... })` из статьи про вход уже в этом состоянии.
+Без `hub` — память. Один сервер, локальная отладка — оставь так; `new WebsocketApp({ ... })` из входной статьи уже в этом режиме.
 
-Ограничение: `room().send` в процессе A **не попадёт** в соединения процесса B. Если Web и Console — два процесса, send из Console браузер не увидит.
+Ограничение: `room().send` в процессе A **не дойдёт** до соединений в B. Web и Console в разных процессах — браузер ничего не получит.
 
-## Мультимашина: RedisHub
+## Multi-instance: RedisHub
 
 ```bash
 pnpm add @aomex/websocket-redis-hub
 ```
 
-Каждая машина локально ведёт «какие соединения у меня и в каких комнатах»; межмашинный broadcast идёт через Redis Pub/Sub. Если в комнате на этой машине никого не осталось, подписка на канал снимается — пустых подписок не копят.
+На каждой машине локально «свои соединения и комнаты»; между машинами — Redis Pub/Sub. Нет клиентов комнаты на машине — отписка от канала, без пустых подписок.
 
-`host` / `port` / пароль — как у обычного ioredis. Если один Redis делят несколько проектов, обязательно смените `channel` (префикс Pub/Sub, по умолчанию `aomex:websocket:hub`) на неуникальный. `fanoutBatchSize` — сколько соединений раздавать за раз на этой машине; обычно не трогают.
+`host` / `port` / пароль как у ioredis. Общий Redis у проектов — меняй `channel` (префикс Pub/Sub, default `aomex:websocket:hub`). `fanoutBatchSize` — сколько соединений fanout за раз, обычно не трогают.
 
 ```typescript
 import { WebsocketApp, channels } from '@aomex/websocket';
 import { WsTransport } from '@aomex/websocket-ws-transport';
 import { RedisHub } from '@aomex/websocket-redis-hub';
+import { logger } from '@/services/logger.service';
 
 export const ws = new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   transport: new WsTransport(),
   hub: new RedisHub({ // [!code focus:5]
@@ -50,28 +51,28 @@ export const ws = new WebsocketApp({
 });
 ```
 
-Реальные каналы: `{префикс}:a` (всем) и `{префикс}:r:{имя-комнаты}`. **Все процессы, которые должны общаться** (каждая Web-реплика, Console с пушем) обязаны: один Redis, один префикс `channel`.
+Каналы: `{prefix}:a` (всем) и `{prefix}:r:{room}`. **Все процессы**, которые должны общаться (реплики Web, Console с push), — один Redis и один префикс `channel`.
 
 ::: warning
-Даже с транспортом Socket.IO **не** вешайте официальный Redis adapter Socket.IO. Комнаты и broadcast знает только `hub` aomex; два слоя — мина под ногами.
+С Socket.IO **не** вешай официальный Redis adapter Socket.IO. Комнаты и broadcast — только hub aomex; два слоя — ловушка при отладке.
 :::
 
-## Пуш из Console через процессы
+## Push из Console через процессы
 
-Тот же приём, что в статье про вход: `ws` экспортируется из отдельного файла; Web-процесс делает `attach`; Console **только import, никогда attach**. При конструировании с обеих сторон — одна и та же конфигурация `RedisHub`:
+Как во входной статье: `ws` в отдельном файле; Web делает `attach`; Console **только import, без attach**. Одинаковый `RedisHub` при создании:
 
 ```typescript
-// Console 指令里
-import { ws } from '../ws.js';
+// в команде Console
+import { ws } from '@/ws';
 
 await ws.room(`order:${orderId}`).send('order.updated', order);
 await ws.all.send('system.notice', { text: '今晚 23:00 维护' });
 ```
 
-Перед отправкой дождутся готовности Hub. Клиент, который тогда был офлайн, ничего не получит — при следующем открытии страницы подтяните состояние по HTTP.
+Перед отправкой ждёт готовности Hub. Офлайн-клиенты не получат — при следующем открытии страницы подтяни состояние по HTTP.
 
 ## Дальше
 
-- [Точка входа](/ru/websocket/) — attach и приёмы пуша
+- [Вход приложения](/ru/websocket/) — attach и push
 - [Транспорт](/ru/websocket/transport)
-- [Мультипроцесс и масштабирование](/ru/advanced/cluster)
+- [Кластер](/ru/advanced/cluster)

@@ -7,6 +7,8 @@ outline: deep
 Turn terminal flags like `--page 1` and `-d 2024-01-01` into **ctx.options** with the same `rule`s as Web. Validation failure → **non-zero exit**; `docs` feed into `--help`. argv is a flat string channel—prefer flat fields over nested structures.
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 import { rule } from '@aomex/common';
 import { Commander, options } from '@aomex/console';
 
@@ -31,7 +33,7 @@ commander.create('export', {
   action: async (ctx) => {
     const { out, date, limit, verbose } = ctx.options;
     if (verbose) {
-      await ctx.logger.info('export start', { out, date, limit });
+      logger.info(`export start out=${out} date=${date} limit=${limit}`);
     }
     await exportCsv({ out, date, limit });
   },
@@ -61,6 +63,8 @@ Do not hand-parse `process.argv` in the action—you lose types and consistent n
 Migrations and batch jobs often need direction, step count, or dry-run switches. Declare them with `rule.boolean()` / `rule.enum()` in `options` so manual runs and CI share `--dry-run`; validation failure exits non-zero instead of parsing strings in the action.
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 commander.create('migrate', {
   mount: [
     options({ // [!code highlight]
@@ -72,7 +76,7 @@ commander.create('migrate', {
   action: async (ctx) => {
     const { direction, steps, dryRun } = ctx.options;
     if (dryRun) {
-      await ctx.logger.info('dry-run', { direction, steps });
+      logger.info(`dry-run direction=${direction} steps=${steps ?? ''}`);
       return;
     }
     await runMigrate({ direction, steps });

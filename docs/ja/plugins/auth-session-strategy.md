@@ -36,10 +36,11 @@ import { AuthSessionStrategy } from '@aomex/auth/session';
 import { cors } from '@aomex/cors';
 import { csrf } from '@aomex/csrf';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:8]
@@ -88,14 +89,17 @@ GET など安全メソッドはデフォルトで CSRF を検証しない。初�
 ```typescript
 import { Auth } from '@aomex/auth';
 import { AuthSessionStrategy } from '@aomex/auth/session';
+import { Caching } from '@aomex/cache';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 import { body, Router } from '@aomex/web';
 import { rule } from '@aomex/common';
 
+const cache = new Caching(new CacheMemoryAdapter());
+
 const auth = new Auth({
   strategies: {
     session: new AuthSessionStrategy({
-      store: new CacheMemoryAdapter(), // [!code highlight]
+      store: cache, // [!code highlight]
       cookie: {
         maxAge: 7 * 24 * 3600,
         // 生产跨站前端常见：sameSite: 'none', secure: true

@@ -2,96 +2,91 @@
 outline: deep
 ---
 
-# Логи
+# Логирование
 
-Сделайте **LoggerService**, в `createTransports` объявите, куда писать; зарегистрируйте в `combineServices` и **прогрейте через eager**. Web / Console делят один `services.logger`, и он же закрывает обязательный `logger` у WebApp.
+Объявите назначения через `new Logger({ transports })` и передайте **тот же экземпляр** в `logger` Web / Console / WebSocket. Первый лог — ленивое подключение; при остановке — уничтожение через внутренний `registerLifecycle`.
 
 ```bash
 pnpm add @aomex/logger
 ```
 
 ```typescript
-import {
-  BaseLoggerService,
-  ConsoleTransport,
-  FileTransport,
-} from '@aomex/logger';
+// src/services/logger.service.ts
+import { Logger, ConsoleTransport, FileTransport } from '@aomex/logger';
 
-export default class LoggerService extends BaseLoggerService {
-  protected createTransports() { // [!code focus:9]
-    return [
-      { transport: new ConsoleTransport(), level: 'debug' },
-      {
-        transport: new FileTransport({ file: './logs/app.log' }),
-        level: 'warn', // [!code highlight]
-      },
-    ];
-  }
-}
-```
-
-```typescript
-export const services = await combineServices(
-  {
-    logger: () => import('./logger.service.js'),
-  },
-  { eager: ['logger'] }, // [!code highlight]
-);
-
-await services.logger.info('服务已就绪');
-await services.logger.error(err, '结账失败');
-```
-
-У WebApp кроме `services` отдельно передайте `logger: services.logger` (та же ссылка):
-
-```typescript
-new WebApp({
-  services,
-  logger: services.logger, // [!code highlight]
-  language: { mode: 'fixed', language: 'zh-CN' },
-  proxyIP: { mode: 'detect' },
+export const logger = new Logger({ // [!code focus:9]
+  transports: [
+    { transport: new ConsoleTransport(), level: 'debug' },
+    {
+      transport: new FileTransport({ file: './logs/app.log' }),
+      level: 'warn', // [!code highlight]
+    },
+  ],
 });
 ```
 
+```typescript
+import { WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
+import { services } from '@/services';
+
+new WebApp({
+  services,
+  logger, // [!code highlight]
+  language: { mode: 'fixed', language: 'zh-CN' },
+  proxyIP: { mode: 'detect' },
+});
+
+logger.info('服务已就绪');
+logger.error(err, '结账失败');
+```
+
+В бизнес-коде — `import { logger } from '@/services/logger.service'`. `ctx.logger` — **та же ссылка**, для **стороннего middleware** и **middleware внутри app** (когда есть только ctx); вывод одинаковый.
+
 ## Уровни и сигнатуры
 
-У каждой записи есть **level**: шум растёт от trace к fatal; `level` в таблице выходов решает, «насколько шумно» попадёт в этот канал. У error / fatal первый аргумент — `Error`, у остальных обычно `(message, context?)`.
+У каждой записи есть **level**: от trace до fatal «громче»; `level` у transport решает, что проходит в этот выход.
 
-- trace / debug / info / warn: (message, context?)
-- error / fatal: (err, message, context?)
-- у каждого выхода level — один уровень или интервал `{ min, max }`
+- trace / debug / info: только текст `(message)`
+- warn / error / fatal: `(message)` или `(err)` / `(err, message)` — `err` типа `unknown` (включая из `catch`), сериализуется в `exception`
+- структурированные поля — [withBindings](#контекст-запроса-withbindings), не дописывайте объекты после info
+- `level` выхода — один уровень или интервал `{ min, max }`
 
 От шумного к тихому: trace → debug → info → warn → error → fatal.
 
+Методы логирования **синхронные** (`void`), без `await`. `await logger.flush()` — когда нужно слить очередь перед выходом процесса.
+
 ::: warning
-Долгий debug / trace в проде убивает горячий путь и диск; бизнес-сбои — `error`, `fatal` — когда процесс нездоров, не помечайте каждый сбой как fatal.
+Постоянный debug / trace в проде бьёт по hot path и диску. Ошибки бизнеса — error, fatal — когда процесс нездоров; не маркируйте всё как fatal. Фреймворк **не** режет уровни по `NODE_ENV` — настраивайте `level` у каждого transport.
 :::
 
 ```typescript
-await services.logger.info('服务已就绪');
-await services.logger.error(err, '结账失败');
-await services.logger.fatal(err, '数据库不可用，准备退出');
+import { logger } from '@/services/logger.service';
+
+logger.info('服务已就绪');
+logger.error(err, '结账失败');
+logger.fatal(err, '数据库不可用，准备退出');
 ```
 
-## Сначала выберите выход
+## Выбор выходов
 
 | Выход | Пакет | Когда |
 | --- | --- | --- |
 | [ConsoleTransport](#consoletransport) | `@aomex/logger` | локальная разработка, stdout контейнера |
-| [FileTransport](#filetransport) | `@aomex/logger` | на диск, файлы по дню / уровню |
-| [StreamTransport](#streamtransport) | `@aomex/logger` | любой Writable (тесты, пайп) |
+| [FileTransport](#filetransport) | `@aomex/logger` | файлы, разделение по дню / уровню |
+| [StreamTransport](#streamtransport) | `@aomex/logger` | любой Writable (тесты, pipe) |
 | [WebhookTransport](#webhooktransport) | `@aomex/logger` | свой HTTP-хук |
-| [CustomTransport](#customtransport) | `@aomex/logger` | своя очередь / БД / SDK вендора |
+| [CustomTransport](#customtransport) | `@aomex/logger` | очередь / БД / SDK вендора |
 | [SentryTransport](#sentrytransport) | `@aomex/logger-sentry` | error в Sentry |
-| [TelegramTransport](#telegramtransport) | `@aomex/logger-telegram` | fatal разбудит людей |
+| [TelegramTransport](#telegramtransport) | `@aomex/logger-telegram` | fatal будит людей |
 
-Типичная продакшен-связка: консоль info + файл warn + Sentry error + Telegram fatal. У каждого выхода свой level — не сваливайте весь шум в один канал. Ниже — как настраивать каждый выход.
+Типичный прод: консоль info + файл warn + Sentry error + Telegram fatal. У каждого выхода свой level, не один канал на весь шум. Ниже — настройка по выходам.
 
 ---
 
 ### ConsoleTransport
 
-В терминал. На TTY text по умолчанию с цветом; для NDJSON в пайп сбора — `format: 'json'` и без цвета.
+В терминал. В TTY text по умолчанию с цветом. Для сбора NDJSON — `format: 'json'` и `colorize: false`.
 
 ```typescript
 { transport: new ConsoleTransport(), level: 'debug' },
@@ -104,11 +99,11 @@ new ConsoleTransport({
 });
 ```
 
-Без `output` error / fatal идут в stderr, остальное — в stdout; чтобы всё в один поток — задайте `output`. `colors` меняет раскраску уровней.
+Без `output` error / fatal — stderr, остальное stdout; один поток — задайте `output`. `colors` меняет раскраску уровней.
 
 ### FileTransport
 
-Дописывает локальный файл; каталог создаётся сам. Фиксированного пути часто хватает одной строкой; для разбиения по дню / уровню — плейсхолдеры `{year}` / `{month}` / `{day}` / `{level}` (или `(log) => path`).
+Дозапись в локальный файл; каталог создаётся сам. Фиксированный путь — одна строка; по дню / уровню — плейсхолдеры `{year}` / `{month}` / `{day}` / `{level}` (или `(log) => path`).
 
 ```typescript
 {
@@ -124,11 +119,11 @@ new FileTransport({
 });
 ```
 
-Для Fluent Bit и т.п. — `format: 'json'`. Права — через `fileMode` / `dirMode`.
+Для Fluent Bit и т.п. — `format: 'json'`. Права — `fileMode` / `dirMode`.
 
 ### StreamTransport
 
-Любой Writable (фейковый поток в unit-тестах, пайп процесса):
+Любой Writable (фейковый поток в тестах, pipe процесса):
 
 ```typescript
 new StreamTransport({
@@ -141,7 +136,7 @@ new StreamTransport({
 
 ### WebhookTransport
 
-HTTP на алерт / свой коллектор. Медленный хук — поднимите `timeoutMs` (по умолчанию около `30000`); авторизация — `headers`.
+HTTP на алерт / свой коллектор. Медленный хук — увеличьте `timeoutMs` (по умолчанию ~`30000`); auth — `headers`.
 
 ```typescript
 new WebhookTransport({
@@ -151,11 +146,11 @@ new WebhookTransport({
 });
 ```
 
-`format` может быть функцией — сами соберёте body. method по умолчанию POST.
+`format` может быть функцией для своего body. method по умолчанию POST.
 
 ### CustomTransport
 
-Своя логика потребления; на `this` доступен `formatLog`.
+Свой consume; на `this` доступен `formatLog`.
 
 ```typescript
 new CustomTransport({
@@ -165,7 +160,7 @@ new CustomTransport({
 });
 ```
 
-Сбой одной записи обычно не блокирует другие выходы. Для более тонкого контроля наследуйте Transport.
+Сбой одной записи обычно не блокирует другие выходы. Тонкая настройка — наследование Transport.
 
 ### SentryTransport
 
@@ -184,7 +179,7 @@ import { SentryTransport } from '@aomex/logger-sentry';
 },
 ```
 
-DSN — из переменных окружения, не в репозиторий. level лучше не ниже error — не заливайте info в Sentry. Перед shutdown дождаться отправки — `flushTimeout` (по умолчанию около `2000`).
+DSN из окружения, не в репозитории. level не ниже error, не заливайте info в Sentry. Перед остановкой — `flushTimeout` (по умолчанию ~`2000`).
 
 ### TelegramTransport
 
@@ -204,55 +199,54 @@ import { TelegramTransport } from '@aomex/logger-telegram';
 },
 ```
 
-Подходит для «процесс падает — разбудить людей»; не привязывайте кучу warn. В интервале одинаковый отпечаток сливается (`dedupe`, около 30 s; `false` выключает). `timeout` включает автоповторы, по умолчанию около `120000`.
+Когда «процесс умирает — разбудить человека»; не вешайте кучу warn. Одинаковый отпечаток в интервале сливается (`dedupe`, ~30s; `false` отключает). `timeout` с авто-ретраями, по умолчанию ~`120000`.
 
-## Комбинация нескольких выходов
+## Несколько выходов
 
-Соберите выше в один Service и разведите по уровням:
+Соберите в одном `Logger`, разведите по уровням:
 
 ```typescript
-import { BaseLoggerService, ConsoleTransport, FileTransport } from '@aomex/logger';
+import { Logger, ConsoleTransport, FileTransport } from '@aomex/logger';
 import { SentryTransport } from '@aomex/logger-sentry';
 import { TelegramTransport } from '@aomex/logger-telegram';
 
-class LoggerService extends BaseLoggerService {
-  protected createTransports() { // [!code highlight]
-    return [
-      { transport: new ConsoleTransport(), level: 'info' },
-      {
-        transport: new FileTransport({ file: './logs/app.log', format: 'json' }),
-        level: 'warn',
-      },
-      {
-        transport: new SentryTransport({ dsn: process.env.SENTRY_DSN! }),
-        level: 'error',
-      },
-      {
-        transport: new TelegramTransport({
-          botToken: process.env.TG_BOT_TOKEN!,
-          chatId: process.env.TG_CHAT_ID!,
-        }),
-        level: 'fatal',
-      },
-    ];
-  }
-}
+export const logger = new Logger({
+  transports: [ // [!code highlight]
+    { transport: new ConsoleTransport(), level: 'info' },
+    {
+      transport: new FileTransport({ file: './logs/app.log', format: 'json' }),
+      level: 'warn',
+    },
+    {
+      transport: new SentryTransport({ dsn: process.env.SENTRY_DSN! }),
+      level: 'error',
+    },
+    {
+      transport: new TelegramTransport({
+        botToken: process.env.TG_BOT_TOKEN!,
+        chatId: process.env.TG_CHAT_ID!,
+      }),
+      level: 'fatal',
+    },
+  ],
+});
 ```
 
-Можно оставить только файл и отдать Fluent Bit — приложение тоньше.
+Можно только файл и Fluent Bit — приложение тоньше. Временно отключить выход — `disabled: true` (без `onInit` / доставки / `flush`).
 
 ## Контекст запроса: withBindings
 
-Чтобы в разборе было ясно «эта запись к какому запросу»: ближе к началу Web mount оберните `next()`, нижестоящие логи сами получат поля.
+Чтобы связать лог с запросом: рано в Web `mount` оберните `next()` — поля появятся на логах ниже.
 
 ```typescript
 import { middleware } from '@aomex/common';
+import { logger } from '@/services/logger.service';
 
 export const bindRequestLog = middleware.web(async (ctx, next) => {
   const requestId =
     ctx.request.headers['x-request-id']?.toString() || crypto.randomUUID();
 
-  await ctx.logger.withBindings( // [!code highlight]
+  await logger.withBindings( // [!code highlight]
     {
       requestId,
       method: ctx.request.method,
@@ -271,20 +265,20 @@ mount: [
 ],
 ```
 
-После аутентификации допишите userId (слияние с внешним; одноимённый ключ перекрывается внутренним):
+После auth добавьте userId (слияние с внешним слоем, внутренний перекрывает совпадения):
 
 ```typescript
-await ctx.logger.withBindings({ userId: ctx.auth.bearer.data.id }, next);
+await logger.withBindings({ userId: ctx.auth.bearer.data.id }, next);
 ```
 
-В Console / Cron то же для `services.logger.withBindings`. Перед shutdown или концом теста можно `await services.logger.flush()`.
+Console / Cron — тот же `logger`. Перед shutdown или концом теста — `await logger.flush()`.
 
 ::: warning
-`withBindings` должен обернуть `await next()` в колбэке, иначе нижестоящие логи могут оказаться вне того же контекста.
+В withBindings обязательно оберните `await next()` в колбэке, иначе логи ниже могут оказаться вне контекста.
 :::
 
-## Связанное
+## См. также
 
-- [Сервисный слой](/ru/core/service)
-- [Middleware](/ru/core/middleware)
-- [Access log](/ru/plugins/access-log) (одна строка HTTP с длительностью; дополняет уровневые выходы)
+- [слой сервисов](/ru/core/service)
+- [middleware](/ru/core/middleware)
+- [access log](/ru/plugins/access-log) (одна строка HTTP с длительностью, дополняет разделение по уровням)

@@ -2,48 +2,48 @@
 outline: deep
 ---
 
-# 手動バリデーション
+# 手動検証
 
-**Web ルート以外**で、任意データをルールに照らして検証する：単体テスト、スクリプト、自作ミドルウェア。Web で body() / query() を載せるときの土台も同じ；ここは自分で `validate` を呼ぶ入口。
+**Web ルート以外**で任意データを規則に照らす：単体テスト、スクリプト、自作ミドルウェア。Web で body() / query() を掛けるときも同じ仕組み；ここは自前で `validate` を呼ぶ入口。
 
 ```typescript
 import { validate } from '@aomex/common';
-import { createUserSchema } from '../schemas/user.schema.js';
+import { createUserSchema } from '@/schemas/user.schema';
 
 const input = { name: 'Ada', email: 'ada@example.com' };
 
 const user = await validate(input, createUserSchema); // [!code highlight]
-// 通过：user 已是 Infer 后的类型
-// 失败：抛错（默认行为）
+// 成功：user は Infer 後の型
+// 失敗：throw（デフォルト）
 ```
 
-ルートで `mount: [body(createUserSchema)]` は同じ「通らなければ中断」の形で、エラーだけ HTTP 400 にまとまる。
+ルートの `mount: [body(createUserSchema)]` は同じ「不合格で中断」だが、エラーは HTTP 400 にまとまる。
 
-validate は形状だけ；在庫、権限、重複登録は service / action のまま。
+validate は形状だけ；在庫・権限・重複登録は service / action。
 
-validate は Promise を返す；await を忘れると Promise を結果として使ってしまう。
+validate は Promise。await 忘れで Promise を結果に使う。
 
-- 第 1 引数は広い型（設定、unknown、テストフィクスチャ）；成功後は `Validator.Infer<typeof schema>` に狭まる。
-- デフォルト throwOnError: true：失敗時は**使える戻り値はなく**、catch かバブルアップ。
-- `{ throwOnError: false }` のとき `{ data, errors }`；**成功は `errors === null`** を見る。 `data === null` で判断しない——nullable() 時は合法値が null になり得る。
+- 第一引数は広い型（設定、unknown、テストフィクスチャ）。成功後は `Validator.Infer<typeof schema>` に狭る。
+- デフォルト throwOnError: true：失敗時は戻り値なし、catch またはバブル。
+- `{ throwOnError: false }` では `{ data, errors }`；**成功は `errors === null`**。`data === null` で失敗判定しない——nullable() で合法 null があり得る。
 
 ::: warning
-`data === null` で失敗判定すると誤判定：nullable() 通過時に data が null のことがある。
+`data === null` で失敗判定すると誤判定：nullable() 通過時 data が null のことがある。
 :::
 
-- 失敗かつ `throwOnError: false` のとき errors はだいたい `string[]`；フォームの複数項目エラーをまとめて返すのに向く。
+- 失敗かつ `throwOnError: false` では errors はだいたい `string[]`。フォームへ一括表示向き。
 
-| 書き方 | いつ使うか |
+| 書き方 | いつ |
 | --- | --- |
-| `await validate(input, schema)` | スクリプト、単体テスト、ミドルウェア——失敗で停止 |
-| `validate(input, schema, { throwOnError: false })` | 管理画面フォームで**全**エラーを一度に表示 |
-| 同じ `schema` + `validate` / `body()` | ルールを 1 箇所で保守 |
+| `await validate(input, schema)` | スクリプト、単体、ミドルウェア——失敗で停止 |
+| `validate(input, schema, { throwOnError: false })` | 管理画面フォーム——**全**エラーを一度に |
+| 同じ `schema` + validate / body() | 規則は一箇所 |
 
-### 例外を投げない：全エラーを集める
+### throw しない：全エラー収集
 
 ```typescript
 import { validate } from '@aomex/common';
-import { createUserSchema } from '../schemas/user.schema.js';
+import { createUserSchema } from '@/schemas/user.schema';
 
 const input = { name: '', email: 'not-email' };
 
@@ -58,12 +58,12 @@ if (result.errors === null) {
 
 ### ルートとの分担
 
-**HTTP 入口**は body / query / params；**設定読み込み、Cron 前チェック、テストデータ**は validate。ルールは `src/schemas/` に置く。
+**HTTP 入口**は body / query / params；**設定読み、Cron 前チェック、単体データ**は validate。規則は `src/schemas/` に集約。
 
-Web API 全体で validate を手書きして throw(400) は重複し OpenAPI も散らかる——ミドルウェアで載せられるならそちら。
+Web API 到处に validate + throw(400) は重複し OpenAPI も散らかす——ミドルウェアが掛けられるなら掛ける。
 
-## 次のステップ
+## 次に
 
 - [schema](./schema)
 - [共通チェーン](./chain)（フィールド上で形状を狭める）
-- [エラー形式](/ja/web/errors)（Web で例外後の JSON エンベロープ）
+- [エラー形式](/ja/web/errors)（Web で throw 後の JSON envelope）

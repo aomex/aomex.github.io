@@ -19,12 +19,12 @@ pnpm add @aomex/redoc-ui
 ```typescript
 import { redocUI } from '@aomex/redoc-ui';
 import { generateOpenapi } from '@aomex/openapi-generator';
-import { app } from './app.js';
+import { app } from '@/app';
 
 mount: [ // [!code focus:13]
   redocUI({
     openapi: './openapi.yaml', // [!code highlight]
-    // или как у Swagger — функция:
+    // 或与 Swagger 一样用函数：
     // openapi: () => {
     //   return generateOpenapi({
     //     routers: './src/routers',

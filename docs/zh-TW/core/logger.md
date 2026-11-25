@@ -4,73 +4,68 @@ outline: deep
 
 # 日誌
 
-做一個 **LoggerService**，在 createTransports 裡宣告往哪兒打；註冊進 combineServices 並 **eager 預熱**。Web / Console 共用同一個 services.logger，並滿足 WebApp 必填的 logger。
+用 `new Logger({ transports })` 宣告往哪兒打；把**同一個實例**傳給 Web / Console / WebSocket 的 `logger`。首次寫日誌時懶連線，關停時經內部 `registerLifecycle` 自動銷毀。
 
 ```bash
 pnpm add @aomex/logger
 ```
 
 ```typescript
-import {
-  BaseLoggerService,
-  ConsoleTransport,
-  FileTransport,
-} from '@aomex/logger';
+// src/services/logger.service.ts
+import { Logger, ConsoleTransport, FileTransport } from '@aomex/logger';
 
-export default class LoggerService extends BaseLoggerService {
-  protected createTransports() { // [!code focus:9]
-    return [
-      { transport: new ConsoleTransport(), level: 'debug' },
-      {
-        transport: new FileTransport({ file: './logs/app.log' }),
-        level: 'warn', // [!code highlight]
-      },
-    ];
-  }
-}
-```
-
-```typescript
-export const services = await combineServices(
-  {
-    logger: () => import('./logger.service.js'),
-  },
-  { eager: ['logger'] }, // [!code highlight]
-);
-
-await services.logger.info('服务已就绪');
-await services.logger.error(err, '结账失败');
-```
-
-WebApp 除 services 外還要單獨傳 `logger: services.logger`（同一引用即可）：
-
-```typescript
-new WebApp({
-  services,
-  logger: services.logger, // [!code highlight]
-  language: { mode: 'fixed', language: 'zh-CN' },
-  proxyIP: { mode: 'detect' },
+export const logger = new Logger({ // [!code focus:9]
+  transports: [
+    { transport: new ConsoleTransport(), level: 'debug' },
+    {
+      transport: new FileTransport({ file: './logs/app.log' }),
+      level: 'warn', // [!code highlight]
+    },
+  ],
 });
 ```
 
+```typescript
+import { WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
+import { services } from '@/services';
+
+new WebApp({
+  services,
+  logger, // [!code highlight]
+  language: { mode: 'fixed', language: 'zh-CN' },
+  proxyIP: { mode: 'detect' },
+});
+
+logger.info('服务已就绪');
+logger.error(err, '结账失败');
+```
+
+業務程式碼直接 `import { logger } from '@/services/logger.service'` 即可。`ctx.logger` 與它是**同一引用**，給**第三方中介軟體**和 **app 內中介軟體**用（只拿到 ctx 時）；兩邊打日誌效果一樣。
+
 ## 等級與簽名
 
-每條日誌帶 **level**：吵度從 trace 到 fatal 遞增，出口表裡設的 level 決定「多吵的才進這個通道」。簽名上 error / fatal 第一個引數是 `Error`，其餘等級一般 `(message, context?)`。
+每條日誌帶 **level**：吵度從 trace 到 fatal 遞增，出口表裡設的 level 決定「多吵的才進這個通道」。
 
-- trace / debug / info / warn：(message, context?)
-- error / fatal：(err, message, context?)
-- 每條出口的 level 可以是單一等級，或 { min, max } 區間
+- trace / debug / info：只收文案 `(message)`
+- warn / error / fatal：`(message)`，或 `(err)` / `(err, message)`——`err` 是 `unknown`（含 `catch` 值），會序列化進 `exception`
+- 結構化欄位用 [withBindings](#請求級上下文withbindings)，不要再往 info 後面塞物件
+- 每條出口的 level 可以是單一等級，或 `{ min, max }` 區間
 
 等級從吵到安靜：trace → debug → info → warn → error → fatal。
 
+寫日誌方法是**同步**的（返回 `void`），不用 `await`；要等佇列刷完再關程序時再 `await logger.flush()`。
+
 ::: warning
-生產長期開 debug / trace 會讓熱路徑和磁碟都受不了；業務失敗用 error，fatal 留給程序不健康，別把所有失敗都打成 fatal。
+生產長期開 debug / trace 會讓熱路徑和磁碟都受不了；業務失敗用 error，fatal 留給程序不健康，別把所有失敗都打成 fatal。框架**不會**按 `NODE_ENV` 自動關等級——靠各 transport 的 `level` 門禁。
 :::
 
 ```typescript
-await services.logger.info('服务已就绪');
-await services.logger.error(err, '结账失败');
-await services.logger.fatal(err, '数据库不可用，准备退出');
+import { logger } from '@/services/logger.service';
+
+logger.info('服务已就绪');
+logger.error(err, '结账失败');
+logger.fatal(err, '数据库不可用，准备退出');
 ```
 
 ## 先選出口
@@ -208,38 +203,36 @@ import { TelegramTransport } from '@aomex/logger-telegram';
 
 ## 多出口組合
 
-把上面拼進一個 Service，按等級分流：
+把上面拼進同一份 `Logger`，按等級分流：
 
 ```typescript
-import { BaseLoggerService, ConsoleTransport, FileTransport } from '@aomex/logger';
+import { Logger, ConsoleTransport, FileTransport } from '@aomex/logger';
 import { SentryTransport } from '@aomex/logger-sentry';
 import { TelegramTransport } from '@aomex/logger-telegram';
 
-class LoggerService extends BaseLoggerService {
-  protected createTransports() { // [!code highlight]
-    return [
-      { transport: new ConsoleTransport(), level: 'info' },
-      {
-        transport: new FileTransport({ file: './logs/app.log', format: 'json' }),
-        level: 'warn',
-      },
-      {
-        transport: new SentryTransport({ dsn: process.env.SENTRY_DSN! }),
-        level: 'error',
-      },
-      {
-        transport: new TelegramTransport({
-          botToken: process.env.TG_BOT_TOKEN!,
-          chatId: process.env.TG_CHAT_ID!,
-        }),
-        level: 'fatal',
-      },
-    ];
-  }
-}
+export const logger = new Logger({
+  transports: [ // [!code highlight]
+    { transport: new ConsoleTransport(), level: 'info' },
+    {
+      transport: new FileTransport({ file: './logs/app.log', format: 'json' }),
+      level: 'warn',
+    },
+    {
+      transport: new SentryTransport({ dsn: process.env.SENTRY_DSN! }),
+      level: 'error',
+    },
+    {
+      transport: new TelegramTransport({
+        botToken: process.env.TG_BOT_TOKEN!,
+        chatId: process.env.TG_CHAT_ID!,
+      }),
+      level: 'fatal',
+    },
+  ],
+});
 ```
 
-也可以只要檔案、交給 Fluent Bit 等轉發——應用側更瘦。
+也可以只要檔案、交給 Fluent Bit 等轉發——應用側更瘦。某條出口臨時關掉時設 `disabled: true`（不 `onInit` / 不投遞 / 不 `flush`）。
 
 ## 請求級上下文：withBindings
 
@@ -247,12 +240,13 @@ class LoggerService extends BaseLoggerService {
 
 ```typescript
 import { middleware } from '@aomex/common';
+import { logger } from '@/services/logger.service';
 
 export const bindRequestLog = middleware.web(async (ctx, next) => {
   const requestId =
     ctx.request.headers['x-request-id']?.toString() || crypto.randomUUID();
 
-  await ctx.logger.withBindings( // [!code highlight]
+  await logger.withBindings( // [!code highlight]
     {
       requestId,
       method: ctx.request.method,
@@ -274,10 +268,10 @@ mount: [
 鑑權後再補 userId（與外層合併，同名鍵內層覆蓋）：
 
 ```typescript
-await ctx.logger.withBindings({ userId: ctx.auth.bearer.data.id }, next);
+await logger.withBindings({ userId: ctx.auth.bearer.data.id }, next);
 ```
 
-Console / Cron 裡對 services.logger.withBindings 同樣適用。關停或測試結束前可 await services.logger.flush()。
+Console / Cron 同樣用這份 `logger`。關停或測試結束前可 `await logger.flush()`。
 
 ::: warning
 withBindings 必須把 await next() 包在回撥裡，否則下游日誌可能不在同一上下文。

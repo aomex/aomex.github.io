@@ -14,11 +14,12 @@ pnpm add tsx -D
 ```typescript
 // src/web.ts
 import { routers, WebApp } from '@aomex/web';
-import { services } from './services/index.js';
+import { logger } from '@/services/logger.service';
+import { services } from '@/services';
 
 const app = new WebApp({ // [!code focus:7]
   services,
-  logger: services.logger,
+  logger, // [!code highlight]
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [routers('./src/routers')], // [!code highlight]
@@ -52,14 +53,16 @@ node --import tsx/esm --watch src/web.ts
 
 ## services 與 logger
 
-`services` 是業務服務容器（查庫、快取、發信等都掛在這裡），用 [combineServices](/zh-TW/core/service) 組裝後交給 WebApp。程序關停時，框架會在銷燬階段對已載入的服務調 `destroy`，用來關連線、刷日誌。
+`services` 是業務服務容器（查庫、發信等都掛在這裡），用 [combineServices](/zh-TW/core/service) 組裝後交給 WebApp。程序關停時，框架會在銷毀階段對已載入的服務調 `destroy`，用來關連線。
 
-`logger` 必須單獨再傳一份（通常就是 `services.logger`）：路由和中介軟體裡的 `ctx.logger` 用的就是這個例項，和構造引數是同一引用。
+`logger` 是 [`Logger`](/zh-TW/core/logger) 實例（`new Logger({ transports })`）。業務裡直接 `import { logger } from '@/services/logger.service'`；`ctx.logger` 與它是同一引用，給第三方中介軟體和 app 內中介軟體用。快取見 [`Caching`](/zh-TW/core/cache)。
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 const app = new WebApp({
   services, // [!code highlight]
-  logger: services.logger, // [!code highlight]
+  logger, // [!code highlight]
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
 });
@@ -164,10 +167,11 @@ proxyIP: {
 ```typescript
 import { middleware } from '@aomex/common';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:9]
@@ -176,7 +180,7 @@ const app = new WebApp({
       await next();
       const cost = Date.now() - start;
       const { method, url } = ctx.request;
-      await ctx.logger.info(`${method} ${url} ${cost}ms`);
+      logger.info(`${method} ${url} ${cost}ms`);
     }),
     routers('./src/routers'),
   ],
@@ -185,7 +189,7 @@ const app = new WebApp({
 
 ## shutdown
 
-程序收到 `SIGTERM` / `SIGINT`（例如 `docker stop`、Ctrl+C、K8s 滾動釋出）時，WebApp 會做**優雅關停**：先停止接受新連線，等在途請求儘量跑完，再銷燬 services，最後以退出碼 0 結束程序。
+程序收到 `SIGTERM` / `SIGINT`（例如 `docker stop`、Ctrl+C、K8s 滾動釋出）時，WebApp 會做**優雅關停**：先停止接受新連線，等在途請求儘量跑完，再銷毀 services，最後以退出碼 0 結束程序。
 
 `timeout` 是最長等待時間（預設約 **5 秒**，可寫毫秒數或 `'10s'` 這類時長字串）。到期還有連線時，會強制斷開，避免程序卡死拖垮釋出。
 
@@ -193,7 +197,7 @@ const app = new WebApp({
 shutdown: { timeout: 10_000 },
 ```
 
-本地開發很少改；生產若有上傳、長輪詢、慢查詢，可按最壞請求耗時調大。關停期間新請求進不來——負載均衡應先摘掉例項再發訊號。用了 [clusterListen](/zh-TW/advanced/cluster#clusterlisten) 時，primary 自己也會收訊號並協調各 worker 退出。
+本地開發很少改；生產若有上傳、長輪詢、慢查詢，可按最壞請求耗時調大。關停期間新請求進不來——負載均衡應先摘掉實例再發訊號。用了 [clusterListen](/zh-TW/advanced/cluster#clusterlisten) 時，primary 自己也會收訊號並協調各 worker 退出。
 
 ## body 全站配額
 
@@ -205,9 +209,11 @@ shutdown: { timeout: 10_000 },
 | `formData` | `multipart/form-data` | 單檔案約 `50mb`、檔案數 / 欄位數有上限 |
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   body: { // [!code focus:8]
@@ -338,7 +344,7 @@ router.get('/login-done', {
 
 - `ctx.download`：把檔案流寫給客戶端；流結束後 Promise 才會 settled，適合「下完就刪」的臨時檔案。
 - `ctx.sse()`：服務端推送（Server-Sent Events），見 [SSE](/zh-TW/web/sse)。
-- `ctx.logger`：就是構造 WebApp 時傳入的那個 logger；要給每條日誌帶 `requestId` 等，見 [日誌 · withBindings](/zh-TW/core/logger#請求級上下文withbindings)。
+- 業務日誌：直接 `import { logger } from '@/services/logger.service'`（與 `ctx.logger` 同一引用；`ctx.logger` 給第三方中介軟體和 app 內中介軟體）。帶 `requestId` 等見 [日誌 · withBindings](/zh-TW/core/logger#請求級上下文withbindings)。
 
 ### app.on('error')
 

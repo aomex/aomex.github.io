@@ -16,7 +16,7 @@ outline: deep
 | Web：執行時 + 改 OpenAPI operation | `middleware.web({ fn, openapi })` |
 | Console：執行時 + 貢獻 `--help` 樹 | `middleware.console({ fn, help })` |
 
-`middleware.web` 的例項**不能**直接掛到 Console；反過來也不行。兩邊都要時，把公共邏輯抽成普通函式，再各包一層。
+`middleware.web` 的實例**不能**直接掛到 Console；反過來也不行。兩邊都要時，把公共邏輯抽成普通函式，再各包一層。
 
 ## 第一步：先寫出能跑的執行時
 
@@ -42,11 +42,12 @@ export const traceId = middleware.web<{ // [!code highlight]
 
 ```typescript
 import { routers, WebApp } from '@aomex/web';
-import { traceId } from './middlewares/trace-id.js';
+import { traceId } from '@/middlewares/trace-id';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [
@@ -57,8 +58,10 @@ const app = new WebApp({
 ```
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 action: async (ctx) => {
-  await services.logger.info('ok', { traceId: ctx.traceId });
+  logger.info(`ok ${ctx.traceId}`);
   ctx.send({ ok: true });
 };
 ```

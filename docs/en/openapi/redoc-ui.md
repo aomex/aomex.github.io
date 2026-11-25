@@ -19,7 +19,7 @@ Mount `redocUI`; the team opens `/redoc` (default) to read the same OpenAPI (JSO
 ```typescript
 import { redocUI } from '@aomex/redoc-ui';
 import { generateOpenapi } from '@aomex/openapi-generator';
-import { app } from './app.js';
+import { app } from '@/app';
 
 mount: [ // [!code focus:13]
   redocUI({

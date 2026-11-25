@@ -1,8 +1,8 @@
 # Слой сервисов
 
-Вынеси из action маршрутов «запросы к БД, вызовы сторонних API, кэш» в переиспользуемые **Service**; собери типизированный мешок `services` через **combineServices** и вызывай одни и те же имена из Web, Console и Cron.
+Вынесите «запросы к БД, вызовы API, кэш» из action маршрута в переиспользуемые **Service**; соберите типизированный мешок `services` через **combineServices** и вызывайте под теми же именами в Web, Console и Cron.
 
-Бизнес-классы наследуют `Service` и отдают обычные async-методы; подключение — в `onInit`, освобождение — в `onDestroy` (оставь `protected`, не свети наружу).
+Бизнес-класс наследует `Service`, наружу — обычные async-методы; подключение и прогрев — в `onInit`, освобождение — в `onDestroy` (protected, снаружи не вызывайте).
 
 ```typescript
 import { Service } from '@aomex/common';
@@ -11,7 +11,7 @@ export default class UserService extends Service {
   private cache = new Map<number, { name: string }>();
 
   protected override async onInit(): Promise<void> { // [!code highlight]
-    // Прогрев соединений, конфиг…
+    // прогрев подключения, чтение конфига…
   }
 
   protected override async onDestroy(): Promise<void> {
@@ -24,116 +24,128 @@ export default class UserService extends Service {
 }
 ```
 
-Регистрируй фабрикой + `combineServices`; **инфраструктуру клади в `eager`**, чтобы приложение подключилось при старте, а не на первом продовом запросе:
+Регистрация через фабрики + `combineServices`. **Сервисы, которые должны подключиться при старте процесса**, — в eager (Prisma, внешние SDK):
 
 ```typescript
 import { combineServices } from '@aomex/common';
 
 export const services = await combineServices( // [!code highlight]
   {
-    user: () => import('./user.service.js'),
-    cache: () => import('./cache.service.js'),
-    logger: () => import('./logger.service.js'),
+    user: () => import('@/services/user.service'),
   },
-  { eager: ['cache', 'logger'] },
+  { eager: ['user'] },
 );
 ```
 
-После подключения к Web типы `services` идут из ключей `combineServices` и **публичных методов** каждого Service: `await services.user.findById(1)` с полной подсказкой аргументов и возврата; `onInit`, `onDestroy`, `private` **не** попадут на `services.user`. Синхронные методы Service снаружи всё равно типизируются как **Promise** — везде пиши `await`.
+После передачи в Web тип `services` идёт из ключей combineServices и **публичных методов** каждого Service: `await services.user.findById(1)` с полным дополнением аргументов и результата; `onInit`, `onDestroy`, private **не** на `services.user`. Синхронные методы снаружи типизируются как **Promise** — пишите `await`.
 
 ```typescript
 import { WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services, // [!code highlight]
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
 });
 ```
 
 ::: tip
-Не делай `new UserService()` в бизнесе, минуя `services` у `WebApp` / `ConsoleApp` — при остановке фреймворк не закроет соединения вне мешка.
+Не делайте `new UserService()` в коде без передачи в `services` WebApp / ConsoleApp — при shutdown фреймворк не закроет ресурсы.
 :::
 
-В маршрутах или middleware:
+В маршруте или middleware:
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 const user = await services.user.findById(1);
-await services.logger.info('用户已查询', { userId: user?.name });
+logger.info(`用户已查询 ${user?.name ?? ''}`);
 ```
 
-В других файлах — `import { services } from './services/index.js'`, без дополнительного augmentation модулей.
+В других файлах: `import { services } from '@/services'`, без дополнительного augmentation модуля.
 
 ## Ленивая загрузка и подмена в тестах
 
-В боевом коде — `() => import('./xxx.service.js')`, откладывает загрузку и ускоряет cold start:
+В проде — `() => import('@/services/xxx.service')` для отложенной загрузки и быстрого cold start:
 
 ```typescript
-user: () => import('./user.service.js'),
+user: () => import('@/services/user.service'),
 ```
 
-В тестах фейк подставляй асинхронной фабрикой, возвращающей класс:
+В тестах async-фабрика может вернуть подделку:
 
 ```typescript
 user: async () => FakeUserService,
 ```
 
 ::: warning
-В проде не пиши `async () => UserService` — класс уже в памяти с модулем, «ленивость» бесполезна и жрёт RAM. В проде всегда `() => import('./user.service.js')`; async-форма только для тестов.
+В проде не пишите `async () => UserService`: класс уже в памяти с модулем, ленивость бессмысленна и жрёт RAM. В проде только `() => import('@/services/user.service')`; вариант выше — для тестов.
 :::
 
-В каждом файле `export default class XxxService` — loader не гадает среди экспортов.
+Удобнее всего `export default class XxxService` в каждом файле — loader не угадывает несколько экспортов.
 
 ## eager
 
-По умолчанию сервисы **ленивые**: первый `await services.xxx` создаёт экземпляр и вызывает `onInit`. Имена в `eager` готовятся до возврата `combineServices` — Redis, логи и всё, что должно быть готово при старте процесса.
+По умолчанию сервисы **ленивые**: первый `await services.xxx` создаёт экземпляр и гоняет `onInit`. Имена в `eager` строятся до возврата `combineServices` — для «подключиться сразу при старте» (Prisma).
 
 ```typescript
-{ eager: ['cache', 'logger'] },
+{ eager: ['user', 'prisma'] },
 ```
 
-Локальный smoke или минимальный CLI может обойтись без `eager`. Если в `onInit` сервиса A есть `await services.cache.xxx`, а `cache` не в `eager`, подключение сдвинется на первый бизнес-вызов — на старте легко поймать гонки.
+Локально и минимальный CLI могут обойтись без eager. Если в `onInit` A нужен `await services.user.xxx`, а user не в eager, инициализация отложится до первого вызова — ловушки порядка на старте.
 
 ## Хуки жизненного цикла
 
-Не всё должно быть Service и жить в `services` (модульный `PrismaClient`, внутренний Redis store плагина), но на старте нужно подключиться, при остановке — отключиться. Для этого `registerLifecycle`: `onInit` сразу при регистрации; `WebApp` / `ConsoleApp` вызовет `onDestroy` при shutdown.
+Ресурсы вне мешка `services` (модульный PrismaClient, Redis store внутри плагина) всё равно могут требовать connect на старте и disconnect на остановке — `registerLifecycle`: `onInit` сразу при регистрации, `onDestroy` при shutdown WebApp / ConsoleApp.
+
+Для ленивого connect (адаптер, свой клиент) часто «защёлка + сброс при ошибке» — **автоповтора нет**:
 
 ```typescript
 import { registerLifecycle } from '@aomex/common';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
+let ready: Promise<void> | undefined;
 
-await registerLifecycle({ // [!code focus:4]
-  onInit: () => prisma.$connect(),
-  onDestroy: () => prisma.$disconnect(),
-});
+function ensureReady() {
+  ready ??= registerLifecycle({ // [!code focus:7]
+    onInit: () => prisma.$connect(),
+    onDestroy: () => prisma.$disconnect(),
+  }).catch((err) => {
+    ready = undefined;
+    throw err;
+  });
+  return ready;
+}
 ```
 
-Возвращаемая функция **снимает регистрацию** досрочно (после shutdown или отмены повторный вызов ничего не делает). При падении `onInit` в очередь destroy не попадаешь. Лимит запросов и другие плагины используют те же хуки для store — в приложении обычно регистрировать store повторно не нужно.
+Разовое подключение (скрипт старта, top-level модуля) — `await registerLifecycle({ … })`. Возвращаемая функция **снимает регистрацию** досрочно (после shutdown/отмены — no-op). При сбое `onInit` в очередь destroy не попадаете. Rate limit и плагины используют те же хуки — обычно не дублируйте с бизнес-стороны.
 
-Классы уже в `combineServices` продолжают `onInit` / `onDestroy` — второй раз `registerLifecycle` не нужен.
+Классы уже в `combineServices` живут на `onInit` / `onDestroy` без лишнего `registerLifecycle`.
 
-## Объединение нескольких мешков
+## Слияние нескольких мешков
 
-В больших репозиториях по доменам несколько `combineServices`, потом массив в App:
+В крупном репо — несколько combineServices по доменам, затем массив в App:
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 const app = new WebApp({
   services: [domainA, domainB], // [!code highlight]
-  logger: domainA.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
 });
 ```
 
-Если имя класса оканчивается на `Service`, [`createRemember`](/ru/core/cache#декоратор-кэша) и похожие берут имя без суффикса для ключей кэша (`UserService` → `User`).
+Для имён, оканчивающихся на Service, [`createRemember`](/ru/core/cache#декоратор-кэша) и подобное берут имя без суффикса в ключах кэша (UserService → User).
 
-Межсервисные вызовы: в классе `import { services } from './index.js'`, затем `await services.other.method()`. Внутри класса — `this.foo()`; **между классами** — `await services.other.foo()`.
+Межсервисные вызовы: в классе `import { services } from '@/services'`, `await services.other.method()`. Внутри класса — `this.foo()`; **между классами** — `await services.other.foo()`.
 
 ## Дальше
 
-- Session и `createRemember`: [Кэш](/ru/core/cache)
-- Общий лог: [Логирование](/ru/core/logger)
-- Тонкие маршруты: [Маршрутизация](/ru/web/router)
+- Общий `Caching`, `createRemember`: [кэш](/ru/core/cache)
+- Общий `Logger`: [логирование](/ru/core/logger)
+- Тонкие маршруты: [маршрутизация](/ru/web/router)

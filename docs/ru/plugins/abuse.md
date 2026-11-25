@@ -10,7 +10,7 @@ outline: deep
 
 ```bash
 pnpm add @aomex/abuse
-# нужен уже имеющийся @aomex/cache (и Redis-адаптер в проде)
+# 还需已有的 @aomex/cache（及生产用的 Redis 适配器）
 ```
 
 ## Создать и повесить `.web()`
@@ -21,11 +21,15 @@ pnpm add @aomex/abuse
 
 ```typescript
 import { Abuse } from '@aomex/abuse';
+import { Caching } from '@aomex/cache';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
+
+const cache = new Caching(new CacheMemoryAdapter());
 
 const abuse = new Abuse({ // [!code focus:18]
-  store: new CacheMemoryAdapter(),
+  store: cache,
   strategies: [
     {
       strategy: 'honeypot',
@@ -46,8 +50,8 @@ const abuse = new Abuse({ // [!code focus:18]
 
 const app = new WebApp({
   services,
-  logger: services.logger,
-  language: { mode: 'fixed', language: 'ru-RU' },
+  logger,
+  language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [abuse.web(), routers('./src/routers')], // [!code highlight]
 });
@@ -123,7 +127,7 @@ const abuse = new Abuse({
 
 router.post('/logout', {
   action: async (ctx) => {
-    const hit = await services.cache.deleteLoginToken(token);
+    const hit = await services.user.deleteLoginToken(token);
     if (!hit) {
       await abuse.ipAbuse(ctx.request.ip, 'logout-miss'); // [!code highlight]
     }
@@ -140,7 +144,7 @@ enum IpAbuseReason {
   TokenProbe = 'token-probe',
 }
 
-// в strategies: reason: IpAbuseReason.LogoutMiss
+// strategies 里：reason: IpAbuseReason.LogoutMiss
 await abuse.ipAbuse(ctx.request.ip, IpAbuseReason.LogoutMiss);
 ```
 
@@ -157,7 +161,7 @@ const abuse = new Abuse({
       reason: 'order-probe',
       limit: 10,
       window: '1 day',
-      banFor: '7 days', // рекомендуемая длительность бана, уходит через колбэк
+      banFor: '7 days', // 建议封禁时长，经回调传出
     },
   ],
   onBanUser: async (id, reason, detail) => { // [!code focus:6]
@@ -182,11 +186,15 @@ await abuse.userAbuse(userId, 'order-probe');
 При блоке по умолчанию **403**; чтобы выровнять семантику с rate-limit (например 429), передайте `blockedError`.
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 const abuse = new Abuse({
   store,
   strategies: [/* ... */],
   onBlockIP: async (ip, reason, detail) => {
-    services.logger.warn('abuse.block', { ip, reason, ...detail });
+    await logger.withBindings({ ip, reason, ...detail }, async () => {
+      logger.warn('abuse.block');
+    });
   },
 });
 

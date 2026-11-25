@@ -2,45 +2,45 @@
 outline: deep
 ---
 
-# Собственная стратегия аутентификации
+# Кастомные стратегии аутентификации
 
-[Bearer](/ru/plugins/auth-bearer-strategy), [API Key](/ru/plugins/auth-api-key-strategy) и [JWT](/ru/plugins/auth-jwt-strategy) уже охватывают большинство API «токен/ключ в заголовке». Вы настраиваете, когда форма учетных данных не соответствует этим плагинам, но вы все равно хотите:
+[Bearer](/ru/plugins/auth-bearer-strategy), [API Key](/ru/plugins/auth-api-key-strategy), [JWT](/ru/plugins/auth-jwt-strategy) и [Session](/ru/plugins/auth-session-strategy) уже закрывают обычные способы взять credentials. Эта страница — когда готовые стратегии не подходят, но нужно:
 
-- Один путь через `auth.authenticate ` / ` authorize `  
-- **401**, если вы не вошли в систему, **403**, если это запрещено.  
-- ` ctx.auth.<strategyName>.data ` в обработчиках  
-- Соответствие безопасности в OpenAPI.  
+- один путь через `auth.authenticate` / `authorize`  
+- **401** без входа, **403** без прав  
+- `ctx.auth.<имяСтратегии>.data` в хендлерах  
+- соответствующий security в OpenAPI  
 
-Типичные случаи: сеансы cookie, заголовки, внедренные шлюзом, удостоверения из mTLS. Если вам нужно только ` user ` on ` ctx ` и не обращайте внимания на соглашения об аутентификации, простое middleware работает, но у вас есть безопасность и неаутентифицированные ветки.
+Типичные случаи: заголовки от шлюза, личность из mTLS, своя подпись. Cookie Session — через [Session-стратегию](/ru/plugins/auth-session-strategy), здесь её не переписывайте. Если нужен только `user` на `ctx` без соглашений Auth — обычный middleware; security и ветку «не вошёл» закрываете сами.
 
-Ниже приведен **сеанс cookie** с нуля путем монтажа на маршрутах.
+Ниже — **заголовок шлюза** (например `x-user-id`) от нуля до монтирования на маршруты.
 
-## Шаг 1: Решите, как будет выглядеть личность
+## Шаг 1: Какой вид у личности
 
-Исправьте полезную нагрузку после входа в систему, например. `{ userId: number }`. Это становится первым обобщением стратегии и типом ` ctx.auth.session.data `.
+Зафиксируйте данные после успешной проверки, например `{ userId: number }`. Это первый дженерик класса стратегии и тип `ctx.auth.gateway.data`.
 
-Второй универсальный вариант ` authorize ` аргументы, например названия ролей: `[string]` → позже `.authorize('admin')`.
+Второй дженерик — аргументы `authorize`, например роли: `[string]` → потом `.authorize('admin')`.
 
-## Шаг 2: Реализация ` authenticate ` (собрать учетные данные)
+## Шаг 2: Реализуйте `authenticate` (сбор credentials)
 
-Прочитайте учетные данные из запроса; Отсутствующие или недействительные должны соответствовать приведенному ниже контракту — **не выдавать необнаруженные ошибки** (клиенты часто видят 500 и предполагают, что служба не работает).
+Читайте credentials из запроса; нет / неверно — по контракту ниже. **Не бросайте непойманные исключения** (часто будет 500, клиент решит, что сервис упал).
 
 ```typescript
-// src/auth/session.strategy.ts
+// src/auth/gateway.strategy.ts
 import { Strategy, AuthError } from '@aomex/auth';
 import type { WebContext } from '@aomex/web';
 
-export class SessionStrategy extends Strategy<{ userId: number }, [string]> {
+export class GatewayStrategy extends Strategy<{ userId: number }, [string]> {
   protected async authenticate(ctx: WebContext) {
-    const sid = ctx.request.cookies?.['sid']; // [!code highlight]
-    if (!sid) {
-      return false; // → 401 未登录
+    const raw = ctx.request.get('x-user-id'); // [!code highlight]
+    if (!raw) {
+      return false; // → 401 не вошёл
     }
-    const user = await findBySession(sid);
-    if (!user) {
-      return new AuthError('session expired'); // → 401，带消息
+    const userId = Number(raw);
+    if (!Number.isFinite(userId) || userId <= 0) {
+      return new AuthError('invalid gateway user'); // → 401 с сообщением
     }
-    return { userId: user.id }; // → 写入 ctx.auth
+    return { userId }; // → в ctx.auth
   }
 
   protected async authorize(role: string) {
@@ -50,71 +50,71 @@ export class SessionStrategy extends Strategy<{ userId: number }, [string]> {
 }
 ```
 
-` authenticate `Соглашение о возвращаемом значении:
+Возврат `authenticate`:
 
-| возвращаемое значение | Поведение |
+| Возврат | Поведение |
 | --- | --- |
-| идентификационный объект | писать` ctx.auth `, продолжайте движение вниз по течению |
-| ` false ` | Не авторизован → **401** |
-| ` AuthError ` | Ошибка аутентификации с сообщением → **401** |
+| Объект личности | Пишется в `ctx.auth`, пайплайн дальше |
+| `false` | Не вошёл → **401** |
+| `AuthError` | Сбой аутентификации с сообщением → **401** |
 
-` authorize `Вернуть ложь или` AuthError `→ **403**.` authorize `проходить` this.getIdentity()`Получите текущий идентификатор (то есть объект при успешной аутентификации).
+Ложь или `AuthError` из `authorize` → **403**. В `authorize` личность — `this.getIdentity()` (объект успешного `authenticate`).
 
-## Шаг 3. Передайте его авторизации, имя ключа — это имя политики.
+## Шаг 3: Передайте в Auth — ключ и есть имя стратегии
 
 ```typescript
 // src/auth/index.ts
 import { Auth } from '@aomex/auth';
-import { SessionStrategy } from './session.strategy.js';
+import { GatewayStrategy } from './gateway.strategy';
 
 export const auth = new Auth({
   strategies: {
-    session: new SessionStrategy(), // [!code highlight]
+    gateway: new GatewayStrategy(), // [!code highlight]
   },
 });
 ```
 
-Ключевое имя здесь ` session ` Определитесь с тремя вещами:
+Ключ `gateway` задаёт три вещи:
 
-1.` auth.authenticate('session')`  
-2. ` ctx.auth.session `  
-3. ` ctx.auth.session.data ` Форма (из общей стратегии)
+1. `auth.authenticate('gateway')`  
+2. `ctx.auth.gateway`  
+3. форму `ctx.auth.gateway.data` (из дженериков стратегии)
 
-## Шаг 4. Подключитесь к маршрутизатору и попробуйте
+## Шаг 4: Повесьте на маршруты и проверьте
 
-Откройте интерфейс входа и интерфейс для аутентификации. **Разберите маршрутизатор** (или укажите цепочку аутентификации). `.skip`, см. [Промежуточное ПО](/ru/core/middleware)), не сбивайтесь в одну группу и не полагайтесь на чувства, чтобы передвигаться.
+**Публичные** и **защищённые** маршруты — в разные `Router` (или `.skip` на цепочке auth — см. [Middleware](/ru/core/middleware)). Не сваливайте всё в одну группу «на глаз».
 
 ```typescript
 import { Router } from '@aomex/web';
-import { auth } from '../auth/index.js';
+import { auth } from '@/auth';
 
 export const router = new Router({
   prefix: '/admin',
-  mount: [auth.authenticate('session')], // 本组都要登录
+  mount: [auth.authenticate('gateway')], // вся группа требует вход
 });
 
 router.get('/dashboard', {
-  mount: [auth.authenticate('session').authorize('admin')], // [!code highlight]
+  mount: [auth.authenticate('gateway').authorize('admin')], // [!code highlight]
   action: async (ctx) => {
-    const userId = ctx.auth.session.data.userId;
+    const userId = ctx.auth.gateway.data.userId;
     ctx.send({ userId });
   },
 });
 ```
 
-Его также можно использовать только на одном маршруте. ` mount`Вешать трубку ` authenticate`, не обязательно на уровне маршрутизатора. цепь `.authorize('admin')` Не менять `data` Тип; сбой будет возвращен платформой как 403. Как правило, нет необходимости повторно оценивать роль в действии (более подробные бизнес-разрешения будут обсуждаться отдельно).
+Можно вешать `authenticate` только на `mount` одного маршрута, без уровня Router. Цепочка `.authorize('admin')` не меняет тип `data`; при провале фреймворк отдаёт 403 — в action роль обычно не проверяют снова (тонкие бизнес-права отдельно).
 
-Проверьте вручную:
+Проверки вручную:
 
-1. Без файлов cookie → **401**
-2. Есть куки и недостаточно ролей → **403**
-3. Через → действие `userId` Есть завершение
+1. Нет `x-user-id` → **401**  
+2. Заголовок есть, роли не хватает → **403**  
+3. Успех → в action есть `userId`  
 
-## Шаг 5. Дополните безопасность OpenAPI
+## Шаг 5: Допишите OpenAPI security
 
-Самописная стратегия по умолчанию приведет только к ответу 401 (базовый класс `openapi()`). Если вы не объявите схему безопасности, Swagger «Authorize» не будет соответствовать вашему заголовку Cookie/custom, а внешний интерфейс всегда будет генерировать 401, используя Bearer для создания клиента.
+У кастомной стратегии по умолчанию только 401 из базового `openapi()`. Без security scheme «Authorize» в Swagger не совпадёт с вашим заголовком, а клиенты под Bearer будут ловить **401**.
 
-Переопределить в политике ` openapi()`(Поля подлежат вводу подсказок, просто обратитесь к подключаемому модулю Bearer):
+Переопределите `openapi()` в стратегии (поля по подсказкам типов; сверяйтесь с плагином Bearer):
 
 ```typescript
 import type { OpenApiInjector } from '@aomex/web';
@@ -125,37 +125,37 @@ protected override openapi(): OpenApiInjector {
     onDocument(document) {
       document.components ||= {};
       document.components.securitySchemes ||= {};
-      document.components.securitySchemes['sessionCookie'] ||= {
+      document.components.securitySchemes['gatewayUser'] ||= {
         type: 'apiKey',
-        in: 'cookie',
-        name: 'sid',
+        in: 'header',
+        name: 'x-user-id',
       };
     },
     onMethod(methodItem) {
       methodItem.security ||= [];
-      methodItem.security.push({ sessionCookie: [] });
+      methodItem.security.push({ gatewayUser: [] });
     },
   };
 }
 ```
 
-Восстановите OpenAPI и проверьте безопасность и описания ошибок 401 для затронутых операций.
+Перегенерируйте OpenAPI и проверьте security и описание 401 у операций.
 
-::: предупреждение
-Имена файлов cookie, имена заголовков и метаданные безопасности должны соответствовать тому, как вы читаете учетные данные, иначе интеграция зациклится на **401**.
+::: warning
+Имена заголовков / cookie и security-метаданные должны совпадать с тем, как вы читаете credentials, иначе интеграция будет крутиться на **401**.
 :::
 
-## Когда не следует настраивать
+## Когда не писать своё
 
 | Ситуация | Подход |
 | --- | --- |
-| Стандартный носитель/ключ JWT/API | Стратегии плагинов |
-| Файлы cookie, заголовки шлюза, пользовательская подпись | Обычай ` Strategy ` (эта страница) |
-| Проверка работоспособности, статические страницы | Отдельный маршрутизатор или `.skip `; см. [Промежуточное ПО](/ru/core/middleware) |
+| Обычный Bearer / JWT / API Key / Session | Плагинные стратегии |
+| Заголовки шлюза, mTLS, своя подпись | Кастомный `Strategy` (эта страница) |
+| Health, статика | Отдельный router или `.skip`; см. [Middleware](/ru/core/middleware) |
 
-## Асимметричные клавиши и вращение JWT (все еще используйте плагин)
+## JWT: асимметрия и ротация ключей (всё ещё плагин)
 
-Пользовательские стратегии решают **как вы собираете учетные данные**; Алгоритмы и ротация JWT остаются в [стратегии JWT](/ru/plugins/auth-jwt-strategy) — переписывать не нужно:
+Кастом решает **как собрать credentials**; алгоритмы JWT и ротация — в [JWT-стратегии](/ru/plugins/auth-jwt-strategy), переписывать не нужно:
 
 ```typescript
 import { AuthJwtStrategy } from '@aomex/auth-jwt-strategy';
@@ -172,7 +172,8 @@ new AuthJwtStrategy({
 });
 ```
 
-## Похожие
+## См. также
 
-- Точка входа и встроенные стратегии: [Auth](/ru/plugins/auth)
-- 401/403 JSON: [Формат ошибки](/ru/web/errors)
+- Точка входа и готовые стратегии: [Auth](/ru/plugins/auth)
+- Cookie session: [Session-стратегия](/ru/plugins/auth-session-strategy)
+- JSON 401 / 403: [Формат ошибок](/ru/web/errors)

@@ -2,28 +2,29 @@
 outline: deep
 ---
 
-# Защита CSRF
+# Защита от CSRF
 
-Браузер сам прикрепляет same-site Cookie. Если страница злоумышленника заставит ваш браузер сделать POST к вашему API, **HttpOnly Cookie входа уедет вместе с запросом** — это межсайтовая подделка запроса. `@aomex/csrf` использует **double-submit Cookie**: сервер выдаёт читаемый Cookie `csrfToken`, фронт кладёт то же значение в заголовок; запись проходит только при совпадении обеих сторон.
+Браузер сам подставляет cookie того же сайта. Если страница атакующего заставляет браузер слать POST на ваш API, **HttpOnly cookie входа тоже уедет** — это подделка межсайтового запроса. `@aomex/csrf` использует **double-submit cookie**: сервер выдаёт читаемую cookie `csrfToken`, фронт кладёт то же значение в заголовок запроса; пропускают только совпадающие пары.
 
-С [Session](/ru/plugins/auth-session-strategy) почти всегда идёт в паре; если вход только через заголовок Bearer и без Cookie-сессии, CSRF обычно не нужен.
+Почти всегда в паре с [Session](/ru/plugins/auth-session-strategy). Если вход только по Bearer без cookie — CSRF обычно не нужен.
 
 ```bash
 pnpm add @aomex/csrf
 ```
 
-## До routers
+## Перед routers
 
-Достаточно безаргументного `csrf()`: GET/HEAD/OPTIONS только выдают или переиспользуют Cookie, заголовок не проверяют; POST и другие методы записи требуют совпадения Cookie и `x-csrf-token`, иначе **403**.
+Достаточно `csrf()` без аргументов: GET/HEAD/OPTIONS лишь выдают или продлевают cookie, заголовок не проверяют; для POST и других «пишущих» методов cookie и `x-csrf-token` должны совпасть, иначе **403**.
 
 ```typescript
 import { cors } from '@aomex/cors';
 import { csrf } from '@aomex/csrf';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:5]
@@ -35,18 +36,18 @@ const app = new WebApp({
 ```
 
 ::: warning
-Ставьте **перед** routers. Если при ошибке сработает error-middleware, а csrf висит после него, свежий `Set-Cookie` может не дойти до браузера — фронт навсегда останется без token.
+Ставьте **перед** routers. При провале проверки ошибка идёт через error middleware; если csrf позади, свежий `Set-Cookie` может не дойти до браузера, и фронт так и останется без token.
 :::
 
-Промежуточный слой вешает на ctx `csrfToken` (текущая строка token). Cookie **принудительно** `httpOnly: false` (double-submit требует читаемости из JS); остальные атрибуты (`sameSite` / `path` / `maxAge`) настраиваются, по умолчанию как у `setCookie` (включая `SameSite=Strict`).
+Middleware вешает на ctx `csrfToken` (текущая строка token). Для cookie **принудительно** `httpOnly: false` (double-submit требует чтения из JS); остальное (`sameSite` / `path` / `maxAge`) настраивается, по умолчанию как у `setCookie` (в т.ч. `SameSite=Strict`).
 
-Если нужен кросс-доменный запрос ещё и с Cookie входа, CORS должен иметь `credentials: true` и **явный** `origin`, а в `allowHeaders` — пропуск `x-csrf-token`. См. [CORS](/ru/plugins/cors) и [Session](/ru/plugins/auth-session-strategy).
+При кросс-домене с cookie входа нужны CORS `credentials: true`, **явный** `origin` и `allowHeaders` с `x-csrf-token`. См. [CORS](/ru/plugins/cors) и [Session](/ru/plugins/auth-session-strategy).
 
-## Как передаёт фронт
+## Как передать с фронта
 
-1. Сначала любой GET (или открытие страницы) — в ответе будет `Set-Cookie: csrfToken=...`
-2. Прочитайте значение через `document.cookie` (или ваш cookie-утилитарный код)
-3. К запросу записи добавьте заголовок `x-csrf-token: <то же значение>` и `credentials: 'include'` (если ещё нужна Cookie входа)
+1. Сначала любой GET (или открыть страницу) — в ответе будет `Set-Cookie: csrfToken=...`
+2. Прочитать значение через `document.cookie` (или свою утилиту)
+3. В «пишущие» запросы добавить заголовок `x-csrf-token: <то же значение>` и `credentials: 'include'` (если ещё нужна cookie входа)
 
 ```typescript
 function readCsrfToken() {
@@ -69,11 +70,11 @@ await fetch('/api/orders', {
 });
 ```
 
-Если сразу POST на интерфейс без Cookie: будет **403**, но в ответе всё равно может прийти свежий `Set-Cookie` — фронт читает и повторяет запрос.
+Первый POST без cookie — **403**, но ответ может всё равно принести новый `Set-Cookie`; прочитайте и повторите.
 
-## Согласование с фронтом
+## Под договорённости фронта
 
-Если фронт уже шлёт `x-xsrf-token` или имя Cookie не `csrfToken`, выровняйте это в конструкторе; `httpOnly` по-прежнему принудительно выключится.
+Если фронт шлёт `x-xsrf-token` или cookie называется иначе `csrfToken` — задайте в опциях конструктора; `httpOnly` по-прежнему принудительно выключен.
 
 ```typescript
 csrf({
@@ -82,11 +83,11 @@ csrf({
 });
 ```
 
-`sameSite` / `path` / `secure` / `maxAge` следуют политике бизнес-Cookie; для кросс-сайтового фронта часто ставят `sameSite: 'lax'`.
+`sameSite` / `path` / `secure` / `maxAge` — по политике cookie продукта; для кросс-сайтового фронта часто ставят `lax`.
 
-## Пропуск webhook и health-check
+## Пропуск webhook и health
 
-Колбэки третьих сторон и пробы балансировщика не имеют браузерных Cookie и не должны идти через double-submit. Пропускайте пути через `ignore`; не отключайте CSRF глобально.
+У колбэков и probe балансировщика нет браузерных cookie, double-submit не нужен. `ignore` по пути; CSRF глобально не выключайте.
 
 ```typescript
 csrf({
@@ -96,10 +97,10 @@ csrf({
 });
 ```
 
-Читаются только Header + Cookie, **body не трогается**, с разбором `body()` не конфликтует. По умолчанию не проверяются GET / HEAD / OPTIONS; менять `ignoreMethods` почти никогда не нужно.
+Смотрит только заголовки и cookie, **body не читает** — не мешает `body()`. По умолчанию без проверки: GET / HEAD / OPTIONS; менять `ignoreMethods` редко нужно.
 
-## Связанное
+## См. также
 
-- [Стратегия Session](/ru/plugins/auth-session-strategy)
-- [Кросс-домен CORS](/ru/plugins/cors)
-- [Заголовки безопасности Helmet](/ru/plugins/helmet)
+- [Session](/ru/plugins/auth-session-strategy)
+- [CORS](/ru/plugins/cors)
+- [Helmet](/ru/plugins/helmet)

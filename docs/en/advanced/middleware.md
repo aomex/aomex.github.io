@@ -42,11 +42,12 @@ Mount on the app or a route and try it:
 
 ```typescript
 import { routers, WebApp } from '@aomex/web';
-import { traceId } from './middlewares/trace-id.js';
+import { traceId } from '@/middlewares/trace-id';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [
@@ -58,7 +59,7 @@ const app = new WebApp({
 
 ```typescript
 action: async (ctx) => {
-  await services.logger.info('ok', { traceId: ctx.traceId });
+  logger.info(`ok ${ctx.traceId}`);
   ctx.send({ ok: true });
 };
 ```

@@ -2,9 +2,9 @@
 outline: deep
 ---
 
-# Точка входа Web-приложения
+# Вход Web-приложения
 
-Поднимите HTTP-сервис: заполните обязательные опции `WebApp` и подключите маршруты через `routers('./src/routers')`. Ниже — язык сайта, IP клиента, лимиты тела запроса и использование `ctx.send` / `ctx.throw` / `ctx.redirect`.
+Подними HTTP-сервис: заполни обязательные поля в `new WebApp`, подключи маршруты через `routers('./src/routers')`. Ниже — язык всего сайта, IP клиента, лимиты тела запроса и `ctx.send` / `ctx.throw` / `ctx.redirect` в маршрутах.
 
 ```bash
 pnpm add @aomex/web @aomex/common @aomex/logger
@@ -14,11 +14,12 @@ pnpm add tsx -D
 ```typescript
 // src/web.ts
 import { routers, WebApp } from '@aomex/web';
-import { services } from './services/index.js';
+import { logger } from '@/services/logger.service';
+import { services } from '@/services';
 
 const app = new WebApp({ // [!code focus:7]
   services,
-  logger: services.logger,
+  logger, // [!code highlight]
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [routers('./src/routers')], // [!code highlight]
@@ -36,30 +37,32 @@ declare module '@aomex/web' {
 }
 ```
 
-Если в `new WebApp({ ... })` не указать `services`, `logger`, `language` или `proxyIP`, TypeScript выдаст ошибку. Поля на `ctx` из глобального `mount` через `middleware.web` требуют `declare module` выше — иначе в рантайме значения есть, а в типах нет, и придётся везде писать `as`. При [response()](/ru/web/response) на маршрутах типы тела для `ctx.send` / `ctx.throw` сужаются по объявлению.
+Пропуск `services`, `logger`, `language` или `proxyIP` в `new WebApp({ ... })` — ошибка компиляции. Если глобальный `mount` через `middleware.web` вешает поля на `ctx`, а `declare module` выше нет — в рантайме значения есть, в типах нет, в коде появятся `as`. С [response()](/ru/web/response) на маршруте форма body в `ctx.send` / `ctx.throw` сужается по объявлению.
 
 ::: warning
-Глобальный `mount` добавляет поля на `ctx` без `declare module` → значения в рантайме есть, типов нет, повсюду приведения типов.
+Глобальный `mount` добавил поля на `ctx`, но без `declare module` — в рантайме есть, в типах нет, в бизнес-коде лезут `as`.
 :::
 
 ```bash
 node --import tsx/esm --watch src/web.ts
 ```
 
-Откройте [http://localhost:3000](http://localhost:3000). Добавьте команду запуска в `scripts` в `package.json`, чтобы команда пользовалась `pnpm start`.
+Открой [http://localhost:3000](http://localhost:3000). Команду запуска лучше положить в `package.json` scripts и договориться о `pnpm start`.
 
-Эти поля задаются в `new WebApp({ ... })`. Маршруты отвечают на вопрос «что делает этот путь»; здесь — «как работает весь сайт».
+Все поля ниже настраиваются в `new WebApp({ ... })`. Маршруты — «что делать на пути»; здесь — «как крутится весь сайт».
 
 ## services и logger
 
-`services` — контейнер бизнес-логики (БД, кэш, почта и т.д.) из [combineServices](/ru/core/service). При остановке фреймворк вызывает `destroy` у загруженных сервисов, чтобы закрыть соединения и сбросить логи.
+`services` — контейнер бизнес-сервисов (БД, почта и т.д.), собирается через [combineServices](/ru/core/service) и передаётся в WebApp. При остановке процесса фреймворк на этапе destroy вызывает `destroy` у загруженных сервисов, чтобы закрыть соединения.
 
-`logger` передаётся отдельно (обычно `services.logger`): `ctx.logger` в маршрутах и middleware — тот же экземпляр, что и в конструкторе.
+`logger` — экземпляр [`Logger`](/ru/core/logger) (`new Logger({ transports })`). В коде — `import { logger } from '@/services/logger.service'`; `ctx.logger` — та же ссылка для сторонних и внутренних middleware. Кэш — [`Caching`](/ru/core/cache).
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 const app = new WebApp({
   services, // [!code highlight]
-  logger: services.logger, // [!code highlight]
+  logger, // [!code highlight]
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
 });
@@ -67,14 +70,14 @@ const app = new WebApp({
 
 ## language
 
-Задаёт язык **ошибок body() / query() и встроенных сообщений фреймворка**. Коды: `zh-CN`, `en-US` (с дефисом, не `zh_CN`). Только тексты фреймворка — не locale Ant Design / Day.js и не ваши строки продукта ([Расширенное: i18n приложения](/ru/advanced/i18n)).
+Язык **ошибок `body()` / `query()` и встроенных сообщений фреймворка**. Коды — `zh-CN`, `en-US` (через дефис, не `zh_CN`). Это не locale Ant Design / Day.js и не бизнес-i18n — см. [продвинутую i18n](/ru/advanced/i18n).
 
-| Режим | Когда использовать |
+| Режим | Когда |
 | --- | --- |
-| `fixed` + `language` | Внутренняя админка, один язык SaaS |
-| `dynamic` | Публичный API, согласование по запросу |
-| `header: 'accept-language'` | Браузеры, стандартные клиенты (порядок `q` по RFC) |
-| `header: 'x-language'` | Свой заголовок приложения (через запятую, обычно без `q`) |
+| `fixed` + `language` | Внутренняя админка, один язык SaaS, без чтения заголовков |
+| `dynamic` | Публичный API для разных клиентов, по запросу |
+| `header: 'accept-language'` | Браузеры, стандартные клиенты (сортировка `q` по RFC) |
+| `header: 'x-language'` | Свой заголовок приложения (через запятую, `q` обычно игнорируется) |
 | `fallback` | Если заголовка нет или язык неизвестен |
 
 Фиксированный язык:
@@ -83,7 +86,7 @@ const app = new WebApp({
 language: { mode: 'fixed', language: 'zh-CN' },
 ```
 
-Согласование по `Accept-Language`:
+По Accept-Language:
 
 ```typescript
 language: {
@@ -110,24 +113,24 @@ curl -H 'Accept-Language: en-US' http://localhost:3000/users
 ```
 
 ::: warning
-Не задавайте язык слишком поздно в middleware — ранние `body()` / `query()` уже могли ответить с дефолтом; для сообщений фреймворка используйте `WebApp.language`. В Console — только строка; см. [Точка входа Console](/ru/console/#language).
+Не меняй язык в позднем middleware — к тому моменту `body()` / `query()` могли уже отдать ошибку на языке по умолчанию; для текстов фреймворка положись на `WebApp.language`. В Console только фиксированные строки — [вход Console](/ru/console/#language).
 :::
 
 ## proxyIP
 
-Заполняет `ctx.request.ip`. Ошибка в настройке ломает rate limit и контроль рисков.
+Заполняет `ctx.request.ip`. Ошибка конфигурации — неверный человек в rate limit и риск-контроле.
 
-| Режим | Когда использовать |
+| Режим | Когда |
 | --- | --- |
-| `detect` | Локальный `tsx`, тесты; топология прокси неясна |
-| `specify` | Публичный прод — доверять только своим заголовкам прокси |
+| `detect` | Локально `tsx`, тесты; неясно, есть ли reverse proxy — сначала завести |
+| `specify` | Прод в интернет: доверять только заголовкам своего прокси, не подделке `X-Forwarded-For` |
 
 ```typescript
 proxyIP: { mode: 'detect' },
 ```
 
 ::: warning
-Не держите `detect` в открытом интернете долго — клиент может подделать заголовки прокси. В проде используйте `specify` и доверяйте только своему reverse proxy.
+Не оставляй `detect` надолго в публичном проде: клиент может подделать типичные proxy-заголовки, лимиты и аудит ошибутся. На проде — `specify` и только свои заголовки.
 :::
 
 ```typescript
@@ -138,13 +141,13 @@ proxyIP: {
 },
 ```
 
-`hops` должен совпадать с реальной глубиной прокси — иначе читается не тот hop, узел CDN или внутренний IP.
+`hops` должен совпадать с реальным числом прокси, иначе получишь внутренний адрес или CDN — поедут алерты «логин из другого места».
 
-| Топология | Типичная настройка |
+| Топология | Обычная настройка |
 | --- | --- |
-| Node напрямую в интернет / dev | `detect` или `specify` без заголовка прокси |
+| Node напрямую в сеть / dev-машина | `detect` или `specify` без proxy-заголовков |
 | Один Nginx → Node | `specify` + `x-forwarded-for`, `hops: 1` |
-| CDN + ваш Nginx | `x-forwarded-for`, `hops: 2` (подстроить под факт) |
+| CDN + свой Nginx | `x-forwarded-for`, `hops: 2` (по факту) |
 | Только Cloudflare | `specify` + `cf-connecting-ip`, `hops: 1` |
 
 ```typescript
@@ -157,17 +160,18 @@ proxyIP: {
 
 ## mount
 
-`mount` — очередь middleware сайта: порядок массива, луковая модель, код до/после `await next()`. CORS, общая аутентификация, access log и `routers('./src/routers')` вешаются сюда.
+`mount` — глобальная очередь middleware: каждый запрос идёт по массиву (луковица, до и после `await next()`). CORS, auth на весь сайт, access log и `routers('./src/routers')` — сюда.
 
-Логику для одной группы URL лучше на [Router](/ru/web/router) или `mount` конкретного маршрута, а не всё в `WebApp`.
+Логику для группы URL — в [Router](/ru/web/router) или mount одного маршрута, не всё в WebApp.
 
 ```typescript
 import { middleware } from '@aomex/common';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:9]
@@ -176,7 +180,7 @@ const app = new WebApp({
       await next();
       const cost = Date.now() - start;
       const { method, url } = ctx.request;
-      await ctx.logger.info(`${method} ${url} ${cost}ms`);
+      logger.info(`${method} ${url} ${cost}ms`);
     }),
     routers('./src/routers'),
   ],
@@ -185,29 +189,31 @@ const app = new WebApp({
 
 ## shutdown
 
-При `SIGTERM` / `SIGINT` (`docker stop`, Ctrl+C, rolling в K8s) `WebApp` **корректно завершается**: перестаёт принимать соединения, дожидается запросов в работе, уничтожает services, выходит с кодом 0.
+На `SIGTERM` / `SIGINT` (`docker stop`, Ctrl+C, rolling в K8s) WebApp делает **graceful shutdown**: не принимает новые соединения, дожидается текущих запросов, уничтожает services, выходит с кодом 0.
 
-`timeout` — максимальное ожидание (по умолчанию ~**5 с**; миллисекунды или строки вроде `'10s'`). По истечении соединения принудительно закрываются, чтобы процесс не зависал при деплое.
+`timeout` — максимум ожидания (по умолчанию ~**5 с**, можно миллисекунды или `'10s'`). По истечении соединения рвутся принудительно, чтобы деплой не завис.
 
 ```typescript
 shutdown: { timeout: 10_000 },
 ```
 
-Локально редко меняют; в проде с загрузками, long poll и медленными запросами увеличьте под худший сценарий. Во время shutdown новых запросов нет — балансировщик должен сначала снять инстанс с балансировки. С [clusterListen](/ru/advanced/cluster#clusterlisten) сигналы получает и primary: он координирует выход worker’ов.
+Локально редко трогают. На проде с загрузками, long poll и медленными запросами — увеличь под худший кейс. Во время shutdown новые запросы не принимаются — LB сначала снимает инстанс. С [clusterListen](/ru/advanced/cluster#clusterlisten) primary тоже ловит сигнал и координирует workers.
 
 ## Квоты body на уровне приложения
 
-Перед большими upload или webhook JSON проверьте дефолты; ужесточите или ослабьте на уровне приложения.
+Перед upload или большими JSON webhook проверь, хватает ли дефолта; иначе ужесточи или ослабь на уровне app.
 
 | Тип | Типичный Content-Type | Дефолт (ориентир) |
 | --- | --- | --- |
-| `payload` | JSON, urlencoded, text в памяти | ~`2mb`, превышение → **413** |
+| `payload` | JSON, urlencoded, text — всё в память | ~`2mb`, сверх — **413** |
 | `formData` | `multipart/form-data` | ~`50mb` на файл, лимиты числа файлов/полей |
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   body: { // [!code focus:8]
@@ -222,19 +228,19 @@ const app = new WebApp({
 });
 ```
 
-Поля файлов в [body()](/ru/web/body) на маршруте и `formData` приложения берут **более строгий** лимит. Детали загрузки: [Загрузка файлов](/ru/web/attach).
+[body()](/ru/web/body) с файлами на маршруте и лимиты `formData` на app — **строже из двух**. Загрузки — [файлы](/ru/web/attach).
 
-Публичные webhook или крупный JSON: тело целиком в памяти; переполнение — **413**, не **400** валидации — одних правок маршрута без `body.payload` на приложении часто мало.
+Перед webhook или большим JSON смотри дефолт: тело целиком в память, сверх — **413**, не путать с **400** валидации. Часто мало менять только маршрут без `body.payload`.
 
 ## envelope
 
-Когда успех и ошибка делят одну JSON-обёртку с внешним HTTP **200** (реальный статус в body), задайте `envelope` на `new WebApp`. В маршрутах по-прежнему `send` / `throw`; обёртка на этапе flush.
+Когда нужна **одна JSON-оболочка** для успеха и ошибки, внешний HTTP **200**, реальный код в body — `envelope` в `new WebApp`. В маршрутах как раньше `send` / `throw`, обёртка перед записью.
 
-Дерево из `envelope.success` / `envelope.payload` / `envelope.statusCode` и опционального `envelope.slot`; часто вместе с [formatError](/ru/web/errors). Для «голого» ответа по коду — `response({ skipEnvelope: true })`. Детали и автоматические исключения (редирект, 204, SSE и т.д.): [Обёртка ответа](/ru/web/envelope).
+Дерево из `envelope.success` / `envelope.payload` / `envelope.statusCode` и опционально `envelope.slot`; часто с [formatError](/ru/web/errors). Голый ответ — `response({ skipEnvelope: true })`. Правила пропуска (редирект, 204, SSE) — [обёртка ответа](/ru/web/envelope).
 
 ## listen, http, https
 
-`listen` привязывает сервер; без него есть только объект `App` в памяти. `app.listen(port)` эквивалентен `app.http({}).listen(port)` для обычного HTTP.
+`listen` биндит HTTP к порту. Без вызова снаружи App недоступен. `app.listen(port)` = `app.http({}).listen(port)`, plain HTTP.
 
 ```typescript
 app.http({ keepAliveTimeout: 65_000 }).listen(3000);
@@ -252,13 +258,13 @@ app
   .listen(443);
 ```
 
-В проде TLS чаще завершают Nginx / Caddy с проксированием на Node HTTP — настройте `proxyIP` согласованно.
+На проде TLS чаще на Nginx / Caddy с прокси на Node HTTP — настрой `proxyIP`.
 
-Многопроцессность, Docker scale, реплики K8s, PM2 и `clusterListen` — в [Многопроцессность и масштабирование](/ru/advanced/cluster).
+Docker scale, K8s, PM2, `clusterListen` — [кластер и масштаб](/ru/advanced/cluster).
 
 ## ctx.send
 
-В action или глобальном middleware без кода статуса по умолчанию **200**; 201, 204 и т.д. — явный первый аргумент.
+В action или глобальном middleware без кода статуса — **200**; 201, 204 — явно первым аргументом.
 
 ```typescript
 router.get('/ping', {
@@ -288,7 +294,7 @@ router.delete('/sessions/current', {
 
 ## ctx.throw
 
-Только **4xx / 5xx**. Бизнес-отказ — `ctx.throw`, а не `throw new Error` — явные 4xx не засоряют логи как 5xx.
+Только **4xx / 5xx**. Бизнес-отказ — `ctx.throw`, не `throw new Error` — публичные 4xx не засоряют лог как 5xx.
 
 ```typescript
 router.get('/users/:id', { // [!code focus:12]
@@ -310,11 +316,11 @@ router.get('/users/:id', { // [!code focus:12]
 ctx.throw(500, 'payment gateway timeout', { expose: true });
 ```
 
-При `expose: true` в ответе может быть `message` — не вставляйте SQL или внутренние пути.
+При `expose: true` message уходит клиенту — не клади SQL и внутренние пути.
 
 ## ctx.redirect
 
-Постоянный **301**; временный часто **302** (по умолчанию при пропуске кода).
+Постоянно **301**, временно **302** (без кода — 302).
 
 ```typescript
 router.get('/old-profile', {
@@ -334,24 +340,24 @@ router.get('/login-done', {
 
 ## download, sse, logger
 
-Другие способы ответа — на отдельных страницах:
+Кратко об этих выходах в маршрутах:
 
-- `ctx.download`: поток файла клиенту; Promise завершается после конца потока — удобно для временных файлов «скачал и удалил».
-- `ctx.sse()`: server-sent events — [SSE](/ru/web/sse).
-- `ctx.logger`: тот же `logger`, что передан в `WebApp`; поля на запрос — [Логгер · withBindings](/ru/core/logger#request-scoped-context-withbindings).
+- `ctx.download` — поток файла клиенту; Promise завершится после конца потока, удобно для временных файлов «скачал — удали».
+- `ctx.sse()` — Server-Sent Events, [SSE](/ru/web/sse).
+- Логи: `import { logger } from '@/services/logger.service'` (то же, что `ctx.logger`; `ctx.logger` — для middleware). `requestId` и т.п. — [лог · withBindings](/ru/core/logger#контекст-запроса-withbindings).
 
 ### app.on('error')
 
-Не пойманные исключения в action/middleware дают `emit('error')` на приложении. Логирование по умолчанию учитывает `expose`; подпишитесь для Sentry, чат-ботов и т.д.
+Не пойманные в action/middleware исключения — `emit('error', err, ctx)`. По умолчанию `logger.error` зависит от `expose`; подпишись для Sentry, чат-алертов.
 
-**Не меняйте тело ответа здесь** — часто уже поздно. Единый JSON ошибок: [Формат ошибок](/ru/web/errors); обёртка с HTTP 200: [Обёртка ответа](/ru/web/envelope).
+**Не меняй body ответа здесь** — поздно, конфликт с уже отправленным. Единый JSON ошибок — [formatError](/ru/web/errors); оболочка success/data и HTTP 200 — [обёртка](/ru/web/envelope).
 
 ## Дальше
 
-- [HTTP-маршрутизация](/ru/web/router): URL и глаголы по файлам
-- [query](/ru/web/query) / [params](/ru/web/params) / [body](/ru/web/body): триада валидации входа
-- [Ограничение ответа](/ru/web/response): TypeScript и OpenAPI в одном ключе
-- [SSE](/ru/web/sse): `ctx.sse` / поток / возобновление
+- [Маршруты](/ru/web/router): URL и HTTP-глаголы по файлам
+- [query](/ru/web/query) / [params](/ru/web/params) / [body](/ru/web/body): валидация входа
+- [Ограничение ответа](/ru/web/response): TypeScript и OpenAPI в унисон
+- [SSE](/ru/web/sse): `ctx.sse`, stream, reconnect
 - [Формат ошибок](/ru/web/errors): JSON после `ctx.throw`
-- [Обёртка ответа](/ru/web/envelope): единая JSON-оболочка, HTTP 200
-- [Многопроцессность и масштабирование](/ru/advanced/cluster): Docker / K8s / PM2 / `clusterListen`
+- [Обёртка ответа](/ru/web/envelope): единая оболочка, HTTP 200 снаружи
+- [Кластер](/ru/advanced/cluster): Docker / K8s / PM2 / `clusterListen`

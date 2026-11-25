@@ -19,10 +19,11 @@ pnpm add @aomex/access-log
 ```typescript
 import { httpAccessLog } from '@aomex/access-log';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:4]

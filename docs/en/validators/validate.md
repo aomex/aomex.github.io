@@ -8,7 +8,7 @@ Outside Web routes, run arbitrary data through rules: unit tests, scripts, your 
 
 ```typescript
 import { validate } from '@aomex/common';
-import { createUserSchema } from '../schemas/user.schema.js';
+import { createUserSchema } from '@/schemas/user.schema';
 
 const input = { name: 'Ada', email: 'ada@example.com' };
 
@@ -43,7 +43,7 @@ Judging failure with `data === null` mis-fires when a nullable field passes as `
 
 ```typescript
 import { validate } from '@aomex/common';
-import { createUserSchema } from '../schemas/user.schema.js';
+import { createUserSchema } from '@/schemas/user.schema';
 
 const input = { name: '', email: 'not-email' };
 

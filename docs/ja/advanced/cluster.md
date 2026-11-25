@@ -2,45 +2,46 @@
 outline: deep
 ---
 
-# マルチプロセスとスケール
+# マルチプロセスとスケールアウト
 
-1 プロセスではコアを使い切れない、または QPS を上げたいときは、複数の Node プロセスを動かす。代表的なやり方は **どれか 1 つだけ** 選ぶ——重ねるとプロセス数が掛け算になる（例: PM2 `-i 4` に `clusterListen({ workers: 4 })` を重ねる → 業務プロセス 16 個）。
+単一プロセスで多核を使い切れない、あるいは QPS を上げたいときは Node を複数起動します。よくあるやり方は**どれか一つだけ**選びます。重ねるとプロセス数が掛け算になります（例：PM2 `-i 4` のうえに `clusterListen({ workers: 4 })` → 16 本の業務プロセス）。
 
-まず 2 層の役割を押さえる:
+まず二層の役割を押さえます。
 
 | 層 | 役割 |
 | --- | --- |
-| **プロセス / レプリカを誰が管理するか** | Docker / K8s / PM2 / systemd / クラウドマネージド… が起動数・障害再起動・ローリングデプロイを担当 |
-| **アプリ入口に何を書くか** | ほとんどの場合: **1 プロセスで `app.listen` は 1 回だけ**。「単機で Node 標準 cluster を使い、別のプロセス管理を入れない」ときだけ `clusterListen` |
+| **誰がプロセス／レプリカを管理するか** | Docker / K8s / PM2 / systemd / マネージドホスト… が起動数・再起動・ローリングを担当 |
+| **アプリのエントリに何を書くか** | ほとんどの場合：**1 プロセスで `app.listen` は 1 回だけ**。「単機で cluster を内蔵し、別マネージャなし」のときだけ `clusterListen` |
 
-メモリ上のレート制限・memory キャッシュ・プロセス内の Map はプロセス間で **共有されない**——レプリカ複数時はカウントや session を Redis など外部ストアに切り替える。[レート制限](/ja/plugins/rate-limit) · [キャッシュ](/ja/core/cache) を参照。
+メモリ上のレート制限、memory キャッシュ、プロセス内 Map は**プロセス間で共有されません**。複数レプリカではカウントと session は Redis など外部ストアへ。 [レート制限](/ja/plugins/rate-limit) · [キャッシュ](/ja/core/cache) を参照。
 
 ## 選び方
 
-| 方式 | 向いているケース |
+| 方式 | 向いている場面 |
 | --- | --- |
-| **リバースプロキシ + 複数インスタンス** | ベアメタル / 従来 VM: Nginx / Caddy / HAProxy の後ろに複数 Node ポート |
-| **systemd**（複数 unit / テンプレート） | Linux 単機で、システムサービスと同じ起動停止・ログに揃えたい（Node 専用 PM 不要） |
-| **PM2 `-i` / `instances`** | 単一 VM でプロセス管理・ログ集約・無停止 reload |
-| **`clusterListen`** | 単機 / VM で Node 標準 `cluster`、追加のプロセス管理なし |
-| **Docker Compose `scale` / Swarm + Nginx** | コンテナ化済み。同一スタック内リバースプロキシ、DNS がレプリカを自動ラウンドロビン |
-| **K8s `replicas` / HPA** | 本番オーケストレーション: ローリング・プローブ・クォータ・自動スケール |
-| **クラウドマネージドレプリカ**（ECS/Fargate、Cloud Run、Container Apps…） | 管理オーケストレーションで制御面を減らす。意味は依然「イメージ内単一プロセス × レプリカ」 |
-| **PaaS 水平スケール**（Fly.io、Render、Heroku dyno…） | プラットフォームが「インスタンス数」で拡張。入口は単一プロセス listen のまま |
+| **リバースプロキシ + 複数インスタンス** | ベアメタル / 従来 VM：Nginx / Caddy / HAProxy の背後に複数 Node ポート |
+| **systemd**（複数 unit / テンプレート） | Linux 単機。システムサービスと同じ起停・ログで、Node 専用マネージャを使わない |
+| **PM2 `-i` / `instances`** | 単機 VM。プロセス管理・ログ集約・ゼロダウン reload |
+| **`clusterListen`** | 単機 / VM。Node 標準 `cluster` を使い、別プロセスマネージャなし |
+| **Docker Compose `scale` / Swarm + Nginx** | コンテナ化済み。同一スタックでプロキシ、DNS がレプリカをラウンドロビン |
+| **K8s `replicas` / HPA** | 本番オーケストレーション：ロールアウト、プローブ、クォータ、自動スケール |
+| **マネージドのレプリカ**（ECS/Fargate、Cloud Run、Container Apps…） | オーケストレーションを任せたい。「イメージ内単一プロセス × レプリカ数」と同じ意味論 |
+| **PaaS 水平スケール**（Fly.io、Render、Heroku dyno…） | プラットフォームが「インスタンス数」で拡張。エントリは単一プロセス listen のまま |
 
-以下、シナリオ別に詳述する。クラウドコンソールの「レプリカ / instances」は Docker / K8s と同じ原則で、ベンダーごとのコマンドは繰り返さない。
+以下、シナリオ別に展開します。クラウドコンソールの「レプリカ / instances」も Docker / K8s と同じ原則で、ベンダーごとにコマンドは繰り返しません。
 
-## 単一プロセス入口（多くの方式で共通）
+## 単一プロセスのエントリ（多くの構成で共通）
 
-Docker、K8s、クラウドマネージド、PaaS、systemd、Nginx 複数 upstream、PM2 `-i`——入口はいずれも通常の単一プロセス listen。イメージの `CMD`、systemd の `ExecStart`、`pm2 start` はこのファイルを指す:
+Docker、K8s、マネージドホスト、PaaS、systemd、Nginx 複数 upstream、PM2 `-i` — エントリは普通の単一プロセス listen。イメージの `CMD`、systemd の `ExecStart`、`pm2 start` はこのファイルを指せばよいです。
 
 ```typescript
 import { routers, WebApp } from '@aomex/web';
-import { services } from './services/index.js';
+import { services } from '@/services';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [routers('./src/routers')],
@@ -48,11 +49,11 @@ const app = new WebApp({
 app.http({ keepAliveTimeout: 61_000 }).listen(process.env.PORT || 3000);
 ```
 
-停止は [グレースフルシャットダウン](/ja/web/#shutdown) と連動する: オーケストレータやプロセス管理が `SIGTERM` を送り、アプリが接続を捌いてから終了する。
+シャットダウンは [グレースフルシャットダウン](/ja/web/#shutdown) と揃えます。オーケストレータやプロセスマネージャが `SIGTERM` を送り、接続を捌いてから終了します。
 
 ## リバースプロキシ + 複数インスタンス
 
-コンテナオーケストレーションを入れないときの定番: 同一または複数ホストで複数 Node（ポートまたはホストを分ける）を起動し、手前に Nginx / Caddy / HAProxy でロードバランス。
+コンテナオーケストレーションを入れないときの定番：同一または複数ホストで Node を複数起動（ポートまたはホストを分ける）し、手前で Nginx / Caddy / HAProxy が負荷分散。
 
 ```nginx
 upstream aomex {
@@ -74,14 +75,14 @@ server {
 }
 ```
 
-各バックエンドは上の単一プロセス入口（`PORT=3001` / `3002`…）。WebApp の [proxyIP](/ja/web/) を正しく設定しないと、レート制限キーや監査ログにクライアントではなくプロキシが見える。スケールはプロセスを増やして upstream を直すこと。ヘルスチェックと接続ドレインはプロキシかデプロイスクリプトが担う。
+各バックエンドは上記の単一プロセスエントリ（`PORT=3001` / `3002`…）。WebApp は [proxyIP](/ja/web/) を正しく設定しないと、レート制限キーや監査ログがクライアントではなくプロキシのアドレスになります。スケールアウト = プロセスを増やして upstream を更新。ヘルスチェックと接続ドレインはプロキシまたはデプロイスクリプト側。
 
 ## systemd
 
-Linux ではアプリをシステムサービスに登録できる: 起動時自動起動、クラッシュ再起動、journal ログ——Nginx と同じ運用感。複数プロセスは **複数 unit** または **テンプレート unit**（`aomex@3001`、`aomex@3002`）で、インスタンスごとに `PORT` を分け、手前にリバースプロキシ。
+Linux ではアプリをシステムサービスに登録できます。起動時自動起動、クラッシュ再起動、journal ログ — Nginx と同じ運用感。複数プロセスは**複数 unit** または **テンプレート unit**（`aomex@3001`、`aomex@3002`）で、インスタンスごとに `PORT`、手前はリバースプロキシ。
 
 ```ini
-# /etc/systemd/system/aomex@.service 片段
+# /etc/systemd/system/aomex@.service の抜粋
 [Service]
 Environment=PORT=%i
 ExecStart=/usr/bin/node /opt/aomex/dist/main.js
@@ -94,35 +95,36 @@ TimeoutStopSec=15
 systemctl enable --now aomex@3001 aomex@3002 aomex@3003
 ```
 
-`TimeoutStopSec` はアプリの `shutdown.timeout` をカバーする。ここで `ExecStart` に `clusterListen` や PM2 を **重ねない**。
+`TimeoutStopSec` はアプリの `shutdown.timeout` を上回るように。ここでは `ExecStart` に `clusterListen` や PM2 を**重ねない**でください。
 
 ## PM2
 
-単機でオーケストレーションなし、Node 系のプロセス管理が欲しいときは PM2: 複数インスタンス起動、ログ、`reload` で無停止再読み込み。入口は単一プロセス listen のまま、インスタンス数は `-i` に任せる:
+オーケストレーションなしで Node 系のプロセス管理が欲しい単機では PM2：複数インスタンス、ログ、`reload` でゼロダウン。エントリは単一プロセス listen のまま、インスタンス数は `-i` に任せます。
 
 ```bash
 pm2 start dist/main.js -i max
-# 或 ecosystem：instances: 'max' / 数字，exec_mode: 'cluster'
+# または ecosystem：instances: 'max' / 数値、exec_mode: 'cluster'
 ```
 
-`-i max` はおおよそ CPU コア数に合わせる。数値指定の方が制御しやすい。すでに PM2 の cluster モードを使っているので、**`clusterListen` は重ねない**。
+`-i max` はだいたい CPU コア数相当。数値指定の方が制御しやすいです。PM2 の cluster モードを使っているので、**`clusterListen` は重ねない**。
 
 ## clusterListen
 
-PM2 や systemd 複数 unit を使わず、1 台で Node 標準 `cluster` を使うときは `@aomex/web` の `clusterListen`: primary は `fork` とシグナル受信だけ、**実際の `listen` は worker だけ**。`WebApp.listen` 自体は変えず、worker は従来のシャットダウン経路のまま。
+PM2 / systemd 複数 unit を入れず、単機で Node 標準 `cluster` を使うときは `@aomex/web` の `clusterListen`：primary は `fork` とシグナル受信のみ、**実際の `listen` は worker だけ**。`WebApp.listen` 自体は変えず、worker 内は従来どおりのシャットダウン経路です。
 
-App 構築と `listen` を `listen` コールバックに入れる（必要なら services を `import`）ことで、primary が業務初期化を無駄に走らせない:
+App の構築と `listen` を `listen` コールバックに入れます（必要なら `import` services）。primary で業務初期化を無駄に走らせないためです。
 
 ```typescript
 import { clusterListen, routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 clusterListen({ // [!code focus:18]
-  workers: 'max', // 或具体数字，如 4
+  workers: 'max', // または具体的な数、例：4
   listen: async () => {
-    const { services } = await import('./services/index.js');
+    const { services } = await import('@/services');
     const app = new WebApp({
       services,
-      logger: services.logger,
+      logger,
       language: { mode: 'fixed', language: 'zh-CN' },
       proxyIP: { mode: 'detect' },
       mount: [routers('./src/routers')],
@@ -132,25 +134,25 @@ clusterListen({ // [!code focus:18]
 });
 ```
 
-`workers: 'max'` は `os.availableParallelism()` を使う。`Math.min(4, availableParallelism())` で上限をかけてもよい。primary が `SIGINT` / `SIGTERM` を受けると各 worker を `disconnect` し、終了を待つ（タイムアウトで `SIGKILL`）、その後 `process.exit`。
+`workers: 'max'` は `os.availableParallelism()` を使用。`Math.min(4, availableParallelism())` で上限をかけることもできます。primary が `SIGINT` / `SIGTERM` を受けると各 worker を `disconnect` し、終了を待ってから（タイムアウトで `SIGKILL`）`process.exit` します。
 
 | オプション | 役割 | デフォルト |
 | --- | --- | --- |
 | `workers` | 数、または `'max'` | （必須） |
-| `listen` | **worker のみ**で呼ぶ: App を組み立てて `listen` | （必須） |
-| `respawn` | worker が予期せず終了したあと再 `fork` するか | `true` |
-| `respawnDelay` | 再 fork 前に待つミリ秒 | `1000` |
-| `maxRespawns` | 予期しない再起動の上限。超過で primary は終了コード `1` | 制限なし |
+| `listen` | **worker のみ**で呼ぶ：App 構築と `listen` | （必須） |
+| `respawn` | worker が予期せず落ちたあと再 `fork` するか | `true` |
+| `respawnDelay` | 再 fork 前の待ち（ミリ秒） | `1000` |
+| `maxRespawns` | 意図しない再起動の上限；超過で primary がコード `1` で終了 | 制限なし |
 | `shutdownTimeout` | シャットダウン待ち、超過で強制終了 | `5000`（WebApp `shutdown.timeout` と同じ既定） |
 | `onListening` / `onExit` | primary で worker の listen / 終了を観察 | — |
 
 ::: warning
-すでにリバースプロキシ複数インスタンス、systemd 複数 unit、Docker / クラウドマネージドレプリカ、K8s `replicas`、PM2 `-i`、PaaS 水平スケールのいずれかで拡張しているなら、**`clusterListen` を重ねない**。意図的シャットダウンや `disconnect` による終了は respawn しない。予期しない落ちだけが上記ポリシーで再起動する。
+リバースプロキシ複数インスタンス、systemd 複数 unit、Docker / マネージドレプリカ、K8s `replicas`、PM2 `-i`、PaaS 水平スケールを使っているときは **`clusterListen` を重ねない**。意図的シャットダウンや `disconnect` による終了は respawn されない。予期しないクラッシュだけが上記ポリシーで再起動される。
 :::
 
 ## Docker Compose scale
 
-イメージ内は **1 プロセス 1 回の `app.listen`** のまま。レプリカ数は Compose に任せる。同じ `compose.yaml` に Nginx を載せる構成がよくある: 80/443 だけ外に出し、サービス名 `web` にリバースプロキシする——Docker 組み込み DNS は**同名サービスの複数レプリカ**を解決し、下の書き方で Nginx に `3001`/`3002`/`3003` を手書きせず自動ラウンドロビンできる。
+イメージ内は**1 プロセス 1 回の `app.listen`**、レプリカ数は Compose に任せます。同じ `compose.yaml` に Nginx を載せることが多い：80/443 だけ公開し、サービス名 `web` にプロキシ — Docker 組み込み DNS が**同名サービスの複数レプリカ**を解決し、以下の書き方でラウンドロビンできます。Nginx に `3001`/`3002`/`3003` を手書きする必要はありません。
 
 ```yaml
 # compose.yaml
@@ -159,7 +161,7 @@ services:
     build: .
     environment:
       PORT: '3000'
-    # 不对外 publish；只进 compose 网络
+    # 外部 publish しない；compose ネットワーク内のみ
     deploy:
       replicas: 3 # [!code highlight]
 
@@ -175,13 +177,13 @@ services:
 
 ```bash
 docker stack deploy -c compose.yaml aomex
-# 本机无 Swarm、临时试副本：
+# ローカルで Swarm なし、レプリカを試す：
 # docker compose up --scale web=3 -d
 ```
 
-`deploy` は Swarm の意味論。`docker stack deploy`（または互換ツール）で初めてファイルどおりに複数レプリカが立つ。普通の `docker compose up` は `deploy` を**よく無視する**。ローカルで手早く試すなら `--scale web=3` でよい。
+`deploy` は Swarm 用：`docker stack deploy`（または互換ツール）でファイルどおり複数レプリカ。通常の `docker compose up` は **`deploy` を無視**することが多く、`--scale web=3` で一時指定できます。
 
-Nginx ではサービス名に対して upstream を 1 行書けばよい。Docker DNS は `web` を**その時点の全レプリカのアドレス**に解決する。Nginx が複数 IP を得ればその間でラウンドロビンする——`server` を 3 台分手書きする**必要はない**：
+Nginx ではサービス名を upstream に 1 行。Docker DNS は `web` を**当時の全レプリカのアドレス**に解決します。Nginx が複数 IP を得ればその間でラウンドロビン — **3 台の `server` を手書きしない**。
 
 ```nginx
 # nginx.conf
@@ -206,17 +208,17 @@ http {
 }
 ```
 
-注意: OSS の Nginx はデフォルトでホスト名を**起動 / reload 時**に解決し結果をキャッシュする。レプリカが先に立ってから Nginx を起動する（`depends_on: web`）場合、上の書き方でラウンドロビンできる。その後 `scale` でレプリカを増減したら、再解決のため **`nginx -s reload`**（または Nginx コンテナの再起動）が必要。reload しないと peer 一覧は古いままになる。
+注意：OSS Nginx は既定で**起動 / reload 時**にホスト名を解決してキャッシュします。レプリカ起動後に Nginx を起動（`depends_on: web`）なら上記でラウンドロビンできます。その後 `scale` で増減したら **`nginx -s reload`**（または Nginx コンテナ再起動）で再解決が必要。reload しないと peer 一覧が古いままです。
 
-スケール後に **reload なし**で追従させたい場合は、Docker DNS（`resolver 127.0.0.11`）と変数形式の `proxy_pass`（`set $upstream web; proxy_pass http://$upstream:3000;`）で `valid` 周期に再解決する。多くの同一スタック構成では upstream + スケール後の reload で十分。
+スケール後も **reload なし**で追従したい場合は Docker DNS（`resolver 127.0.0.11`）+ 変数形式の `proxy_pass`（`set $upstream web; proxy_pass http://$upstream:3000;`）で `valid` 周期に再解決。多くの同一スタックデプロイでは upstream + スケール後 reload で十分です。
 
-WebApp は [proxyIP](/ja/web/) を正しく合わせる。**イメージ入口で `clusterListen` や PM2 `-i` を走らせない**。停止は `SIGTERM` と [グレースフルシャットダウン](/ja/web/#shutdown) に合わせる。
+WebApp は引き続き [proxyIP](/ja/web/) を正しく。イメージエントリで **`clusterListen` や PM2 `-i` を走らせない**。シャットダウンは `SIGTERM` と [グレースフルシャットダウン](/ja/web/#shutdown) に合わせる。
 
-Traefik / Caddy など Docker provider 付きゲートウェイはラベルでレプリカを自動発見でき、`resolver` を手書きしなくてよい。意味は同じ——「同一スタック内リバースプロキシ + 複数レプリカのラウンドロビン」。
+Traefik / Caddy など Docker provider 付きゲートウェイはラベルでレプリカを発見し、スケール時に Nginx 手 reload が不要なことが多いです。
 
-## Kubernetes とクラウドマネージド
+## Kubernetes とマネージドホスティング
 
-Docker と同じ考え方: **Pod / タスク内は単一プロセス**、レプリカ数でスケール。
+Docker と同じ考え方：**Pod / タスク内は単一プロセス**、レプリカ数でスケール。
 
 ```yaml
 apiVersion: apps/v1
@@ -234,16 +236,16 @@ spec:
             - containerPort: 3000
 ```
 
-プローブと `terminationGracePeriodSeconds` はアプリの `shutdown.timeout` より大きく（少なくともカバーする）こと。さもないとオーケストレータが先に強制終了する。HPA は CPU / カスタム指標で `replicas` を増減、アプリコードは変更不要。
+プローブと `terminationGracePeriodSeconds` はアプリの `shutdown.timeout` より大きく（少なくともカバーする）。でないとオーケストレータが先に強制終了します。HPA は CPU / カスタムメトリクスで `replicas` を増減し、アプリコードは変更不要です。
 
-マネージドコンテナ（AWS ECS/Fargate、Google Cloud Run、Azure Container Apps、Alibaba Cloud ACK/SAE など）はレプリカ・ローリング・プローブをコンソールや Terraform に集約: 渡すのは依然 **単一プロセスイメージ**、スケールはプラットフォーム。HashiCorp Nomad なども「job レプリカ × 単一プロセスタスク」の同じモデル。
+マネージドコンテナ（AWS ECS/Fargate、Google Cloud Run、Azure Container Apps、Alibaba ACK/SAE など）は「レプリカ、ローリング、プローブ」をコンソールまたは Terraform に集約します。届けるのは**単一プロセスイメージ**、スケールはプラットフォームへ。HashiCorp Nomad なども「job レプリカ × 単一プロセスタスク」は同じモデルです。
 
 ## PaaS 水平スケール
 
-Fly.io Machines、Render services、Heroku dyno などは「インスタンス数」で拡張。プラットフォームが複数プロセスを起動してトラフィック分散。リポジトリ入口は単一プロセス `listen` のまま、プラットフォームの scale / instances 設定で数を調整すればよく、アプリ内で `fork` しない。
+Fly.io Machines、Render services、Heroku dynos などは「インスタンス数」で拡張。プラットフォームが複数プロセスを起動してトラフィック分配。リポジトリのエントリは単一プロセス `listen` のまま、プラットフォームの scale / instances 設定で数を調整し、アプリ内で fork する必要はありません。
 
 ## 次のステップ
 
-- [アプリ入口](/ja/web/): `listen` / `shutdown` / proxyIP
-- [レート制限](/ja/plugins/rate-limit): レプリカ複数時は共有 store
-- [キャッシュ](/ja/core/cache): session と Redis アダプター
+- [アプリケーションエントリ](/ja/web/)：`listen` / `shutdown` / proxyIP
+- [レート制限](/ja/plugins/rate-limit)：複数レプリカでは共有 store
+- [キャッシュ](/ja/core/cache)：session と Redis アダプタ

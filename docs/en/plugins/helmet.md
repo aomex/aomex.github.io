@@ -19,10 +19,11 @@ Parameterless `helmet()` applies upstream’s default browser security headers; 
 ```typescript
 import { helmet } from '@aomex/helmet';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'en-US' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:4]

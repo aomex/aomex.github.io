@@ -21,10 +21,11 @@ pnpm add @aomex/cron
 ```typescript
 import { commanders, ConsoleApp } from '@aomex/console';
 import { crons } from '@aomex/cron';
+import { logger } from '@/services/logger.service';
 
 const app = new ConsoleApp({
   services,
-  logger: services.logger,
+  logger,
   language: 'zh-CN',
   mount: [ // [!code focus:7]
     crons({
@@ -129,12 +130,15 @@ commander.create('export', {
 Чтобы реплики работали вместе, а один план во всём кластере брал слот по `concurrent`, дайте `crons()` **общий store** (часто Redis). Планирование и взаимное исключение координирует store; в business action свой распределённый lock не нужен.
 
 ```typescript
+import { Caching } from '@aomex/cache';
 import { CacheRedisAdapter } from '@aomex/cache-redis-adapter';
 
 crons({
   commanders: './src/commanders',
   port: 9786,
-  store: new CacheRedisAdapter({ host: '127.0.0.1', port: 6379 }), // [!code highlight]
+  store: new Caching( // [!code highlight]
+    new CacheRedisAdapter({ host: '127.0.0.1', port: 6379 }),
+  ),
 });
 ```
 

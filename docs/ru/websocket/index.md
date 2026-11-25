@@ -2,30 +2,30 @@
 outline: deep
 ---
 
-# Точка входа WebSocket-приложения
+# Вход WebSocket-приложения
 
-Чат, статус заказа, совместный курсор — всё, что сервер должен сам пушить в браузер. WebSocket-приложение как раз для этого: вы создаёте `WebsocketApp` почти как Web-приложение, затем вешаете его на **тот же** HTTP-порт. Клиент подключается и ходит в бизнес по «имени события»; после успешной записи заказа в БД вы можете из обычного HTTP-маршрута вызвать тот же `ws` и отправить сообщение тем, кто ещё онлайн.
+Чат, статус заказа, совместный курсор — когда сервер сам пушит в браузер. Собери `WebsocketApp` как Web и повесь на **тот же** HTTP-порт. После подключения бизнес идёт по имени события. После записи заказа в БД можно из обычного HTTP-маршрута дернуть тот же `ws` и дотянуться до онлайн-клиентов.
 
-Сразу одно правило: доставка — **best-effort**. Когда `await ws.room(...).send(...)` завершился, фреймворк уже отдал сообщение наружу (или в Redis) — это **не** гарантия, что получатель его увидел, и нет автоповтора или офлайн-ящика. Важные данные всё равно пишите в БД; после переподключения клиент догоняет состояние по HTTP.
+Важно: доставка **best-effort**. `await ws.room(...).send(...)` значит лишь, что фреймворк отправил (или отдал Redis) — **не** что клиент точно получил. Нет авто-retry и офлайн-ящика. Важное — в БД; после reconnect клиент догоняет по HTTP.
 
-## Установите зависимости и создайте один общий экземпляр
+## Зависимости и первый экземпляр
 
-Предположим, у вас уже есть рабочее [Web-приложение](/ru/web/). Добавьте пакеты для realtime:
+Нужно работающее [Web-приложение](/ru/web/). Добавь пакеты realtime:
 
 ```bash
 pnpm add @aomex/websocket @aomex/websocket-ws-transport
 ```
 
-`WebsocketApp` держите в отдельном файле и `export`ьте его. HTTP-вход, маршруты и Console-команды импортируют **этот** экземпляр — **не** делайте `new` в каждом файле, иначе пуши не попадут в те же соединения.
+`WebsocketApp` — в отдельном файле с `export`. HTTP, маршруты и Console импортируют **один** экземпляр — не `new` в каждом файле, иначе push не совпадёт с соединениями.
 
 ```typescript
 // src/ws.ts
 import { WebsocketApp, channels } from '@aomex/websocket';
 import { WsTransport } from '@aomex/websocket-ws-transport';
-import { services } from './services/index.js';
+import { logger } from '@/services/logger.service';
 
 export const ws = new WebsocketApp({ // [!code focus:8]
-  logger: services.logger,
+  logger, // [!code highlight]
   language: { mode: 'fixed', language: 'zh-CN' },
   path: '/ws',
   transport: new WsTransport(),
@@ -33,13 +33,13 @@ export const ws = new WebsocketApp({ // [!code focus:8]
 });
 ```
 
-`logger`, `language` и `transport` обязательны; без них компилятор остановит вас.
+`logger`, `language`, `transport` обязательны — без них не скомпилируется.
 
-- `logger`: передайте **тот же** `services.logger`, что и в Web / Console. Сюда попадут ошибки инициализации транспорта и сбоев fan-out по комнатам.
-- `language`: язык служебных текстов на этом соединении (сбой handshake, причина закрытия неверной рамки, ответ при лимите / ошибке валидации). Выше — режим `fixed`: для админки, внутренней сети и одноязычного продукта проще всего.
-- `mount`: сначала повесьте `channels('./src/channels')` — то же, что `routers('./src/routers')` в Web. Как писать Channel: [маршрутизация событий](/ru/websocket/channel).
+- `logger`: **тот же** `Logger`, что у Web / Console. Сюда падают сбои транспорта и ошибки fanout по комнатам.
+- `language`: тексты фреймворка на соединении (ошибка handshake, причина close, лимиты / ошибки валидации в push). Здесь `fixed` — админка, интранет, один язык.
+- `mount`: сначала `channels('./src/channels')`, аналог `routers` у Web. Каналы — [события](/ru/websocket/channel).
 
-Если публичный мультиязычный клиент согласует язык по заголовку handshake, переключитесь на `dynamic` и укажите `fallback`:
+Для публичных клиентов — согласование по заголовку handshake, `dynamic` + `fallback`:
 
 ```typescript
 language: {
@@ -49,25 +49,26 @@ language: {
 },
 ```
 
-`header` по умолчанию — `accept-language` (с сортировкой по `q`); свой заголовок приложения можно задать как `x-language`. Коды языка пишите как `zh-CN`, `en-US` (через дефис).
+`header` по умолчанию `accept-language` (сортировка `q`); свой — `x-language`. Коды `zh-CN`, `en-US` (дефис).
 
 ::: tip
-Когда вы вызываете `ws.room().send()` из **HTTP-маршрута**, язык берётся из **этого HTTP-запроса**, а не из языка handshake длинного соединения.
+При `ws.room().send()` из **HTTP-маршрута** язык берётся из **этого HTTP-запроса**, а не из языка handshake давнего WS-соединения.
 :::
 
-## Подвесьте к HTTP-порту
+## Повесить на HTTP-порт
 
-WebSocket не открывает свой listen-порт — он делает upgrade того же `http.Server`, что и Web. Поэтому точка входа процесса — не один `app.listen(3000)`: сначала `app.http({})` → `ws.attach` → затем `listen`.
+WebSocket сам порт не слушает — upgrade через `http.Server` Web. Вход: не только `app.listen(3000)`, а `app.http({})` → `ws.attach` → `listen`.
 
 ```typescript
-// src/web.ts —— настоящая точка входа процесса
+// src/web.ts — точка входа процесса
 import { routers, WebApp } from '@aomex/web';
-import { services } from './services/index.js';
-import { ws } from './ws.js';
+import { services } from '@/services';
+import { ws } from '@/ws';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [routers('./src/routers')],
@@ -80,10 +81,10 @@ server.listen(3000, () => {
 });
 ```
 
-`attach` должен быть **до** `listen`; один и тот же `ws` можно attach только один раз — повторный вызов сразу бросит ошибку. При сигнале остановки фреймворк закроет HTTP и опустошит WebSocket-соединения — два набора cleanup писать не нужно.
+`attach` **до** `listen`. Один `ws` — один attach, повтор бросит ошибку. При shutdown фреймворк гасит HTTP и WS вместе — свою вторую очистку писать не нужно.
 
 ::: warning
-Не вызывайте `ws.attach(...)` на верхнем уровне модуля `src/ws.ts`. Console-команды тоже импортируют `ws`: один import снова пройдёт attach, два процесса разъедутся, пуши сломаются.
+Не вызывай `ws.attach(...)` на верхнем уровне `src/ws.ts`. Console тоже импортирует `ws` — attach при import в каждом процессе, push разъедется.
 :::
 
 Запуск:
@@ -92,7 +93,7 @@ server.listen(3000, () => {
 node --import tsx/esm --watch src/web.ts
 ```
 
-В консоли браузера проверьте связь (путь по умолчанию `/ws`):
+Проверка в консоли браузера (путь `/ws`):
 
 ```typescript
 const socket = new WebSocket('ws://localhost:3000/ws');
@@ -104,32 +105,34 @@ socket.onmessage = (ev) => {
 };
 ```
 
-Пока нет соответствующего Channel, сообщение могут тихо отбросить (по умолчанию `unknownEvent: 'ignore'`). Сначала поднимите канал, потом пишите обработчики.
+Без Channel сообщение может тихо пропасть (`unknownEvent: 'ignore'`). Сначала заведи каналы, потом обработчики.
 
-## Куда подключается клиент и какой протокол
+## Куда подключается клиент
 
-`path` задаёт URL для браузера. По умолчанию `/ws`; если меняете — меняйте и адрес:
+`path` — URL подключения. По умолчанию `/ws`; при смене меняй адрес:
 
 ```typescript
 path: '/realtime',
-// 浏览器：new WebSocket('ws://localhost:3000/realtime')
+// браузер: new WebSocket('ws://localhost:3000/realtime')
 ```
 
-Для клиента Socket.IO: `io('http://localhost:3000', { path: '/realtime' })`.
+Для Socket.IO: `io('http://localhost:3000', { path: '/realtime' })`.
 
-`transport` **обязателен**: handshake, upgrade и каждая рамка. Для локального старта хватит `new WsTransport()`; позже на Socket.IO меняете одну строку, бизнес Channel не трогаете — см. [транспорт](/ru/websocket/transport).
+`transport` **обязателен** — handshake и кадры. Для старта `new WsTransport()`; Socket.IO — замена одной строки, Channel без переделки — [транспорт](/ru/websocket/transport).
 
-`hub` **можно не указывать**. По умолчанию — memory Hub: комнаты и broadcast работают только в **текущем процессе**, для одномашинной разработки достаточно. На нескольких репликах или когда Console тоже пушит людям на Web — поставьте Redis Hub: [мультимашинный Hub](/ru/websocket/hub).
+`hub` **необязателен**. Память по умолчанию — комнаты только в **текущем процессе**. Несколько реплик или push из Console на браузеры Web — Redis Hub — [Hub](/ru/websocket/hub).
 
-Это независимые оси: смена транспорта ≠ смена Hub; мультимашина — только Hub. Если взяли Socket.IO, **не** вешайте его собственный Redis adapter — комнаты знает только Hub aomex.
+Транспорт и Hub независимы. С Socket.IO не вешай официальный Redis adapter Socket.IO — комнаты только hub aomex.
 
-## Грубый фильтр handshake и глобальный middleware
+## verify и глобальный middleware
 
-Перед upgrade можно повесить `verify`: аргумент — обычный Web-запрос (Cookie, заголовки, IP). Верните `true`, чтобы пустить; `false` или HTTP-код (например `401`) — отказать в handshake. Права на конкретное событие лучше вешать в mount Channel.
+На upgrade `verify` — грубый фильтр: обычный Web `request`, Cookie, заголовки, IP. `true` — ок; `false` или код HTTP (например `401`) — отказ handshake. Права на конкретное событие — mount Channel.
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 export const ws = new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   transport: new WsTransport(),
   verify: (request) => { // [!code focus:3]
@@ -139,36 +142,38 @@ export const ws = new WebsocketApp({
 });
 ```
 
-`mount` — как у `WebApp.mount`, onion-очередь. Обычно **в конце** — `channels(...)`, раньше — access log, rate limit, abuse. Сюда только `middleware.socket` / `middleware.mixin`, не HTTP-only middleware.
+`mount` — луковица как у `WebApp.mount`. Обычно **в конце** `channels(...)`, перед ним access log, rate limit, abuse. Только `middleware.socket` / `middleware.mixin`, не HTTP-middleware.
 
 ```typescript
 mount: [
-  // 访问日志、限速……见侧栏「常用中间件」
+  // access log, rate limit… см. «Частые middleware» в сайдбаре
   channels('./src/channels'),
 ],
 ```
 
-## Отладка: неизвестные события и размер рамки
+## Отладка: неизвестные события и размер кадра
 
-Если клиент шлёт незарегистрированное имя события, по умолчанию `unknownEvent: 'ignore'` — тихий дроп. На этапе стыковки можно `'error'`: фреймворк ответит рамкой `event: 'error'`, фронт сразу увидит опечатку; в проде чаще оставляют `ignore`.
+Незарегистрированное имя — `unknownEvent: 'ignore'`, тихо. На отладке `'error'` — push `event: 'error'`, сразу видно опечатку. В проде чаще оставляют `ignore`.
 
 ```typescript
-unknownEvent: 'error', // 联调时打开
+unknownEvent: 'error', // на время отладки
 ```
 
-`maxPayload` — максимум байт на одну рамку, по умолчанию 1MiB. Слишком большой пакет съедает память, низкий уровень просто рвёт соединение. Увеличивайте только если реально нужны большие JSON / base64-скриншоты; для чата обычно хватает дефолта.
+`maxPayload` — макс. байт кадра, default 1 MiB. Слишком большое жрёт память, низкий уровень рвёт соединение. Поднять для большого JSON / base64; для чата default хватает.
 
 ```typescript
-maxPayload: 256 * 1024, // 256KiB，收紧一点
+maxPayload: 256 * 1024, // 256 KiB, чуть жёстче
 ```
 
 ## Онлайн-метрики
 
-Чтобы сразу видеть смену числа онлайна или исход входящих, повесьте `onMetric`: колбэк на событие. Ошибка внутри колбэка только warn, на приём/отправку не влияет.
+`onMetric` — колбэк при изменении онлайна и исходах входящих. Ошибка в колбэке — только warn, трафик не стопорится.
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 export const ws = new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   transport: new WsTransport(),
   mount: [channels('./src/channels')],
@@ -180,7 +185,7 @@ export const ws = new WebsocketApp({
 });
 ```
 
-Можно периодически снимать локальный снимок (онлайн, число комнат). Это данные **одной машины**, не агрегация кластера:
+Или свой интервал — снимок **этой машины** (online, rooms), не весь кластер:
 
 ```typescript
 setInterval(async () => {
@@ -189,16 +194,16 @@ setInterval(async () => {
 }, 10_000);
 ```
 
-## Пуш из HTTP-маршрута
+## Push из HTTP-маршрута
 
-Самый частый прод-сценарий: API записало в БД → пуш тем, кто онлайн → обычный HTTP-ответ.
+Типичный прод: API пишет в БД → push онлайну → HTTP-ответ как обычно.
 
-Сразу после соединения фреймворк сам кладёт клиента только в комнату `client.id` («только этому соединению»). Бизнес-комнаты (лобби, id заказа) нужно `join` в Channel, иначе `room('lobby').send` никто не получит.
+При connect фреймворк сам кладёт в комнату `client.id` (push только на это соединение). Бизнес-комнаты (лобби, id заказа) — `join` в Channel, иначе `room('lobby').send` некому.
 
 ```typescript
 // src/routers/order.ts
 import { Router } from '@aomex/web';
-import { ws } from '../ws.js';
+import { ws } from '@/ws';
 
 export const router = new Router();
 
@@ -211,41 +216,39 @@ router.post('/orders', { // [!code focus:8]
 });
 ```
 
-Варианты пуша:
+Варианты отправки:
 
 ```typescript
-// 所有在线连接
+// все онлайн
 await ws.all.send('system.notice', { text: '维护 5 分钟' });
 
-// 某个 client.id（点对点）
+// один client.id (точка-точка)
 await ws.room(clientId).send('dm', { text: 'hi' });
 
-// 全员，但排除某个人
+// всем, кроме одного
 await ws.all.send('notice', { text: '...' }, { except: clientId });
 ```
 
-`except` принимает объект соединения (есть `id`) или строку id. Имя комнаты не может быть пустой строкой и не может содержать `\0` — иначе сразу ошибка.
+`except` — объект соединения с `id` или строка id. Имя комнаты не пустое и без `\0`, иначе throw.
 
 ::: tip
-Memory Hub по умолчанию **не выходит за процесс**. Если в Console сделать `import { ws }` и `send`, а Console и Web — разные Node-процессы, браузер ничего не получит. На обеих сторонах один и тот же Redis Hub: [мультимашинный Hub](/ru/websocket/hub).
+Память hub **не выходит за процесс**. Console с `import { ws }` и `send` в другом процессе, чем Web — браузер не получит. Один Redis Hub на обоих — [Hub](/ru/websocket/hub).
 :::
 
-## Сводка рядом с Web и Console
-
-Три уже знакомые оси рядом, чтобы не путать:
+## Web, Console рядом
 
 | | Web | WebSocket | Console |
 | --- | --- | --- | --- |
-| Как матчится | метод + путь | имя события | имя команды |
-| Как валидировать вход | query / body / params | `payload()` | `options()` |
-| Как объявить выход | `response()` | `emit()` | — |
-| Как живёт процесс | listen держит процесс | attach к тому же Server | `run` и выход |
+| Сопоставление | метод + путь | имя события | имя команды |
+| Ввод | query / body / params | `payload()` | `options()` |
+| Выход | `response()` | `emit()` | — |
+| Жизнь процесса | listen | attach к тому же Server | `run` и выход |
 
-Запросы к БД и почта — в [services](/ru/core/service); realtime вход/выход — в Channel; «после успешной записи в БД ещё раз пушнуть» — из маршрута или Console через `ws.room`.
+БД и почта — [services](/ru/core/service); realtime — Channel; «после записи push» — маршрут или Console с `ws.room`.
 
 ## Дальше
 
-- [Маршрутизация событий Channel](/ru/websocket/channel) — сначала событие, которое отвечает `pong`
-- [Входящий payload](/ru/websocket/payload) / [Исходящий emit](/ru/websocket/emit)
+- [Channel](/ru/websocket/channel) — событие с ответом `pong`
+- [payload](/ru/websocket/payload) / [emit](/ru/websocket/emit)
 - [Транспорт](/ru/websocket/transport) — нужен ли Socket.IO
-- [Мультимашинный Hub](/ru/websocket/hub) — несколько реплик или пуш из Console через процессы
+- [Hub](/ru/websocket/hub) — реплики и Console

@@ -4,32 +4,33 @@ outline: deep
 
 # Журнал доступа
 
-У realtime-канала нет «URL + код статуса», но всё равно хочется знать: какой IP, какое соединение, какое событие только что обработали и сколько это заняло. `websocketAccessLog()` из `@aomex/access-log/websocket` пишет строку после того, как цепочка middleware для входящего сообщения дошла до конца (включая выброшенную ошибку).
+У realtime-канала нет «URL + статус», но нужно знать: какой IP, какое соединение, какое событие обработано и за сколько мс. `websocketAccessLog()` из `@aomex/access-log/websocket` — одна строка после прохода цепочки middleware (включая ошибки).
 
 ```bash
 pnpm add @aomex/access-log
 ```
 
-## Сначала смотрите каждое входящее сообщение
+## Сначала каждое входящее сообщение
 
-Вешайте **перед** `channels()`, иначе не попадёте в строку после бизнес-обработки. Формат по умолчанию — `[ip] [clientId] [event] [duration]`, вывод в консоль:
+Вешай **перед** `channels()`, иначе не увидишь строку после бизнес-логики. Формат по умолчанию `[ip] [clientId] [event] [duration]`, в консоль:
 
 ```typescript
 import { websocketAccessLog } from '@aomex/access-log/websocket';
 import { WebsocketApp, channels } from '@aomex/websocket';
 import { WsTransport } from '@aomex/websocket-ws-transport';
+import { logger } from '@/services/logger.service';
 
 new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   transport: new WsTransport(),
   mount: [websocketAccessLog(), channels('./src/channels')], // [!code highlight]
 });
 ```
 
-## Свой формат и бизнес-поля
+## Формат и бизнес-поля
 
-Токены — `WebsocketAccessLogToken`. В `customTokens` приходит WebSocket-ctx; можно брать поля, которые вы раньше положили в `client.data`. Для записи на диск — `FileTransport`:
+Токены — `WebsocketAccessLogToken`. В `customTokens` ctx WebSocket — поля из `client.data`. Для файла — `FileTransport`:
 
 ```typescript
 import {
@@ -54,10 +55,10 @@ websocketAccessLog({ // [!code focus:14]
 });
 ```
 
-Удобно смотреть распределение событий и медленную обработку; **не** считайте это единственным аудитом чувствительных операций.
+Для распределения событий и медленных обработок, **не единственный аудит чувствительных операций**.
 
 ## Дальше
 
-- [Точка входа](/ru/websocket/)
-- [Маршрутизация событий](/ru/websocket/channel)
-- Уровни вывода: [логгер](/ru/core/logger)
+- [Вход приложения](/ru/websocket/)
+- [Маршруты событий](/ru/websocket/channel)
+- Уровни: [логгер](/ru/core/logger)

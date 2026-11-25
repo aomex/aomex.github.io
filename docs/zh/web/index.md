@@ -14,11 +14,12 @@ pnpm add tsx -D
 ```typescript
 // src/web.ts
 import { routers, WebApp } from '@aomex/web';
-import { services } from './services/index.js';
+import { logger } from '@/services/logger.service';
+import { services } from '@/services';
 
 const app = new WebApp({ // [!code focus:7]
   services,
-  logger: services.logger,
+  logger, // [!code highlight]
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [routers('./src/routers')], // [!code highlight]
@@ -52,14 +53,16 @@ node --import tsx/esm --watch src/web.ts
 
 ## services 与 logger
 
-`services` 是业务服务容器（查库、缓存、发信等都挂在这里），用 [combineServices](/zh/core/service) 组装后交给 WebApp。进程关停时，框架会在销毁阶段对已加载的服务调 `destroy`，用来关连接、刷日志。
+`services` 是业务服务容器（查库、发信等都挂在这里），用 [combineServices](/zh/core/service) 组装后交给 WebApp。进程关停时，框架会在销毁阶段对已加载的服务调 `destroy`，用来关连接。
 
-`logger` 必须单独再传一份（通常就是 `services.logger`）：路由和中间件里的 `ctx.logger` 用的就是这个实例，和构造参数是同一引用。
+`logger` 是 [`Logger`](/zh/core/logger) 实例（`new Logger({ transports })`）。业务里直接 `import { logger } from '@/services/logger.service'`；`ctx.logger` 与它是同一引用，给第三方中间件和 app 内中间件用。缓存见 [`Caching`](/zh/core/cache)。
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 const app = new WebApp({
   services, // [!code highlight]
-  logger: services.logger, // [!code highlight]
+  logger, // [!code highlight]
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
 });
@@ -164,10 +167,11 @@ proxyIP: {
 ```typescript
 import { middleware } from '@aomex/common';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:9]
@@ -176,7 +180,7 @@ const app = new WebApp({
       await next();
       const cost = Date.now() - start;
       const { method, url } = ctx.request;
-      await ctx.logger.info(`${method} ${url} ${cost}ms`);
+      logger.info(`${method} ${url} ${cost}ms`);
     }),
     routers('./src/routers'),
   ],
@@ -205,9 +209,11 @@ shutdown: { timeout: 10_000 },
 | `formData` | `multipart/form-data` | 单文件约 `50mb`、文件数 / 字段数有上限 |
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   body: { // [!code focus:8]
@@ -338,7 +344,7 @@ router.get('/login-done', {
 
 - `ctx.download`：把文件流写给客户端；流结束后 Promise 才会 settled，适合「下完就删」的临时文件。
 - `ctx.sse()`：服务端推送（Server-Sent Events），见 [SSE](/zh/web/sse)。
-- `ctx.logger`：就是构造 WebApp 时传入的那个 logger；要给每条日志带 `requestId` 等，见 [日志 · withBindings](/zh/core/logger#请求级上下文withbindings)。
+- 业务日志：直接 `import { logger } from '@/services/logger.service'`（与 `ctx.logger` 同一引用；`ctx.logger` 给第三方中间件和 app 内中间件）。带 `requestId` 等见 [日志 · withBindings](/zh/core/logger#请求级上下文withbindings)。
 
 ### app.on('error')
 

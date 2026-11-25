@@ -2,9 +2,9 @@
 outline: deep
 ---
 
-# 静的ファイル
+# 静的リソース
 
-ディスク上のディレクトリ（フロントの dist、public、ダウンロード用パッケージ）を HTTP ファイル応答にマップする。未ヒットなら next() で後続 API に渡す。指定した root だけを出す。プロジェクトルートや node_modules を指さない。
+ディスク上のディレクトリ（フロント dist、public、配布パッケージ）を HTTP ファイル応答にマップする。ミス時は next() で後続 API へ。指定した root だけを配信し、プロジェクトルートや node_modules を指さない。
 
 ```bash
 pnpm add @aomex/serve-static
@@ -12,15 +12,16 @@ pnpm add @aomex/serve-static
 
 ## ルートの前に置く
 
-静的ミドルウェアは通常、業務ルートの**前**に置く（先にファイルを試し、次に API）。`root` は必須で、フロント成果物やダウンロード用ディレクトリを指す。
+静的ミドルウェアは通常、業務ルート**の前**（先にファイル試行、次に API）。`root` は必須。フロント成果物やダウンロード用ディレクトリを指す。
 
 ```typescript
 import { serveStatic } from '@aomex/serve-static';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:4]
@@ -30,15 +31,15 @@ const app = new WebApp({
 });
 ```
 
-通常の WebMiddleware。ファイルにヒットしたら内容を送り、未ヒットなら通す。パストラバーサル、`..`、NUL、ドットファイルなどは直接拒否する（安全チェックはパッケージ内）。ディレクトリアクセス時はデフォルトで `index.html` にフォールバック（`indexFile` で変更可）。ビルドが隣に `.br` / `.gz` を出しているとき、`useCompressedFile` はデフォルトで優先する（オフ可）。
+通常の WebMiddleware。ヒット時は内容を直接返す。ミス時は通過。パストラバーサル、`..`、NUL、ドットファイルは拒否（パッケージ内で検証）。ディレクトリアクセスはデフォルトで `index.html` にフォールバック（`indexFile` で変更可）。ビルド成果物に `.br` / `.gz` があるとき `useCompressedFile` がデフォルトで優先（オフ可）。
 
 ::: warning
-root: '.' や node_modules を含むディレクトリを指すとパス漏洩のリスクがある。本番で誤設定の例がある。
+`root: '.'` や node_modules を含むディレクトリはパス漏えいリスク。本番で誤設定の例あり。
 :::
 
-## ハッシュ付き chunk：長キャッシュ
+## content hash 付き chunk：長キャッシュ
 
-content hash 付きの JS/CSS chunk は長い `cacheControl` を付けてよい。`index.html` などの入口に同じ `immutable` は向かない。さもないとリリース後もユーザーが古い殻のままになる。
+content hash 付き JS/CSS chunk は長い `cacheControl` 可。`index.html` などエントリに同じ `immutable` は不向き。リリース後もユーザーが古いシェルを握り続ける。
 
 ```typescript
 serveStatic({
@@ -50,11 +51,11 @@ serveStatic({
 });
 ```
 
-デフォルトは `maxAge: 0`。HTML は短いキャッシュか `noCache` がよい。
+デフォルト `maxAge: 0`。HTML は短キャッシュまたは `noCache`。
 
-## URL プレフィックスとディスクが一致しない
+## URL プレフィックスとディスクが不一致
 
-CDN / ゲートウェイが `/assets/...` を `./dist` に向けるときは、`formatPath` でプレフィックスを外してからファイルを探す：
+CDN / ゲートウェイが `/assets/...` を `./dist` に向けるとき、`formatPath` でプレフィックスを削ってからファイル検索：
 
 ```typescript
 serveStatic({
@@ -68,7 +69,7 @@ serveStatic({
 
 ## API + SPA フォールバック
 
-深いリンクのリフレッシュは静的ミドルウェアだけでは足りない。未ヒットパスは routers の後で `index.html` に落とす。`send` と `serveStatic` は同じパッケージからエクスポートされる。
+深いリンクのリフレッシュは静的だけでは足りない。ミスパスは routers の後で `index.html` にフォールバック。`send` と `serveStatic` は同パッケージから export。
 
 ```typescript
 import { middleware } from '@aomex/common';
@@ -91,12 +92,12 @@ mount: [
 ];
 ```
 
-| 環境 | 推奨 |
+| 環境 | 目安 |
 | --- | --- |
-| 本番 | 大流量なら静的は CDN/Nginx に任せることが多い。Node はフォールバックやイントラ向けに向く |
-| ローカル | Vite のビルド成果物にそのまま `serveStatic` を向ければよい |
+| 本番 | 大流量は静的を CDN/Nginx へ。Node はフォールバックや内網向き |
+| ローカル | `serveStatic` を Vite ビルド成果物に向けるだけ |
 
-## 次のステップ
+## 次に
 
 - 条件付きキャッシュ：[ETag](/ja/plugins/etag)
 - 転送圧縮：[Compress](/ja/plugins/compress)

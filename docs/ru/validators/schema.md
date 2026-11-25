@@ -4,7 +4,7 @@ outline: deep
 
 # schema
 
-Соберите таблицы полей пользователей, заказов и пагинации в переиспользуемые блоки в `src/schemas/xxx.schema.ts`: на маршрутах `body(schema)` / `query(schema)`, в тестах `validate(input, schema)` — один набор правил, один тип `Validator.Infer`, меньше копипаста.
+Собирает таблицы полей вроде «пользователь, заказ, пагинация» в переиспользуемый блок в `src/schemas/xxx.schema.ts`: на роуте `body(schema)` / `query(schema)`, в тестах `validate(input, schema)` — одни правила, один тип `Validator.Infer`, меньше копипаста.
 
 ```typescript
 // src/schemas/user.schema.ts
@@ -23,7 +23,7 @@ export type User = Validator.Infer<typeof userSchema>;
 ```typescript
 // src/routers/users.ts
 import { body, Router } from '@aomex/web';
-import { userSchema } from '../schemas/user.schema.js';
+import { userSchema } from '@/schemas/user.schema';
 
 export const router = new Router();
 
@@ -36,26 +36,26 @@ router.post('/register', {
 });
 ```
 
-Полевые `optional` / `default` по-прежнему в [Общие цепочки](./chain); ниже — методы **на уровне schema**.
+optional / default на полях — как в [общей цепочке](./chain); ниже — методы **самой** schema.
 
-- `Validator.Infer<typeof userSchema>` — тип объекта после проверки; должен совпадать с суженным `ctx.body`.
-- `pick` / `omit` / `extend` дают **новые** schema и типы; имена компонентов OpenAPI не наследуются — вызовите `asName(...)` у каждой формы для библиотеки компонентов.
-- `partial()` делает поля необязательными; голый `partial()` может быть заблокирован на уровне типов, если у поля есть `transform` — используйте `partial('name', 'bio')`.
-- `required()` ужесточает обратно; у полей с `default` пропуск по-прежнему даёт значение по умолчанию.
+- `Validator.Infer<typeof userSchema>` — тип объекта после проверки; сузившийся ctx.body должен совпасть.
+- pick / omit / extend дают **новую** schema и новый тип; имя OpenAPI-компонента не наследуется — для библиотеки компонентов снова `asName(...)`.
+- partial() делает поля опциональными; безаргументный partial() при transform на полях может быть запрещён типом — используйте `partial('name', 'bio')`.
+- required() ужесточает; при default на поле пропуск всё равно идёт в default.
 
-| Метод | Когда использовать |
+| Метод | Когда |
 | --- | --- |
-| `schema({ ... })` | Первый сбор в блок |
+| `schema({ ... })` | Первичная сборка |
 | `asName('User')` | `$ref` в OpenAPI `components.schemas` |
-| `pick('email', 'password')` | Логин — только два поля |
-| `omit('password')` | Публичные DTO, регистрация без `id` |
-| `extend({ nickname: rule.string() })` | Регистрация добавляет поля к базе аккаунта |
-| `partial()` / `partial('name')` | PATCH, черновые обновления |
-| `required()` / `required('name')` | Черновик становится формальной отправкой |
+| `pick('email', 'password')` | Логин — два поля |
+| `omit('password')` | Внешний DTO, регистрация без `id` |
+| `extend({ nickname: rule.string() })` | Регистрация — доп. поля |
+| `partial()` / `partial('name')` | PATCH, черновики |
+| `required()` / `required('name')` | Черновик → финальная отправка |
 
 ### asName(name)
 
-Имя **не** переносится на результаты `pick` / `omit` / `extend` / `partial` / `required` — вызовите `asName` снова у каждой формы в библиотеке компонентов.
+Имя **не** переезжает в результаты pick / omit / extend / partial / required — каждую форму в компоненты именуйте снова.
 
 ```typescript
 export const userSchema = schema({
@@ -70,17 +70,17 @@ export const publicUserSchema = userSchema.omit('password').asName('PublicUser')
 ### pick / omit
 
 ```typescript
-import { userSchema } from '../schemas/user.schema.js';
+import { userSchema } from '@/schemas/user.schema';
 
 userSchema.pick('email', 'password');
 userSchema.omit('password');
 ```
 
-Регистрация с `body(userSchema)` без `omit('id')` — клиент не должен задавать первичный ключ; для создания выведите отдельную schema.
+Регистрация с body(userSchema) без omit('id') — клиент может менять первичный ключ; для создания отдельная производная schema.
 
 ### extend
 
-При совпадении ключей побеждает аргумент; можно передать таблицу полей или другую schema.
+Одноимённое — из аргумента; можно таблицу полей или другую schema.
 
 ```typescript
 export const accountSchema = schema({
@@ -93,12 +93,12 @@ export const registerSchema = accountSchema.extend({ // [!code highlight]
 });
 ```
 
-Новая форма после `extend` без `asName` остаётся inline в OpenAPI — плохо для `$ref`.
+Забыли asName после extend — в OpenAPI останется inline, хуже для $ref.
 
 ### partial / required
 
 ```typescript
-import { userSchema } from '../schemas/user.schema.js';
+import { userSchema } from '@/schemas/user.schema';
 
 userSchema.pick('name', 'email', 'bio').partial(); // [!code highlight]
 
@@ -107,9 +107,9 @@ draftSchema.required();
 draftSchema.required('name', 'email');
 ```
 
-Голый `partial()` при `transform` на поле может застопорить типы или runtime — используйте именованный `partial('name', 'bio')`.
+Безаргументный partial() при transform на полях может застрять в типах или рантайме — `partial('name', 'bio')`.
 
-### Пример: query списка
+### Пример: query пагинации
 
 ```typescript
 // src/schemas/list-query.schema.ts
@@ -120,14 +120,14 @@ export const listQuerySchema = schema({ // [!code highlight]
 });
 ```
 
-`page` / `pageSize` с default — клиент может их не передавать; в логах «не передано» может отображаться как default.
+У page / pageSize есть default — клиент может не слать; в логах «не передано» будет default.
 
-На Web-маршрутах предпочитайте `body` / `query` вместо ручного `validate` и своих 400 — типы и конверт ошибок остаются согласованными.
+На Web-роутах, где можно body/query — не пишите validate и throw(400) вручную: типы и envelope ошибок ровнее.
 
-Язык сообщений об ошибках следует `language` приложения — см. [Web](/ru/web/#language) · [Console](/ru/console/#language).
+Язык ошибок — по `language` приложения: [Web](/ru/web/#language) · [Console](/ru/console/#language).
 
 ## Дальше
 
-- [Ручная валидация](./validate) (та же schema в скриптах и тестах)
+- [validate](./validate) (скрипты, тесты — та же schema)
 - [object](./rules/object) / [array](./rules/array) / [oneOf](./rules/one-of)
-- [Тело запроса](/ru/web/body) / [Строка запроса](/ru/web/query)
+- [body](/ru/web/body) / [query](/ru/web/query)

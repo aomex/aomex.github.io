@@ -4,9 +4,11 @@ outline: deep
 
 # 入力パラメータ
 
-ターミナルの `--page 1`、`-d 2024-01-01` を **`ctx.options`** に集約。ルールは Web と同じ rule 系。検証失敗は**非ゼロ終了**。docs は `--help` に入る。argv は平坦な文字列チャネル。複雑な構造は平坦フィールドに分割するのが無難。
+ターミナルの `--page 1`、`-d 2024-01-01` を **ctx.options** に収めます。ルールは Web と同じ rule。検証失敗は**非ゼロ終了**；docs は `--help` に入ります。argv はフラットな文字列チャネルなので、複雑な構造はフラットなフィールドに拆すのがよいです。
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 import { rule } from '@aomex/common';
 import { Commander, options } from '@aomex/console';
 
@@ -31,7 +33,7 @@ commander.create('export', {
   action: async (ctx) => {
     const { out, date, limit, verbose } = ctx.options;
     if (verbose) {
-      await ctx.logger.info('export start', { out, date, limit });
+      logger.info(`export start out=${out} date=${date} limit=${limit}`);
     }
     await exportCsv({ out, date, limit });
   },
@@ -42,7 +44,8 @@ commander.create('export', {
 aomex export --out ./a.csv -d 2024-01-01 --limit 50 -v
 aomex export --help
 ```
-署名は二つ覚える：**フィールド表** + 任意の**エイリアス表**：
+
+署名は 2 引数：**フィールド表** + 任意の**エイリアス表**：
 
 ```typescript
 options(
@@ -50,15 +53,18 @@ options(
   aliasList?: { [key in keyof fields]?: string | string[] },
 )
 ```
-`ctx.options` はフィールド表と1対1。`limit` は number（文字列ではない）、`verbose` は boolean、`date` は検証後 Date。エイリアスは検証**前**に展開し、長短オプションは同一フィールドへ。
 
-action で `process.argv` を手作業しない——型と非ゼロ終了の一貫性を失う。
+`ctx.options` はフィールド表と 1 対 1：`limit` は number（文字列ではない）、`verbose` は boolean、検証後 `date` は Date。エイリアスは検証**前**に展開し、長短オプションは同一フィールドへ。
+
+action 内で `process.argv` を手揉みしない — 型と非ゼロ終了の一貫性を失います。
 
 ## migrate と dry-run
 
-DB マイグレーションやバッチで「方向、ステップ数、書き込まない演習」が要る。`rule.boolean()` / `rule.enum()` を options に宣言し、手動も CI も同じ `--dry-run` を渡す。検証失敗は即非ゼロ。action 内 parse より信頼できる。
+DB マイグレーションやバッチで「方向・ステップ・書き込みなし演習」が要ることが多いです。`rule.boolean()` / `rule.enum()` を options に宣言し、手動も CI も同じ `--dry-run` — 検証失敗ですぐ非ゼロ終了。action 内で文字列 parse するより堅いです。
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 commander.create('migrate', {
   mount: [
     options({ // [!code highlight]
@@ -70,18 +76,19 @@ commander.create('migrate', {
   action: async (ctx) => {
     const { direction, steps, dryRun } = ctx.options;
     if (dryRun) {
-      await ctx.logger.info('dry-run', { direction, steps });
+      logger.info(`dry-run direction=${direction} steps=${steps ?? ''}`);
       return;
     }
     await runMigrate({ direction, steps });
   },
 });
 ```
-## Cron と共有
 
-Cron 発火時は `args` にパラメータを詰め、CLI と同じ `options()` 検証を再度通る。フィールド名・型は手打ち `aomex export --out ...` と一致させる。さもないと定時は action 手前まで来て検証で落ちる。
+## Cron と共用
 
-Cron の args は同じルールセット必須——さもないと「本番の定時引数が不正」：
+Cron 発火時は `args` にパラメータが連結され、CLI と同じ `options()` 検証を再度通ります。フィールド名・型は手打ち `aomex export --out ...` と一致させないと、定期実行は action 手前まで来て検証で落ちます。
+
+Cron の args は同じルールセット必須 — そうでないと「本番の cron 引数が不正」になります：
 
 ```typescript
 import { cron } from '@aomex/cron';
@@ -102,14 +109,15 @@ commander.create('export', {
   },
 });
 ```
+
 ::: warning
-Cron の `args` のフィールド名は `options` と一致。さもないと発火はするが検証で即死。複雑構造は1 string に JSON を押し込まず平坦化——help と検証が両方つらくなる。
+Cron の args のフィールド名は options と一致必須。一致しないとトリガーは走るが検証で落ちる。複雑構造はフラットに拆し、1 本の string に JSON を詰めて手 parse しない — help も検証も不利です。
 :::
 
-本番 / CI：Cron 注入の args と手動スクリプトでオプション名を統一。ローカルは `--help` でフィールドを揃える。失敗は終了コードと検証メッセージを見る。
+本番 / CI：Cron 注入の args と手動スクリプトは同じオプション名。ローカルは `--help` でフィールドを揃える。失敗は終了コードと検証メッセージを見る。
 
 ## 次のステップ
 
 - コマンド構成：[コマンドルーティング](/ja/console/commander)
-- ルールチェーン：[共通チェーン](/ja/validators/chain)、[バリデータ入門](/ja/validators/)
-- 定時パラメータ：[Cron](/ja/plugins/cron)
+- ルールチェーン：[共通チェーン](/ja/validators/chain)、[バリデータクイックスタート](/ja/validators/)
+- スケジュール引数：[Cron](/ja/plugins/cron)

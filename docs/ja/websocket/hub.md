@@ -2,42 +2,43 @@
 outline: deep
 ---
 
-# マルチマシン Hub
+# マルチインスタンス Hub
 
-Hub が覚えるのは「誰がどの部屋にいるか」と「ブロードキャスト時にどう扇ぎ出すか」です。既定のメモリ Hub が知るのは**今この Node プロセス**内の接続だけ——ローカル開発には十分です。
+Hub は「誰がどのルームにいるか」「ブロードキャストをどう扇ぐか」を記録する。デフォルトのメモリ Hub は**この Node プロセス内**の接続しか知らない——ローカル開発には十分。
 
-いつ Redis Hub に換える必要があるか？
+いつ Redis Hub に替えるか？
 
-- 本番で複数の Web レプリカを走らせ、ユーザーが別マシンに振り分けられる
-- Console（や他プロセス）からも `ws.room(...).send` し、Web プロセス上でまだ繋がっているブラウザへ送りたい
+- 本番で Web レプリカが複数あり、ユーザーが別マシンに当たる
+- Console（ほかプロセス）から `ws.room(...).send` で Web プロセス上のブラウザへ push したい
 
-転送層（ws / Socket.IO）と Hub は**別々の担当**です。クライアントプロトコルを換えても Hub は換えなくてよく、マルチマシン化は Hub だけ換えます。
+トランスポート（ws / Socket.IO）と Hub は**別物**：クライアントプロトコルを変えても Hub は必須ではない；マルチインスタンスでは Hub だけ差し替え。
 
-メッセージは引き続きベストエフォートです。Redis `PUBLISH` が成功しても、各マシンが扇ぎ切った保証も、ブラウザが表示した保証もありません。
+メッセージはベストエフォート：Redis `PUBLISH` 成功 ≠ 全マシンで扇ぎ終わり ≠ ブラウザ表示済み。
 
-## 既定で十分：MemoryHub
+## デフォルトで十分：MemoryHub
 
-`hub` を渡さないと自動でメモリ実装になります。単機・本機結合試験はそのままで構いません——入口ページの `new WebsocketApp({ ... })` がすでにこの状態です。
+`hub` 省略時はメモリ実装。単機・ローカル連携はこのまま——入口の `new WebsocketApp({ ... })` が既にこの状態。
 
-制限を覚えてください：プロセス A の `room().send` は、プロセス B 上の接続には**届きません**。Web と Console が別プロセスなら、Console からいくら send してもブラウザは受け取れません。
+制限：プロセス A の `room().send` はプロセス B の接続に**届かない**。Web と Console が別プロセスなら、Console で send してもブラウザは受け取れない。
 
-## マルチマシンへ：RedisHub
+## マルチインスタンス：RedisHub
 
 ```bash
 pnpm add @aomex/websocket-redis-hub
 ```
 
-各マシンは引き続きローカルで「本機にどの接続があり、それぞれどの部屋にいるか」を持ちます。マシンを跨ぐブロードキャストは Redis Pub/Sub です。ある部屋に本機の人がいなくなれば対応チャンネルを購読解除し、空購読を避けます。
+各マシンはローカルで「自機接続と所属ルーム」を維持；マシン間ブロードキャストは Redis Pub/Sub。ルームに自機クライアントがいなければ該当チャンネル購読をやめ、空購読を避ける。
 
-`host` / `port` / パスワードなどは普段の ioredis と同じです。複数プロジェクトが同じ Redis を共有するときは、必ず `channel`（Pub/Sub チャンネル接頭辞、既定 `aomex:websocket:hub`）を衝突しない名前にしてください。`fanoutBatchSize` は本機が一回に扇ぎ出す接続数で、通常は触りません。
+`host` / `port` / パスワードは ioredis 設定と同様。複数プロジェクトが同一 Redis なら `channel`（Pub/Sub プレフィックス、デフォルト `aomex:websocket:hub`）を衝突しない名前に。`fanoutBatchSize` は自機で一度に扇ぐ接続数。通常は触らない。
 
 ```typescript
 import { WebsocketApp, channels } from '@aomex/websocket';
 import { WsTransport } from '@aomex/websocket-ws-transport';
 import { RedisHub } from '@aomex/websocket-redis-hub';
+import { logger } from '@/services/logger.service';
 
 export const ws = new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   transport: new WsTransport(),
   hub: new RedisHub({ // [!code focus:5]
@@ -50,28 +51,28 @@ export const ws = new WebsocketApp({
 });
 ```
 
-実際のチャンネルは `{接頭辞}:a`（全員向け）と `{接頭辞}:r:{部屋名}` です。**相互にやり取りするすべてのプロセス**（各 Web レプリカ、送信する Console）は、同じ Redis・同じ `channel` 接頭辞である必要があります。
+実チャンネルは `{プレフィックス}:a`（全員）と `{プレフィックス}:r:{ルーム名}`。**相互に届けたい全プロセス**（各 Web レプリカ、push する Console）は同一 Redis・同一 `channel` プレフィックス。
 
 ::: warning
-Socket.IO 転送を使っていても、Socket.IO 公式の Redis adapter は**載せない**でください。部屋とブロードキャストは aomex の `hub` だけを見ます。二系統を重ねるのは地雷です。
+Socket.IO トランスポートでも Socket.IO 公式 Redis adapter は**掛けない**。ルームとブロードキャストは aomex の `hub` のみ。二重は地雷。
 :::
 
-## Console からクロスプロセスで一送り
+## Console からクロスプロセス push
 
-入口ページと同じ型です：`ws` は単独ファイルで export；Web プロセスが `attach` を担当；Console は**import するだけで、絶対に attach しない**。双方の構築時に同じ `RedisHub` 設定を渡します：
+入口と同じ型：`ws` を別ファイル export；Web プロセスが `attach`；Console は **import のみ、attach しない**。両方の構築で同じ `RedisHub` 設定：
 
 ```typescript
-// Console 指令里
-import { ws } from '../ws.js';
+// Console コマンド内
+import { ws } from '@/ws';
 
 await ws.room(`order:${orderId}`).send('order.updated', order);
 await ws.all.send('system.notice', { text: '今晚 23:00 维护' });
 ```
 
-送信前に Hub の準備完了を待ちます。そのときオフラインのクライアントには届きません——次回ページを開いたときに HTTP で状態を揃えれば十分です。
+送信前に Hub の準備を待つ。オフラインのクライアントは受け取れない——次回ページ表示で HTTP から状態を揃える。
 
 ## 次のステップ
 
-- [アプリケーション入口](/ja/websocket/) —— attach と送信の書き方
-- [転送層](/ja/websocket/transport)
-- [マルチプロセスとスケールアウト](/ja/advanced/cluster)
+- [アプリ入口](/ja/websocket/) — attach と push の書き方
+- [トランスポート層](/ja/websocket/transport)
+- [マルチプロセスとスケール](/ja/advanced/cluster)

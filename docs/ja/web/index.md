@@ -4,7 +4,7 @@ outline: deep
 
 # Web アプリケーション入口
 
-HTTP サービスを起動：`new WebApp` で必須項目を埋め、`routers('./src/routers')` でルートをマウント。サイト言語、クライアント IP、ボディ上限、ルート内 `ctx.send` / `ctx.throw` / `ctx.redirect` もここで触れる。
+HTTP サービスを起動する：`new WebApp` で必須項目を埋め、`routers('./src/routers')` でルートを掛ける。以下ではサイト全体の言語、クライアント IP、リクエストボディ上限、およびルート内の `ctx.send` / `ctx.throw` / `ctx.redirect` も説明する。
 
 ```bash
 pnpm add @aomex/web @aomex/common @aomex/logger
@@ -14,11 +14,12 @@ pnpm add tsx -D
 ```typescript
 // src/web.ts
 import { routers, WebApp } from '@aomex/web';
-import { services } from './services/index.js';
+import { logger } from '@/services/logger.service';
+import { services } from '@/services';
 
 const app = new WebApp({ // [!code focus:7]
   services,
-  logger: services.logger,
+  logger, // [!code highlight]
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [routers('./src/routers')], // [!code highlight]
@@ -35,51 +36,57 @@ declare module '@aomex/web' {
   }
 }
 ```
-`new WebApp({ ... })` で services、logger、language、proxyIP のいずれか欠けるとコンパイルエラー。グローバル mount で `middleware.web` が ctx にフィールドを足したのに `declare module` がないと実行時はあるが型に無く、業務で as が増える。ルートに [response()](/ja/web/response) があれば send/throw body 形状が宣言に追従。
+
+`new WebApp({ ... })` で `services`、`logger`、`language`、`proxyIP` のいずれかを欠くとコンパイラがエラーにする。グローバル `mount` で `middleware.web` が `ctx` にフィールドを載せたのに上の `declare module` がないと、実行時には値があるのに型にない——業務で `as` が増える。ルートに [response()](/ja/web/response) があると `ctx.send` / `ctx.throw` の body 形状は宣言に沿って絞られる。
 
 ::: warning
-グローバル mount で ctx にフィールドを足し `declare module` を書かないと、実行時はあるが型に無い。業務で as が増える。
+グローバル `mount` で `ctx` にフィールドを載せたのに `declare module` を書かないと、実行時には値があるのに型にない——業務で `as` が増える。
 :::
 
 ```bash
 node --import tsx/esm --watch src/web.ts
 ```
-ブラウザで [http://localhost:3000](http://localhost:3000)。起動コマンドを package.json scripts に置き、`pnpm start` でチーム統一を推奨。
 
-以下は `new WebApp({ ... })` 内の項目。ルートは「このパスで何をするか」。こちらは「サイト全体の動き方」。
+ブラウザで [http://localhost:3000](http://localhost:3000) を開く。起動コマンドは `package.json` の scripts に入れ、チームで `pnpm start` に揃えるとよい。
+
+以下のフィールドはすべて `new WebApp({ ... })` で触る。ルートは「このパスで何をするか」、ここは「サイト全体をどう回すか」。
 
 ## services と logger
 
-`services` は業務コンテナ（DB、キャッシュ、メール等）。[combineServices](/ja/core/service) 後 WebApp へ。プロセス停止時、フレームワークは読み込み済みサービスに destroy を呼び接続切断・ログ flush。
+`services` は業務サービスコンテナ（DB、メールなど）。 [combineServices](/ja/core/service) で組み立てて `WebApp` に渡す。プロセス終了時、フレームワークは破棄段階で読み込み済みサービスの `destroy` を呼び、接続を閉じる。
 
-`logger` は別途再渡し必須（多くは `services.logger` と同一参照）。ルート・ミドルウェアの `ctx.logger` はこのインスタンス。
+`logger` は [`Logger`](/ja/core/logger) インスタンス（`new Logger({ transports })`）。業務では `import { logger } from '@/services/logger.service'`；`ctx.logger` は同一参照で、サードパーティ middleware と app 内 middleware 向け。キャッシュは [`Caching`](/ja/core/cache)。
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 const app = new WebApp({
   services, // [!code highlight]
-  logger: services.logger, // [!code highlight]
+  logger, // [!code highlight]
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
 });
 ```
+
 ## language
 
-**body() / query() 検証失敗とフレームワーク内蔵メッセージ**の言語。言語コードは `zh-CN`、`en-US`（ハイフン。`zh_CN` 不可）。フレームワーク側文案。Ant Design / Day.js の locale や業務文言ではない——業務多言語は [上級：ビジネス i18n](/ja/advanced/i18n)。
+**`body()` / `query()` 検証失敗とフレームワーク組み込みメッセージ**の言語。言語コードは `zh-CN`、`en-US`（ハイフン；`zh_CN` は不可）。フレームワーク側の文言であり、Ant Design / Day.js の locale や業務 i18n ではない——業務の多言語は [上級：業務 i18n](/ja/advanced/i18n)。
 
-| モード | いつ |
+| モード | いつ使うか |
 | --- | --- |
-| `fixed` + `language` | イントラネット管理画面、単一言語 SaaS。リクエストヘッダ不要 |
+| `fixed` + `language` | イントラ管理、単一言語 SaaS。リクエストヘッダーを読まない |
 | `dynamic` | 公開マルチクライアント API。リクエストで協議 |
-| `header: 'accept-language'` | ブラウザ、標準クライアント（RFC `q` 順） |
-| `header: 'x-language'` | アプリ独自ヘッダ（カンマ区切り、多くは `q` 無視） |
-| `fallback` | ヘッダ欠損・未知時のフォールバック |
+| `header: 'accept-language'` | ブラウザ、標準クライアント（RFC の `q` でソート） |
+| `header: 'x-language'` | アプリ独自ヘッダー（カンマ区切り、`q` は通常無視） |
+| `fallback` | ヘッダー欠落・未認識時のフォールバック |
 
 固定言語：
 
 ```typescript
 language: { mode: 'fixed', language: 'zh-CN' },
 ```
-Accept-Language 協議：
+
+Accept-Language で協議：
 
 ```typescript
 language: {
@@ -88,7 +95,8 @@ language: {
   fallback: 'zh-CN',
 },
 ```
-カスタムヘッダ：
+
+カスタムヘッダー：
 
 ```typescript
 language: {
@@ -97,29 +105,32 @@ language: {
   fallback: 'zh-CN',
 },
 ```
-自己テスト：
+
+動作確認：
 
 ```bash
 curl -H 'Accept-Language: en-US' http://localhost:3000/users
 ```
+
 ::: warning
-遅いミドルウェアで言語を変えない——その前の body()/query() は既にデフォルト言語でエラーかもしれない。フレームワーク文案は WebApp.language に任せる。Console は文字列固定のみ。[Console アプリケーション入口](/ja/console/#language)。
+遅い middleware で言語を変えない——その前に `body()` / `query()` がデフォルト言語で既にエラーを返しているかもしれない。フレームワーク文言は `WebApp.language` に任せる。Console 側は文字列固定のみ、 [Console アプリ入口](/ja/console/#language) 参照。
 :::
 
 ## proxyIP
 
-`ctx.request.ip` を埋める。誤設定はレート制限・リスク管理の誤判定。
+`ctx.request.ip` を埋める。誤設定はレート制限・リスク管理の対象者を間違える。
 
-| モード | いつ |
+| モード | いつ使うか |
 | --- | --- |
-| `detect` | ローカル `tsx`、単体テスト。前段プロキシ不明でもとりあえず動かす |
-| `specify` | インターネット公開の本番。自社リバプロが書いたヘッダだけ信じ、`X-Forwarded-For` 偽造を防ぐ |
+| `detect` | ローカル `tsx`、単体テスト。前面にリバースプロキシがあるか不明なとき、まず動かす |
+| `specify` | 公網本番：自社プロキシが書いたヘッダーだけ信頼し、クライアントの `X-Forwarded-For` 偽造を防ぐ |
 
 ```typescript
 proxyIP: { mode: 'detect' },
 ```
+
 ::: warning
-インターネット公開の本番で detect を長期使わない。クライアントが一般的プロキシヘッダを偽造でき、レート制限・監査が誤る。本番は specify で自社リバプロのヘッダだけ。
+公網本番で `detect` を長期使わない。クライアントが一般的なプロキシヘッダーを偽造でき、レート制限と監査が人を取り違える。本番は `specify` で自社プロキシのヘッダーだけ信頼する。
 :::
 
 ```typescript
@@ -129,14 +140,15 @@ proxyIP: {
   hops: 1,
 },
 ```
-hops は実プロキシ段数と一致。さもないと1つ前のイントラネットや CDN ノードを読む。ログイン異常地通知などが狂う。
 
-| トポロジ | 典型設定 |
+`hops` は実際のプロキシ段数と一致させる。ずれると前跳び内網アドレスや CDN ノードを読み、ログイン異常検知などが狂う。
+
+| トポロジ | よくある設定 |
 | --- | --- |
-| Node がインターネット直結 / 開発機直結 | `detect` または specify でプロキシヘッダ読まない |
-| Nginx 1段 → Node | `specify` + `x-forwarded-for`、`hops: 1` |
-| CDN + 自社 Nginx | `x-forwarded-for`、`hops: 2`（実段数に合わせる） |
-| Cloudflare のみ | `specify` + `cf-connecting-ip`、`hops: 1` |
+| Node が公網直結 / 開発機直結 | `detect` またはプロキシヘッダーを読まない `specify` |
+| 1 段 Nginx → Node | `specify` + `x-forwarded-for`、`hops: 1` |
+| CDN + 自社 Nginx | `x-forwarded-for`、`hops: 2`（実際の段数に合わせる） |
+| トラフィックが Cloudflare のみ | `specify` + `cf-connecting-ip`、`hops: 1` |
 
 ```typescript
 proxyIP: {
@@ -145,19 +157,21 @@ proxyIP: {
   hops: 1,
 },
 ```
+
 ## mount
 
-`mount` はサイト全体ミドルウェア列。各リクエストが配列順に入る（オニオン、`await next()` 前後で処理）。CORS、サイト認証、アクセスログ、`routers('./src/routers')` はここ。
+`mount` はサイト全体のミドルウェアキュー。各リクエストが配列順に入る（オニオンモデル、`await next()` の前後で処理）。CORS、サイト全体の認証、アクセスログ、`routers('./src/routers')` でスキャンした API はここ。
 
-一部 URL だけ効かせたいロジックは [Router](/ja/web/router) か単一ルート mount へ。WebApp に全部詰めない。
+特定 URL グループだけのロジックは [Router](/ja/web/router) または単一ルートの mount へ。`WebApp` に全部詰めない。
 
 ```typescript
 import { middleware } from '@aomex/common';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:9]
@@ -166,36 +180,40 @@ const app = new WebApp({
       await next();
       const cost = Date.now() - start;
       const { method, url } = ctx.request;
-      await ctx.logger.info(`${method} ${url} ${cost}ms`);
+      logger.info(`${method} ${url} ${cost}ms`);
     }),
     routers('./src/routers'),
   ],
 });
 ```
+
 ## shutdown
 
-`SIGTERM` / `SIGINT`（`docker stop`、Ctrl+C、K8s ローリング等）で WebApp は**グレースフル停止**：新接続停止、処理中リクエストをできるだけ完了、services 破棄、終了コード 0。
+`SIGTERM` / `SIGINT`（`docker stop`、Ctrl+C、K8s ローリングなど）を受けると WebApp は**グレースフルシャットダウン**：新規接続を止め、進行中リクエストをできるだけ完了させ、`services` を破棄し、終了コード 0 で終了。
 
-`timeout` は最長待ち（デフォルト約 **5 秒**。ミリ秒や `'10s'` 等）。期限後も接続があれば強制切断。プロセス固着でリリースが止まらないように。
+`timeout` は最長待ち時間（デフォルト約 **5 秒**、ミリ秒または `'10s'` など）。期限時に接続が残れば強制切断し、デプロイでプロセスが固まるのを防ぐ。
 
 ```typescript
 shutdown: { timeout: 10_000 },
 ```
-ローカルはほぼデフォルトのまま。本番でアップロード、ロングポーリング、遅いクエリがあるなら最悪リクエスト時間に合わせて延長。停止中は新規リクエスト不可——LB は先にインスタンスを外してからシグナル。[clusterListen](/ja/advanced/cluster#clusterlisten) を使う場合、primary もシグナルを受け取り各 worker の終了を調整します。
 
-## body サイトクォータ
+ローカル開発ではめったに変更しない。本番でアップロード、ロングポーリング、遅いクエリがあるなら最悪のリクエスト時間に合わせて延ばす。シャットダウン中は新規リクエスト不可——ロードバランサは先にインスタンスを外してからシグナルを送る。[clusterListen](/ja/advanced/cluster#clusterlisten) 使用時、primary もシグナルを受け各 worker の終了を調整。
 
-アップロードや巨大 JSON webhook の前にデフォルトで足りるか確認。不足ならアプリ級で調整。
+## body のサイト全体クォータ
+
+アップロードや大きな JSON の webhook を開く前にデフォルトで足りるか確認。足りなければアプリレベルで厳しく/緩くする。
 
 | 種類 | 典型 Content-Type | デフォルト（参考） |
 | --- | --- | --- |
-| `payload` | JSON、urlencoded、text 等をメモリに丸ごと | 約 `2mb`、超過 **413** |
-| `formData` | `multipart/form-data` | 単ファイル約 `50mb`、ファイル数・フィールド数上限あり |
+| `payload` | JSON、urlencoded、text などメモリに全体読み込み | 約 `2mb`、超過 **413** |
+| `formData` | `multipart/form-data` | 単一ファイル約 `50mb`、ファイル数・フィールド数に上限 |
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   body: { // [!code focus:8]
@@ -209,19 +227,20 @@ const app = new WebApp({
   mount: [routers('./src/routers')],
 });
 ```
-ルート [body()](/ja/web/body) でファイルフィールドがあるとアプリ級 formData と**厳しい方**。[ファイルアップロード](/ja/web/attach) 参照。
 
-公開 webhook や大 JSON はデフォルトクォータを先に確認。丸ごとメモリで超過は **413**。検証失敗 **400** とは別。ルートだけ変えても body.payload を変えないと足りないことが多い。
+ルートの [body()](/ja/web/body) でファイルフィールドを宣言すると、アプリレベルの `formData` 上限と**より厳しい方**が効く。アップロード詳細は [ファイルアップロード](/ja/web/attach)。
+
+公開 webhook や大 JSON の前にデフォルトクォータを確認：全体が先にメモリに入り、超過は **413** で **400** 検証失敗とは別。ルートだけ変えて `body.payload` を触らないと足りないことが多い。
 
 ## envelope
 
-**成功・失敗で同じ JSON 外殻**、外側 HTTP **200** 固定（実コードは body 内）なら `new WebApp` で `envelope`。ルートは従来 send/throw、フレームワークが書き出し前にラップ。
+**成功・失敗を同じ JSON 外殻**にし、外側 HTTP を **200** 固定（実ステータスは body 内）するなら `new WebApp` で `envelope`。ルートでは従来どおり `send` / `throw`、書き出し前にラップする。
 
-宣言ツリーは `envelope.success` / `envelope.payload` / `envelope.statusCode` と任意 `envelope.slot`。[formatError](/ja/web/errors) と併用が多い。特定ステータスを裸レスポンスにするには `response({ skipEnvelope: true })`。詳細・自動スキップ規則（リダイレクト、204、SSE 等）は [レスポンスエンベロープ](/ja/web/envelope)。
+`envelope.success` / `envelope.payload` / `envelope.statusCode` と任意の `envelope.slot` で宣言ツリーを組む。よく [formatError](/ja/web/errors) と併用。特定ステータスだけ素の応答は `response({ skipEnvelope: true })`。詳細と自動スキップ（リダイレクト、204、SSE 等）は [レスポンスのエンベロープ](/ja/web/envelope)。
 
 ## listen、http、https
 
-`listen` が HTTP をポートにバインド。呼ばないと App オブジェクトだけで外から来ない。`app.listen(port)` は `app.http({}).listen(port)` 相当。平文 HTTP。
+`listen` が HTTP をポートにバインドする。呼ばないとプロセス内に App だけ残り外部から届かない。`app.listen(port)` は `app.http({}).listen(port)` と同等で平文 HTTP。
 
 ```typescript
 app.http({ keepAliveTimeout: 65_000 }).listen(3000);
@@ -238,13 +257,14 @@ app
   }) // [!code highlight]
   .listen(443);
 ```
-本番は Nginx / Caddy で TLS 終端し Node HTTP へリバプロ——proxyIP も正しく。
+
+本番では Nginx / Caddy が TLS を終端し Node HTTP にリバースプロキシすることが多い——`proxyIP` も合わせる。
 
 マルチプロセス、Docker scale、K8s レプリカ、PM2、`clusterListen` は [マルチプロセスとスケール](/ja/advanced/cluster)。
 
 ## ctx.send
 
-ルート action やグローバルミドルウェア。ステータス省略は **200**。201、204 等は第一引数に明示。
+ルート action またはグローバル middleware で、ステータス省略時デフォルト **200**。201、204 などは第一引数に明示。
 
 ```typescript
 router.get('/ping', {
@@ -271,9 +291,10 @@ router.delete('/sessions/current', {
   },
 });
 ```
+
 ## ctx.throw
 
-**4xx / 5xx** のみ。業務拒否は ctx.throw。`throw new Error` にしない——公開 4xx が 5xx としてログを汚しにくい。
+**4xx / 5xx** のみ。業務拒否は `ctx.throw`、`throw new Error` ではない——公開 4xx を 5xx としてログを汚さない。
 
 ```typescript
 router.get('/users/:id', { // [!code focus:12]
@@ -294,11 +315,12 @@ router.get('/users/:id', { // [!code focus:12]
 ```typescript
 ctx.throw(500, 'payment gateway timeout', { expose: true });
 ```
-`expose: true` ならレスポンスに message——SQL・内部パスを入れない。
+
+`expose: true` ではレスポンスに message が出る——SQL や内部パスを入れない。
 
 ## ctx.redirect
 
-永久 **301**、一時は多く **302**（省略時デフォルト 302）。
+恒久的 **301**、一時的には **302**（省略時デフォルト 302）。
 
 ```typescript
 router.get('/old-profile', {
@@ -315,26 +337,27 @@ router.get('/login-done', {
   },
 });
 ```
+
 ## download、sse、logger
 
-ルートでよく使う出口。詳細は専用ページ。ここは顔合わせ：
+ルートでよく使う出口。専用ページで詳述、ここでは概要のみ：
 
-- `ctx.download`：ファイルストリーム送出。ストリーム終了で Promise settle。「落として消す」一時ファイル向け。
-- `ctx.sse()`：SSE。[SSE](/ja/web/sse)。
-- `ctx.logger`：WebApp 構築時に渡した logger。`requestId` 等は [ログ · withBindings](/ja/core/logger#リクエスト単位のコンテキストwithbindings)。
+- `ctx.download`：ファイルストリームをクライアントへ。ストリーム終了後に Promise が settle。「落としてすぐ削除」の一時ファイル向け。
+- `ctx.sse()`：Server-Sent Events。[SSE](/ja/web/sse) 参照。
+- 業務ログ：`import { logger } from '@/services/logger.service'`（`ctx.logger` と同一；`ctx.logger` はサードパーティ / app 内 middleware 向け）。`requestId` 等は [ログ · withBindings](/ja/core/logger#リクエスト単位のコンテキストwithbindings)。
 
 ### app.on('error')
 
-action/ミドルウェアで捕捉されない例外は `emit('error', err, ctx)`。デフォルトは `expose` で logger.error するか決める。追加リスナーは Sentry、Slack など旁路通知向け。
+action / middleware で捕まえられない例外は `emit('error', err, ctx)`。デフォルトは `expose` で `logger.error` するか決定済み。このイベントは Sentry、チャット通知など旁路向け。
 
-**ここでレスポンス body を変えない**——タイミングが遅く既存レスポンスと競合しやすい。統一 JSON エラーは [formatError](/ja/web/errors)。成功失敗同じ外殻・外側 200 は [レスポンスエンベロープ](/ja/web/envelope)。
+**ここでレスポンス body を変えない**——タイミングが遅く既出レスポンスと衝突しやすい。サイト全体で統一 JSON エラーは [formatError](/ja/web/errors)；成功失敗とも同じ外殻・外側 200 は [レスポンスのエンベロープ](/ja/web/envelope)。
 
 ## 次のステップ
 
-- [インターフェースルーティング](/ja/web/router)：URL と HTTP 動詞のファイル分割
-- [query](/ja/web/query) / [params](/ja/web/params) / [body](/ja/web/body)：入参検証三種
-- [レスポンス制約](/ja/web/response)：TypeScript と OpenAPI を一致
-- [SSE](/ja/web/sse)：ctx.sse / stream / 断線続き
-- [エラー形式](/ja/web/errors)：`ctx.throw` 後の JSON
-- [レスポンスエンベロープ](/ja/web/envelope)：統一 JSON 外殻・HTTP 200
+- [HTTP ルート](/ja/web/router)：ファイル単位の URL と HTTP 動詞
+- [query](/ja/web/query) / [params](/ja/web/params) / [body](/ja/web/body)：入参検証の三つ
+- [レスポンスの制約](/ja/web/response)：TypeScript と OpenAPI を揃える
+- [SSE](/ja/web/sse)：`ctx.sse` / stream / 再接続
+- [エラー形式](/ja/web/errors)：`ctx.throw` 後の JSON エラー体
+- [レスポンスのエンベロープ](/ja/web/envelope)：統一 JSON 外殻、外側 HTTP 200
 - [マルチプロセスとスケール](/ja/advanced/cluster)：Docker / K8s / PM2 / `clusterListen`

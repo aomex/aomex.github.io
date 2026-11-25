@@ -20,9 +20,10 @@ pnpm add @aomex/rate-limit-redis-store
 import { websocketRateLimit } from '@aomex/rate-limit/websocket';
 import { WebsocketApp, channels } from '@aomex/websocket';
 import { WsTransport } from '@aomex/websocket-ws-transport';
+import { logger } from '@/services/logger.service';
 
 new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   transport: new WsTransport(),
   mount: [ // [!code focus:6]
@@ -64,7 +65,7 @@ websocketRateLimit({ // [!code focus:18]
 
 ## 多副本：Redis
 
-和 HTTP 側用同一套 `RateLimitRedisStore`。就算塞進同一個 store 例項，鍵字首也不同（`aomex-rate-limit:ws:…`），配額不會和 HTTP 限流互相吃掉。真實 IP 依賴 Web 應用上的 `proxyIP`（握手請求走同一套）。
+和 HTTP 側用同一套 `RateLimitRedisStore`。就算塞進同一個 store 實例，鍵字首也不同（`aomex-rate-limit:ws:…`），配額不會和 HTTP 限流互相吃掉。真實 IP 依賴 Web 應用上的 `proxyIP`（握手請求走同一套）。
 
 ```typescript
 import { RateLimitRedisStore } from '@aomex/rate-limit-redis-store';

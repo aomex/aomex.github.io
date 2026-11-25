@@ -17,10 +17,11 @@ Mount `etag()` in `WebApp.mount`; successful GET/HEAD responses get an ETag auto
 ```typescript
 import { etag } from '@aomex/etag';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'en-US' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:4]

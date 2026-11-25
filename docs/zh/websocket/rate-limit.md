@@ -20,9 +20,10 @@ pnpm add @aomex/rate-limit-redis-store
 import { websocketRateLimit } from '@aomex/rate-limit/websocket';
 import { WebsocketApp, channels } from '@aomex/websocket';
 import { WsTransport } from '@aomex/websocket-ws-transport';
+import { logger } from '@/services/logger.service';
 
 new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   transport: new WsTransport(),
   mount: [ // [!code focus:6]

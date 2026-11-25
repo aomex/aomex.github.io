@@ -4,28 +4,28 @@ outline: deep
 
 # WebSocket アプリケーション入口
 
-チャット、注文ステータス、共同編集のカーソル——サーバーからブラウザへ能動的に送る必要がある場面向けです。Web と同じ要領で `WebsocketApp` を作り、**同じ** HTTP ポートにぶら下げます。クライアントは接続後「イベント名」で業務に入ります。注文を DB に書けたら、通常の HTTP ルートから同じ `ws` を呼び、まだオンラインの相手へメッセージを送れます。
+チャット、注文ステータス、共同カーソル——サーバーからブラウザへ能動的に push する用途向け。WebSocket アプリは Web と同様に `WebsocketApp` を組み、**同じ** HTTP ポートに載せる。接続後はイベント名で業務へ。注文を DB に書いたあと、通常の HTTP ルートから同じ `ws` でオンラインユーザーへ push できる。
 
-先に一つだけ押さえてください：メッセージは**ベストエフォート**です。`await ws.room(...).send(...)` が終わっても、フレームワークが外へ書いた（または Redis に渡した）だけで、相手が必ず受け取った保証はなく、自動再送もオフライン受信箱もありません。重要なデータはいつもどおり永続化し、クライアントは再接続後に HTTP で欠けた状態を補います。
+先に言っておく：メッセージは**ベストエフォート**。`await ws.room(...).send(...)` の完了は、フレームワークが書き出した（または Redis に渡した）ことまでで、**相手が必ず受け取る保証はない**。自動再送やオフライン受信箱もない。重要データは DB に。クライアントは再接続後に HTTP で漏れを補う。
 
-## 依存を入れ、最初のインスタンスを書く
+## 依存関係と最初のインスタンス
 
-すでに動く [Web アプリケーション](/ja/web/) がある前提です。リアルタイム用パッケージを追加します：
+動く [Web アプリ](/ja/web/) がある前提。リアルタイム用パッケージを追加：
 
 ```bash
 pnpm add @aomex/websocket @aomex/websocket-ws-transport
 ```
 
-`WebsocketApp` は単独ファイルに置き、`export` してください。HTTP 入口・ルート・Console コマンドはすべてこの一本を import します——ファイルごとに `new` すると、送信が接続と噛み合いません。
+`WebsocketApp` は単独ファイルに置き `export` する。HTTP 入口・ルート・Console はこの一つを import——**各ファイルで `new` しない**。さもないと push と接続がずれる。
 
 ```typescript
 // src/ws.ts
 import { WebsocketApp, channels } from '@aomex/websocket';
 import { WsTransport } from '@aomex/websocket-ws-transport';
-import { services } from './services/index.js';
+import { logger } from '@/services/logger.service';
 
 export const ws = new WebsocketApp({ // [!code focus:8]
-  logger: services.logger,
+  logger, // [!code highlight]
   language: { mode: 'fixed', language: 'zh-CN' },
   path: '/ws',
   transport: new WsTransport(),
@@ -33,13 +33,13 @@ export const ws = new WebsocketApp({ // [!code focus:8]
 });
 ```
 
-`logger`、`language`、`transport` は必須です。欠けるとコンパイラが止めます。
+`logger`、`language`、`transport` は必須。欠けるとコンパイルエラー。
 
-- `logger`：Web / Console と同じ `services.logger` を渡します。転送層の初期化失敗や部屋へのファンアウトエラーはここに出ます。
-- `language`：この接続上のフレームワーク文言（ハンドシェイク失敗、不正フレームの切断理由、レート制限 / 検証失敗の返信）を決めます。上の例は `fixed`——管理画面・社内・単一言語ならこれが一番簡単です。
-- `mount`：まず `channels('./src/channels')` を掛けます。Web で `routers('./src/routers')` を掛けるのと同種です。Channel の書き方は [イベントルーティング](/ja/websocket/channel)。
+- `logger`：Web / Console と**同じ** `Logger`。トランスポート初期化失敗やルーム扇ぎ失敗のログ先。
+- `language`：この接続上のフレームワーク文言（握手失敗、不正フレームの close 理由、限流・検証失敗の push）。ここでは `fixed`——管理画面・イントラ・単一言語向け。
+- `mount`：まず `channels('./src/channels')`。Web の `routers('./src/routers')` と同型。Channel の書き方は [イベントルート](/ja/websocket/channel)。
 
-公開マルチクライアントでハンドシェイクのリクエストヘッダから言語を協議するなら、`dynamic` にし、`fallback` を付けます：
+公開マルチクライアントで握手ヘッダー協議なら `dynamic` + `fallback`：
 
 ```typescript
 language: {
@@ -49,25 +49,26 @@ language: {
 },
 ```
 
-`header` の既定は `accept-language`（`q` で並べ替え）。アプリ独自ヘッダなら `x-language` でも構いません。言語コードは `zh-CN`、`en-US`（ハイフン）。
+`header` デフォルトは `accept-language`（`q` ソート）。アプリ独自は `x-language`。言語コードは `zh-CN`、`en-US`（ハイフン）。
 
 ::: tip
-**HTTP ルート**から `ws.room().send()` を呼ぶとき、言語は**その HTTP リクエスト**のもので、長接続がハンドシェイク時に決めた言語ではありません。
+**HTTP ルート**から `ws.room().send()` するときの言語は**その HTTP リクエスト**に従い、長接続握手時の言語ではない。
 :::
 
-## HTTP ポートにぶら下げる
+## HTTP ポートに載せる
 
-WebSocket は自分で別ポートを listen しません——Web 側の `http.Server` でプロトコルアップグレードします。そのためプロセス入口では `app.listen(3000)` 一発ではなく、先に `app.http({})` で server を取り → `ws.attach` → それから `listen` します。
+WebSocket は単独ポートで listen しない——Web の `http.Server` でプロトコルアップグレードする。入口は `app.listen(3000)` 一発ではなく：`app.http({})` で server 取得 → `ws.attach` → `listen`。
 
 ```typescript
-// src/web.ts —— 真正启动进程的入口
+// src/web.ts — プロセス起動の入口
 import { routers, WebApp } from '@aomex/web';
-import { services } from './services/index.js';
-import { ws } from './ws.js';
+import { services } from '@/services';
+import { ws } from '@/ws';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [routers('./src/routers')],
@@ -80,10 +81,10 @@ server.listen(3000, () => {
 });
 ```
 
-`attach` は `listen` の**前**に必須です。同じ `ws` は一度しか attach できず、二度目は即エラーになります。プロセスが停止シグナルを受けると、フレームワークは HTTP を閉じつつ WebSocket 接続をドレインするので、二系統の後始末を自分で書く必要はありません。
+`attach` は `listen` **より前**。同じ `ws` は一度だけ attach、再呼び出しは throw。シャットダウン時は HTTP と同時に WebSocket を排水——二重クリーンアップは不要。
 
 ::: warning
-`src/ws.ts` のモジュールトップで `ws.attach(...)` を書かないでください。Console コマンドも `ws` を import するので、import のたびに attach が走り、プロセス同士で送信が壊れます。
+`src/ws.ts` のモジュールトップで `ws.attach(...)` を書かない。Console も `ws` を import し、import 時に再 attach するとプロセスごとに乱れ、push が壊れる。
 :::
 
 起動：
@@ -92,7 +93,7 @@ server.listen(3000, () => {
 node --import tsx/esm --watch src/web.ts
 ```
 
-ブラウザのコンソールでまず疎通確認（パス既定は `/ws`）：
+ブラウザコンソールで接続（デフォルト `/ws`）：
 
 ```typescript
 const socket = new WebSocket('ws://localhost:3000/ws');
@@ -104,32 +105,34 @@ socket.onmessage = (ev) => {
 };
 ```
 
-対応する Channel がまだ無いと、このメッセージは黙って捨てられることがあります（既定 `unknownEvent: 'ignore'`）。先にチャネルを通してからイベント処理を書きましょう。
+対応 Channel がないと黙って捨てられる（デフォルト `unknownEvent: 'ignore'`）。先にチャネルを通してからイベント処理を書く。
 
-## クライアントはどこへ、どのプロトコルで
+## クライアントの接続先とプロトコル
 
-`path` がブラウザの接続先です。既定は `/ws`；変えたらアドレスも合わせて変えます：
+`path` が接続 URL。デフォルト `/ws`；変更時はアドレスも合わせる：
 
 ```typescript
 path: '/realtime',
 // ブラウザ：new WebSocket('ws://localhost:3000/realtime')
 ```
 
-Socket.IO クライアントなら `io('http://localhost:3000', { path: '/realtime' })` です。
+Socket.IO クライアントは `io('http://localhost:3000', { path: '/realtime' })`。
 
-`transport` は**必須**で、ハンドシェイクのアップグレードと各フレームの送受信を担当します。ローカル入門は `new WsTransport()` で十分；あとで Socket.IO に換えるならこの一行だけで、Channel 業務はそのまま——詳しくは [転送層](/ja/websocket/transport)。
+`transport` **必須**——握手アップグレードと送受信。入門は `new WsTransport()`；Socket.IO へはこの一行差し替え、Channel はそのまま——[トランスポート層](/ja/websocket/transport)。
 
-`hub` は**省略可**。既定はメモリ Hub で、部屋とブロードキャストは**現在のプロセス**内だけ有効です。単機開発には十分です。複数レプリカや、Console プロセスから Web 上の人へ送るときは Redis Hub に換えてください——[マルチマシン Hub](/ja/websocket/hub)。
+`hub` **省略可**。デフォルトメモリ Hub、ルームと broadcast は**現在プロセス**のみ。レプリカ複数や Console から Web のブラウザへ push するなら Redis Hub——[マルチインスタンス Hub](/ja/websocket/hub)。
 
-二者は独立です：転送を換えても Hub は換えなくてよく、マルチマシン化は Hub だけ換えます。Socket.IO を使っても、Socket.IO 付属の Redis adapter は**載せない**でください。部屋は aomex の Hub だけを見ます。
+トランスポート変更と Hub 変更は独立。Socket.IO でも Socket.IO 公式 Redis adapter は**掛けない**。ルームは aomex Hub のみ。
 
-## ハンドシェイクで粗く止め、グローバルミドルウェアを掛ける
+## 握手の門番とグローバル middleware
 
-接続がまさにアップグレードしようとしているとき、`verify` で粗い門番ができます。引数は普通の Web リクエストオブジェクトで、Cookie・ヘッダ・IP が読めます。`true` で通し；`false` または HTTP ステータス（例：`401`）で拒否します。イベント単位の権限は Channel の mount の方が向いています。
+アップグレード直前に `verify` で粗い門番。引数は通常の Web リクエスト——Cookie、ヘッダー、IP。`true` で通過；`false` または HTTP ステータス（例 `401`）で握手拒否。イベント単位の権限は Channel の mount が適切。
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 export const ws = new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   transport: new WsTransport(),
   verify: (request) => { // [!code focus:3]
@@ -139,36 +142,38 @@ export const ws = new WebsocketApp({
 });
 ```
 
-`mount` は `WebApp.mount` と同じオニオンキューです。通常は**最後**に `channels(...)` を掛け、手前にアクセスログ・レート制限・濫用チェックを置けます。ここには `middleware.socket` / `middleware.mixin` だけ。HTTP 専用ミドルウェアは入れないでください。
+`mount` は `WebApp.mount` と同じオニオン。通常**最後**に `channels(...)`、その前にアクセスログ・限流・abuse。ここは `middleware.socket` / `middleware.mixin` のみ。HTTP 専用 middleware を入れない。
 
 ```typescript
 mount: [
-  // 访问日志、限速……见侧栏「常用中间件」
+  // アクセスログ、限流……サイドバー「よく使うミドルウェア」参照
   channels('./src/channels'),
 ],
 ```
 
-## 結合試験：未知イベントと単フレームサイズ
+## 調整：未知イベントと単フレームサイズ
 
-クライアントが未登録のイベント名を送ってきたとき、既定は `unknownEvent: 'ignore'`——黙って捨てます。結合試験中は `'error'` にすると、フレームワークが `event: 'error'` のフレームを返し、フロントがイベント名の打ち間違いにすぐ気づけます。本番では多くが `ignore` のままです。
+未登録イベント名はデフォルト `unknownEvent: 'ignore'`——黙って破棄。調整時は `'error'` で `event: 'error'` を push し、イベント名 typo をすぐ発見。本番は多くが `ignore` のまま。
 
 ```typescript
-unknownEvent: 'error', // 联调时打开
+unknownEvent: 'error', // 調整時に有効化
 ```
 
-`maxPayload` は単フレームの最大バイト数で、既定は 1MiB。大きすぎるパケットはメモリを食い、下位層が即切断します。大きな JSON やスクリーンショットの base64 などで必要になってから上げてください。チャットのテキストなら既定で十分です。
+`maxPayload` は単フレーム最大バイト、デフォルト 1MiB。巨大パケットはメモリを食い、下位レイヤが切断する。大 JSON や base64 スクリーンショット向けに上げる；通常チャットはデフォルトでよい。
 
 ```typescript
-maxPayload: 256 * 1024, // 256KiB，收紧一点
+maxPayload: 256 * 1024, // 256KiB、やや厳しめ
 ```
 
-## オンライン状況を見る
+## オンライン状況
 
-人数変化や受信の成否をすぐ知りたいときは `onMetric` を掛けます。何かあるとコールバックします。コールバック内の throw は warn になるだけで、送受信には影響しません。
+人数変化や入站の成否を即知りたいとき `onMetric`。コールバック内の throw は warn のみ、送受信は継続。
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 export const ws = new WebsocketApp({
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   transport: new WsTransport(),
   mount: [channels('./src/channels')],
@@ -180,7 +185,7 @@ export const ws = new WebsocketApp({
 });
 ```
 
-自分で定期的に本機スナップショット（オンライン数、部屋数）を取ることもできます。これは**単機**のデータで、クラスタ全体の集計ではありません：
+自前で定期ポーリングするなら自機スナップショット（オンライン数・ルーム数）。**単機**データでクラスタ全体ではない：
 
 ```typescript
 setInterval(async () => {
@@ -189,16 +194,16 @@ setInterval(async () => {
 }, 10_000);
 ```
 
-## HTTP ルートからメッセージを送る
+## HTTP ルートから push
 
-これが本番でいちばん多い使い方です：API で DB 書き込み → まだオンラインの人へ送る → HTTP はいつもどおり返す。
+本番で最も多い形：API が DB 書き込み → オンラインユーザーへ push → HTTP 応答は通常どおり。
 
-接続が立った直後、フレームワークは自動で `client.id` という名前の部屋にだけ入れます（「この接続だけへ送る」用）。業務の部屋（ロビー、注文番号）は Channel で自分で `join` しないと、`room('lobby').send` の受け手がいません。
+接続直後、フレームワークが自動で入れるのは `client.id` ルーム（この接続だけへの push）。業務ルーム（ロビー、注文 ID）は Channel で `join` しないと `room('lobby').send` は届かない。
 
 ```typescript
 // src/routers/order.ts
 import { Router } from '@aomex/web';
-import { ws } from '../ws.js';
+import { ws } from '@/ws';
 
 export const router = new Router();
 
@@ -214,38 +219,36 @@ router.post('/orders', { // [!code focus:8]
 いくつかの送り方：
 
 ```typescript
-// 所有在线连接
+// 全オンライン接続
 await ws.all.send('system.notice', { text: '维护 5 分钟' });
 
-// 某个 client.id（点对点）
+// 特定 client.id（P2P）
 await ws.room(clientId).send('dm', { text: 'hi' });
 
-// 全员，但排除某个人
+// 全員、一人を除く
 await ws.all.send('notice', { text: '...' }, { except: clientId });
 ```
 
-`except` には接続オブジェクト（`id` があればよい）も、id 文字列そのものも渡せます。部屋名は空文字や `\0` を含むと即エラーになります。
+`except` は接続オブジェクト（`id` があれば可）または id 文字列。ルーム名は空文字不可、`\0` 不可——即 throw。
 
 ::: tip
-既定のメモリ Hub は**プロセスを越えられません**。Console で `import { ws }` して `send` しても、Console と Web が同じ Node プロセスでなければブラウザに届きません——双方を同じ Redis Hub に揃えてください。[マルチマシン Hub](/ja/websocket/hub)。
+デフォルトメモリ Hub は**プロセスを跨げない**。Console で `import { ws }` して `send` し、Console と Web が別 Node プロセスならブラウザに届かない——両方で同一 Redis Hub、 [マルチインスタンス Hub](/ja/websocket/hub)。
 :::
 
-## Web・Console と並べて見る
-
-すでに分かる三つの入口を並べると混ざりにくいです：
+## Web・Console との対照
 
 | | Web | WebSocket | Console |
 | --- | --- | --- | --- |
-| マッチの仕方 | メソッド + パス | イベント名 | コマンド名 |
-| 入力の検証 | query / body / params | `payload()` | `options()` |
-| 出口の宣言 | `response()` | `emit()` | — |
-| プロセスの生き方 | listen し続ける | 同じ Server に attach | `run` で終わる |
+| マッチ | メソッド + パス | イベント名 | コマンド名 |
+| 入参検証 | query / body / params | `payload()` | `options()` |
+| 出口宣言 | `response()` | `emit()` | — |
+| プロセスの居方 | listen で常駐 | 同一 Server に attach | `run` して終了 |
 
-DB 照会やメール送信は引き続き [services](/ja/core/service)；リアルタイムの出入りは Channel；「書き込み成功後にもう一度送る」はルートや Console コマンドから `ws.room` を呼びます。
+DB・メールは [services](/ja/core/service)；リアルタイム入出力は Channel；「書き込み成功後に push」はルートまたは Console で `ws.room` を呼ぶ。
 
 ## 次のステップ
 
-- [イベントルーティング Channel](/ja/websocket/channel) —— まず `pong` を返すイベントを書く
-- [受信 payload](/ja/websocket/payload) / [送信 emit](/ja/websocket/emit)
-- [転送層](/ja/websocket/transport) —— Socket.IO にするか
-- [マルチマシン Hub](/ja/websocket/hub) —— 複数レプリカや Console のクロスプロセス送信
+- [イベントルート Channel](/ja/websocket/channel) — まず `pong` を返すイベント
+- 入站 [payload](/ja/websocket/payload) / 出站 [emit](/ja/websocket/emit)
+- [トランスポート層](/ja/websocket/transport) — Socket.IO にするか
+- [マルチインスタンス Hub](/ja/websocket/hub) — レプリカや Console 跨

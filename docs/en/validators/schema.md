@@ -23,7 +23,7 @@ export type User = Validator.Infer<typeof userSchema>;
 ```typescript
 // src/routers/users.ts
 import { body, Router } from '@aomex/web';
-import { userSchema } from '../schemas/user.schema.js';
+import { userSchema } from '@/schemas/user.schema';
 
 export const router = new Router();
 
@@ -70,7 +70,7 @@ export const publicUserSchema = userSchema.omit('password').asName('PublicUser')
 ### pick / omit
 
 ```typescript
-import { userSchema } from '../schemas/user.schema.js';
+import { userSchema } from '@/schemas/user.schema';
 
 userSchema.pick('email', 'password');
 userSchema.omit('password');
@@ -98,7 +98,7 @@ New shape after `extend` without `asName` stays inline in OpenAPI—bad for `$re
 ### partial / required
 
 ```typescript
-import { userSchema } from '../schemas/user.schema.js';
+import { userSchema } from '@/schemas/user.schema';
 
 userSchema.pick('name', 'email', 'bio').partial(); // [!code highlight]
 

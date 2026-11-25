@@ -6,7 +6,7 @@ outline: deep
 
 掃目錄、撞蜜罐、短時間刷 404、用假 token 試探退出——這些往往不是「正常超限」，而是在摸你的邊界。`@aomex/abuse` 按策略**計數**，滿額後**封 IP**（或回撥你去封賬號），和 [請求限速](/zh-TW/plugins/rate-limit) 互補：限速擋突發 QPS，濫用擋探測與業務側上報的惡意行為。
 
-計數與封禁態落在 `@aomex/cache` 的介面卡上（memory / Redis 等），多例項共享時換 Redis。依賴 `ctx.request.ip`，生產請配 `proxyIP: { mode: 'detect' }`（或固定信任鏈），否則全站可能只看到反代 IP。
+計數與封禁態落在共享的 [`Caching`](/zh-TW/core/cache) 上（memory / Redis 等），多實例共享時換 Redis。依賴 `ctx.request.ip`，生產請配 `proxyIP: { mode: 'detect' }`（或固定信任鏈），否則全站可能只看到反代 IP。
 
 ```bash
 pnpm add @aomex/abuse
@@ -15,17 +15,21 @@ pnpm add @aomex/abuse
 
 ## 建立並掛上 `.web()`
 
-`new Abuse(...)` 得到的是一份**服務**（上面有 `ipAbuse` / `blockIP` 等 API），不是直接能塞進 mount 的中介軟體。HTTP 側用 `.web()` 掛到 `WebApp.mount`。業務程式碼裡繼續拿同一個 `abuse` 例項調 API，**不要**指望它出現在 `ctx` 上。
+`new Abuse(...)` 得到的是一份**服務**（上面有 `ipAbuse` / `blockIP` 等 API），不是直接能塞進 mount 的中介軟體。HTTP 側用 `.web()` 掛到 `WebApp.mount`。業務程式碼裡繼續拿同一個 `abuse` 實例調 API，**不要**指望它出現在 `ctx` 上。
 
 下面這份配置先掛兩條常見策略：蜜罐路徑（碰一下就封）和錯誤狀態碼累計（短時間刷 401 / 404 才封）。
 
 ```typescript
 import { Abuse } from '@aomex/abuse';
+import { Caching } from '@aomex/cache';
 import { CacheMemoryAdapter } from '@aomex/cache/memory';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
+
+const cache = new Caching(new CacheMemoryAdapter());
 
 const abuse = new Abuse({ // [!code focus:18]
-  store: new CacheMemoryAdapter(),
+  store: cache,
   strategies: [
     {
       strategy: 'honeypot',
@@ -46,14 +50,14 @@ const abuse = new Abuse({ // [!code focus:18]
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [abuse.web(), routers('./src/routers')], // [!code highlight]
 });
 ```
 
-本地 / 單測用 memory；生產多副本把 `store` 換成 Redis 介面卡，否則封禁只在本機生效。`window` / `blockFor` 等時長接受毫秒數或可讀字串（如 `'1 hour'`、`'30m'`），與 [快取](/zh-TW/core/cache#時長-durationinput) 同一套 `DurationInput`。
+本地 / 單測用 memory；生產多副本把 `store` 換成掛了 Redis 適配器的同一份 `Caching`，否則封禁只在本機生效。`window` / `blockFor` 等時長接受毫秒數或可讀字串（如 `'1 hour'`、`'30m'`），與 [快取](/zh-TW/core/cache#時長-durationinput) 同一套 `DurationInput`。
 
 請求進來時：若 IP 已封禁 → 預設 **403**；命中蜜罐且滿額 → 當場封禁並 403。`http-error` 在響應結束後計數，**撞線當次仍返回原狀態碼**，下一請求才因封禁變 403。
 
@@ -123,7 +127,7 @@ const abuse = new Abuse({
 
 router.post('/logout', {
   action: async (ctx) => {
-    const hit = await services.cache.deleteLoginToken(token);
+    const hit = await services.user.deleteLoginToken(token);
     if (!hit) {
       await abuse.ipAbuse(ctx.request.ip, 'logout-miss'); // [!code highlight]
     }
@@ -182,11 +186,15 @@ await abuse.userAbuse(userId, 'order-probe');
 被封時預設拋 **403**；要對齊限速語義改成 429，傳 `blockedError`。
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 const abuse = new Abuse({
   store,
   strategies: [/* ... */],
   onBlockIP: async (ip, reason, detail) => {
-    services.logger.warn('abuse.block', { ip, reason, ...detail });
+    await logger.withBindings({ ip, reason, ...detail }, async () => {
+      logger.warn('abuse.block');
+    });
   },
 });
 
@@ -204,7 +212,7 @@ await abuse.blockIP('203.0.113.8', '1 day');
 await abuse.unblockIP('203.0.113.8');
 ```
 
-`onBlockIP` 的 `reason` 在 HTTP 側常見為 `'honeypot' | 'http-error' | 'ip-abuse' | 'manual'`；若同一例項還掛了 WebSocket 事件蜜罐，還會出現 `'socket-events'`（見 [濫用防護（WebSocket）](/zh-TW/websocket/abuse)）。`detail.blockFor` 單位是毫秒；已封則再調 `blockIP` 會跳過（不重新整理 TTL、不重複回撥）。
+`onBlockIP` 的 `reason` 在 HTTP 側常見為 `'honeypot' | 'http-error' | 'ip-abuse' | 'manual'`；若同一實例還掛了 WebSocket 事件蜜罐，還會出現 `'socket-events'`（見 [濫用防護（WebSocket）](/zh-TW/websocket/abuse)）。`detail.blockFor` 單位是毫秒；已封則再調 `blockIP` 會跳過（不重新整理 TTL、不重複回撥）。
 
 ::: tip
 濫用封禁偏「抓到了就關一陣」；全站軟限流仍看 [請求限速](/zh-TW/plugins/rate-limit)。兩者可以同時掛：限速靠前擋毛刺，濫用按策略累計後再封。
@@ -214,5 +222,5 @@ await abuse.unblockIP('203.0.113.8');
 
 - [請求限速](/zh-TW/plugins/rate-limit)
 - [濫用防護（WebSocket）](/zh-TW/websocket/abuse)
-- [快取](/zh-TW/core/cache)（`store` 介面卡與 `DurationInput`）
+- [快取](/zh-TW/core/cache)（共享 `Caching` 與 `DurationInput`）
 - [CSRF 防護](/zh-TW/plugins/csrf)

@@ -2,26 +2,27 @@
 outline: deep
 ---
 
-# Время отклика
+# Время ответа
 
-Записывает время обработки на сервере в заголовок каждого ответа (например, `X-Response-Time`) — удобно браузеру, шлюзу и интеграционным тестам, отслеживающим медленные эндпоинты. Без настроек: смонтируйте и готово.
+Пишет в заголовок каждого ответа длительность обработки на сервере (например X-Response-Time) — для браузера, шлюза, интеграционных тестов. Без настроек: повесили и работает.
 
 ```bash
 pnpm add @aomex/response-time
 ```
 
-## Рядом с журналом доступа
+## Рядом с access log
 
-`responseTime()` без конфигурации; ставьте рядом с access log. После завершения запроса заголовок несёт длительность. Дополняет `access_log` в Nginx / поле `duration` в [httpAccessLog](/ru/plugins/access-log) (заголовок — клиенту/шлюзу, лог — агрегации). В проде журнал доступа чаще на периметре; плагин отвечает на вопрос «нужна ли длительность в заголовке ответа».
+`responseTime()` без конфигурации. Ставят рядом с access log: после запроса время попадает в заголовок ответа. Дополняет Nginx `access_log` / [httpAccessLog](/ru/plugins/access-log) duration (заголовок — клиент/шлюз, лог — агрегация на платформе). В проде access log чаще на edge; плагин решает только «нужен ли duration в заголовке».
 
 ```typescript
 import { responseTime } from '@aomex/response-time';
 import { httpAccessLog } from '@aomex/access-log';
 import { routers, WebApp } from '@aomex/web';
+import { logger } from '@/services/logger.service';
 
 const app = new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   mount: [ // [!code focus:5]
@@ -32,28 +33,28 @@ const app = new WebApp({
 });
 ```
 
-Используется `process.hrtime`; в заголовке часто вида `12.345ms`. Значение есть и при ошибках; в error-path может попасть в `HttpError.headers`.
+Используется process.hrtime; в заголовке часто вида 12.345ms. Попадает и на ошибочные ответы; в error path может сливаться в HttpError.headers.
 
-Обычный `WebMiddleware`, типы бизнес-`ctx` не меняются. Смотрите в Network; в action заголовки вручную не пишете.
+Обычный WebMiddleware, бизнес-тип ctx не меняет. Смотрите заголовки в Network, в action писать руками не нужно.
 
-## Заголовок ответа vs access log
+## Заголовок vs access log
 
-| Выход | Аудитория | Заметки |
+| Вывод | Кому | Заметка |
 | --- | --- | --- |
-| `X-Response-Time` | Браузер, API-шлюз, тесты | Одинаково по всему сайту, независимо от смены маршрутов |
-| `duration` в access log | Платформа логов, алерты, агрегация по маршрутам | См. [HTTP access log](/ru/plugins/access-log) |
+| `X-Response-Time` | Браузер, API gateway, тесты | Одинаково на всех роутах |
+| `duration` в access log | Платформа логов, алерты, по роутам | См. [HTTP access log](/ru/plugins/access-log) |
 
-Таблицы опций нет: **нужен заголовок — монтируйте; нет — не ставьте.** Обычно перед `routers`, рядом с access log.
+Таблицы опций нет: **нужен заголовок — включите, нет — не вешайте.** Обычно перед routers, рядом с access log.
 
 | Среда | Рекомендация |
 | --- | --- |
 | Прод | Часто вместе с `httpAccessLog()` |
-| Локально | Если только tail консоли, может хватить одного access log |
+| Локально | Только console tail — можно оставить один access log |
 
-`X-Response-Time` — не end-to-end: до него ещё шлюз, TLS, очередь клиента. На публичном API заголовок можно срезать на периметре; для внутренних/своих фронтов обычно не критично. Если включён только `responseTime` без сохранения логов, на пике нагрузки всё равно нужен `duration` в агрегации (см. [HTTP access log](/ru/plugins/access-log)).
+X-Response-Time — не полное end-to-end: перед ним шлюз, TLS, очередь клиента. Для публичного API заголовок можно снять на edge; для внутреннего/своего фронта обычно ок. Только responseTime без логов — в пике смотрите duration в агрегации логов ([HTTP access log](/ru/plugins/access-log)).
 
 ## Дальше
 
 - Access log: [HTTP access log](/ru/plugins/access-log)
-- Распределённый трейсинг: [Async trace](/ru/plugins/async-trace)
-- [Middleware](/ru/core/middleware)
+- Распределённый трейсинг: [async-trace](/ru/plugins/async-trace)
+- [middleware](/ru/core/middleware)

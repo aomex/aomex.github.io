@@ -2,27 +2,27 @@
 outline: deep
 ---
 
-# Собственный валидатор
+# Пользовательский валидатор
 
-Номер задания, нечетное число с контрольной цифрой, внутренний код перечисления — одна и та же форма будет неоднократно появляться в теле, запросе, схеме и OpenAPI. пишите каждый раз `rule.string().match(/^E\d{6}$/)` Можно запустить, но:
+Табельный номер, номер с контрольной цифрой, внутренний код перечисления — одна и та же форма многократно в body, query, schema и OpenAPI. Каждый раз `rule.string().match(/^E\d{6}$/)` сработает, но:
 
-- Каждая копия отчета об ошибках пишется по-своему, и совместная отладка непоследовательна.
-- В OpenAPI осталась только общая строка, формат не виден.
-- Чтобы изменить правила, выполните поиск обычных правил по всему миру.
+- тексты ошибок разъезжаются при интеграции;
+- в OpenAPI остаётся generic string без формата;
+- смена правила — глобальный поиск по regex.
 
-Эта страница поможет вам сделать это **` rule.employeeId()`**: Проверка, тип и документы хранятся в одном месте. Для одноразовых полей по-прежнему используйте [Встроенные валидаторы](/ru/validators/builtins) + [Общая цепочка](/ru/validators/chain).
+На этой странице вместе доводим до **`rule.employeeId()`**: проверка, типы и документация в одном месте. Разовые поля — [список валидаторов](/ru/validators/builtins) и [общая цепочка](/ru/validators/chain).
 
-## Как выглядит цель?
+## Как должно выглядеть в конце
 
-В случае успеха поле ` string `; Автоматический 400 при отказе; Включено в документ ` pattern ` и примеры. Конечный маршрут:
+При успехе поле — `string`; при ошибке автоматический 400; в документе `pattern` и example. На маршруте в итоге:
 
 ```typescript
 mount: [body({ employeeId: rule.employeeId() })];
 ```
 
-## Первый шаг: создайте класс и выполняйте только проверку во время выполнения.
+## Шаг 1: класс, только рантайм-проверка
 
-Новый ` src/validators/employee-id.validator.ts`. Забудьте пока об OpenAPI и связанных методах — вы можете ` accept`/` deny `Вот и все.
+Создайте `src/validators/employee-id.validator.ts`. OpenAPI и цепочки — потом; достаточно `accept` / `deny`.
 
 ```typescript
 // src/validators/employee-id.validator.ts
@@ -42,21 +42,21 @@ export class EmployeeIdValidator<T = string> extends Validator<T> {
 }
 ```
 
-` ValidateResult.accept(value)` Указывает на прохождение, и **возвращаемое здесь значение** будет использоваться для ввода последующих действий (может быть нормализовано);` deny ` Нитка уйдет в 400 конвертов.
+`ValidateResult.accept(value)` — прохождение; **именно это значение** идёт дальше (можно нормализовать). Строка в `deny` попадает в envelope 400.
 
-Используйте [Ручная проверка](/ru/validators/validate), чтобы протестировать его самостоятельно, не запуская HTTP:
+Проверьте без HTTP через [ручную валидацию](/ru/validators/validate):
 
 ```typescript
 import { validate } from '@aomex/common';
-import { EmployeeIdValidator } from './employee-id.validator.js';
+import { EmployeeIdValidator } from '@/validators/employee-id.validator';
 
 await validate('E123456', new EmployeeIdValidator()); // 通过
 // await validate('bad', new EmployeeIdValidator()); // 抛错
 ```
 
-## Шаг 2. Объявите тип метода цепочки
+## Шаг 2: объявить типы цепочных методов
 
-в базовом классе ` optional`/` default `/` transform `Ждать` protected `выполнить. Если ваш подкласс не` declare public `И снова тип вернется к базовому классу или дополнит недостающие элементы после цепного вызова. По встроенному` rule.string()`Просто скопируйте оператор (реализация уже есть в базовом классе):
+`optional` / `default` / `transform` на базовом классе — `protected` реализации. Без `declare public` в наследнике тип после цепочки откатывается к базе или теряет дополнения. Скопируйте объявления как у встроенного `rule.string()` (реализация уже в базе):
 
 ```typescript
 import {
@@ -101,14 +101,14 @@ export class EmployeeIdValidator<T = string> extends Validator<T> {
 }
 ```
 
-` declare protected copy `Очень критично: эксклюзивная цепочка (следующий шаг) зависит от` this.copy()`Клонировать, тип возвращаемого значения по-прежнему должен быть ` EmployeeIdValidator`.
+`declare protected copy` критичен: своя цепочка (следующий шаг) клонирует через `this.copy()`, возвращаемый тип должен остаться `EmployeeIdValidator`.
 
-## Шаг 3: Зарегистрируйтесь в ` rule.xxx()`
+## Шаг 3: зарегистрировать в `rule.xxx()`
 
-Два шага обязательны:
+Два шага, оба обязательны:
 
-1. ` declare module '@aomex/common'`Усиливать ` Rule`Интерфейс → Редактор распознает только ` rule.employeeId()`  
-2. ` Rule.register('employeeId', EmployeeIdValidator)`→ Эта фабрика существует только при запуске  
+1. `declare module '@aomex/common'` расширяет `Rule` → редактор знает `rule.employeeId()`
+2. `Rule.register('employeeId', EmployeeIdValidator)` → фабрика в рантайме
 
 ```typescript
 import { Rule } from '@aomex/common';
@@ -123,15 +123,15 @@ Rule.register('employeeId', EmployeeIdValidator); // [!code highlight]
 ```
 
 ::: warning
-Только класс написан, нет ` register`: К счастью, тип может быть правильным (если вы улучшили модуль вручную) во время выполнения. ` rule.employeeId is not a function`.
-Только ` register`,без ` declare module`: Запустить можно, но завершение недоступно. Легко написать как угодно.
+Только класс без `register`: типы могут совпасть (если руками расширяли module), в рантайме `rule.employeeId is not a function`.  
+Только `register` без `declare module`: работает, но без дополнения, легко уйти в any.
 :::
 
-Регистрация является **побочным эффектом**: на любом ` rule.employeeId()`Это должно быть реализовано заранее. Обычной практикой является размещение его в верхней части файла схемы. ` import '../validators/employee-id.validator.js'`или в ` web.ts`/` cli.ts `Вход импортируется один раз.
+Регистрация — **side-effect**: выполнить до любого `rule.employeeId()`. Обычно `import '@/validators/employee-id.validator'` вверху schema-файла или один раз в entry `web.ts` / `cli.ts`.
 
-## Шаг 4. Заполните форму OpenAPI.
+## Шаг 4: форма OpenAPI
 
-крышка` toDocument()`, доступно только при создании документов ` pattern`/` example `. Если этого не написать, документ будет почти обычной строкой.
+Переопределите `toDocument()` — при генерации появятся `pattern` / `example`. Иначе почти plain string.
 
 ```typescript
 import type { OpenAPI } from '@aomex/common';
@@ -145,13 +145,13 @@ protected override toDocument(): OpenAPI.SchemaObject {
 }
 ```
 
-(Если в вашем проекте ` OpenAPI`от `@aomex/common` Если путь экспорта не соответствует подсказке типа, переход к редактору имеет преимущественную силу. )
+(Если путь экспорта `OpenAPI` в проекте не совпадает с подсказкой — следуйте переходу из редактора.)
 
-## Шаг 5: Подключитесь к схеме/маршрутизации
+## Шаг 5: schema / маршрут
 
 ```typescript
 // src/schemas/staff.schema.ts
-import '../validators/employee-id.validator.js';
+import '@/validators/employee-id.validator';
 import { schema, rule } from '@aomex/common';
 
 export const staffSchema = schema({
@@ -162,7 +162,7 @@ export const staffSchema = schema({
 
 ```typescript
 import { body } from '@aomex/web';
-import { staffSchema } from '../schemas/staff.schema.js';
+import { staffSchema } from '@/schemas/staff.schema';
 
 router.post('/staff', {
   mount: [body(staffSchema)],
@@ -173,13 +173,13 @@ router.post('/staff', {
 });
 ```
 
-Попробуйте сейчас еще раз: введите действие с легальным рабочим номером;` employeeId=abc `Должно быть 400, и копия исходит от вашего` deny `.
+Проверка: валидный номер доходит до action; `employeeId=abc` → 400, текст из вашего `deny`.
 
-## Шаг 6 (необязательно): метод эксклюзивной цепочки
+## Шаг 6 (опционально): свой метод цепочки
 
-Например, допускается использование нижнего регистра.` e `. Режимы и встроенные модули` trim `/` min `такой же:` copy()`→ Изменить ` config`→` return `.
+Например разрешить строчную `e`. Как у встроенных `trim` / `min`: `copy()` → правка `config` → `return`.
 
-первый` Options `Рижские поля, а затем реализовать метод:
+Сначала поле в `Options`, затем метод:
 
 ```typescript
 export declare namespace EmployeeIdValidator {
@@ -204,25 +204,25 @@ protected validateValue(value: unknown, _key: string, label: string) {
 }
 ```
 
-использование:` rule.employeeId().allowLowerE()`.
+Использование: `rule.employeeId().allowLowerE()`.
 
-` Rule.register ` Висит **фабрика без параметров**; когда вам нужен «режим», используйте цепочку или конфигурацию по умолчанию, не ждите этого ` rule.employeeId('v2')`(встроенный ` rule.uuid('v4')` Это написано в классе Rule, не зарегистрировано).
+`Rule.register` — **фабрика без аргументов**; «режимы» — через цепочку или default config. Не ждите `rule.employeeId('v2')` (встроенный `rule.uuid('v4')` — метод на классе Rule, не из register).
 
-## При ошибке копирайтинга необходимо использовать языковой пакет продукта
+## Продуктовые строки в `deny`
 
-` deny ` Ничего страшного ` import { i18n } from '../i18n/index.js'` Снова ` i18n.t('errors.badEmployeeId')`. рамка ` language ` Он управляет встроенной проверочной копией, которая представляет собой два набора бизнес-пакетов — см. [Продукт i18n](/ru/advanced/i18n).
+В `deny` можно `import { i18n } from '@/i18n'` и `i18n.t('errors.badEmployeeId')`. `language` фреймворка — для встроенных сообщений валидации; бизнес-пакет отдельно — см. [i18n приложения](/ru/advanced/i18n).
 
-## Полное сравнение файлов
+## Порядок в одном файле
 
-При сборе вышеуказанных шагов в файл рекомендуемая последовательность: Параметры пространства имен → класс (цепочка объявления + validateValue + toDocument + эксклюзивная цепочка) →` declare module `→` Rule.register `.
+Соберите шаги так: namespace Options → class (declare цепочки + validateValue + toDocument + своя цепочка) → `declare module` → `Rule.register`.
 
-Вы можете обратиться к той же процедуре:
+Аналоги:
 
-- [rule.file()](/ru/validators/rules/file)(`@aomex/web `, с maxSize и т. д.)
-- [Mongoose](/ru/plugins/mongoose)` rule.mongoObjectId()`  
+- [rule.file()](/ru/validators/rules/file) (`@aomex/web`, maxSize и т.д.)
+- `rule.mongoObjectId()` в [Mongoose](/ru/plugins/mongoose)
 
-## Связанный
+## См. также
 
--Ежедневное использование: [Валидаторы: быстрый старт](/ru/validators/)
-- Универсальная цепь: [Общая цепочка](/ru/validators/chain)
-- Проверка сценария: [Ручная проверка](/ru/validators/validate)
+- Повседневное использование: [валидаторы: быстрый старт](/ru/validators/)
+- Общая цепочка: [общая цепочка](/ru/validators/chain)
+- В скриптах: [ручная валидация](/ru/validators/validate)

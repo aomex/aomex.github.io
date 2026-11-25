@@ -37,9 +37,11 @@ Do not read the request stream yourself for `JSON.parse`—conflicts with framew
 `WebApp.body.payload.maxSize` limits **site-wide** JSON / text body size; oversize payloads fail with **413** before `body()` validation. Set this on public APIs and webhooks—route schemas cannot stop “cannot parse at all”.
 
 ```typescript
+import { logger } from '@/services/logger.service';
+
 new WebApp({
   services,
-  logger: services.logger,
+  logger,
   language: { mode: 'fixed', language: 'zh-CN' },
   proxyIP: { mode: 'detect' },
   body: { // [!code focus:3]
@@ -98,7 +100,7 @@ export const createPostSchema = schema({
 
 ```typescript
 import { body } from '@aomex/web';
-import { createPostSchema } from '../schemas/post.schema.js';
+import { createPostSchema } from '@/schemas/post.schema';
 
 router.post('/posts', { // [!code focus:6]
   mount: [body(createPostSchema)], // [!code highlight]
