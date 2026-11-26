@@ -146,4 +146,5 @@ Calling across services: inside a class `import { services } from '@/services'` 
 
 - Shared `Caching` and `createRemember`: [Cache](/en/core/cache)
 - Site-wide `Logger`: [Logging](/en/core/logger)
+- Topic produce / consume: [Kafka](/en/core/kafka)
 - Thin routes: [Router](/en/web/router)

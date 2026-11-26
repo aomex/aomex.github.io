@@ -85,6 +85,7 @@ type SidebarLabels = {
   service: string;
   cache: string;
   logger: string;
+  kafka: string;
   prisma: string;
   mongoose: string;
   asyncTrace: string;
@@ -167,6 +168,7 @@ const zhLabels: SidebarLabels = {
   service: '服务层',
   cache: '缓存',
   logger: '日志',
+  kafka: 'Kafka',
   prisma: 'Prisma',
   mongoose: 'Mongoose',
   asyncTrace: '链路追踪',
@@ -249,6 +251,7 @@ const zhTWLabels: SidebarLabels = {
   service: '服務層',
   cache: '快取',
   logger: '日誌',
+  kafka: 'Kafka',
   prisma: 'Prisma',
   mongoose: 'Mongoose',
   asyncTrace: '鏈路追蹤',
@@ -331,6 +334,7 @@ const enLabels: SidebarLabels = {
   service: 'Services',
   cache: 'Cache',
   logger: 'Logger',
+  kafka: 'Kafka',
   prisma: 'Prisma',
   mongoose: 'Mongoose',
   asyncTrace: 'Async tracing',
@@ -413,6 +417,7 @@ const jaLabels: SidebarLabels = {
   service: "サービス層",
   cache: "キャッシュ",
   logger: "ログ",
+  kafka: "Kafka",
   prisma: "Prisma",
   mongoose: "Mongoose",
   asyncTrace: "分散トレース",
@@ -495,6 +500,7 @@ const ruLabels: SidebarLabels = {
   service: "Сервисный слой",
   cache: "Кэш",
   logger: "Логирование",
+  kafka: "Kafka",
   prisma: "Prisma",
   mongoose: "Mongoose",
   asyncTrace: "Трассировка",
@@ -650,6 +656,7 @@ const makeSidebar = (
         { text: t.service, link: p('/core/service') },
         { text: t.cache, link: p('/core/cache') },
         { text: t.logger, link: p('/core/logger') },
+        { text: t.kafka, link: p('/core/kafka') },
         { text: t.prisma, link: p('/plugins/prisma') },
         { text: t.mongoose, link: p('/plugins/mongoose') },
         { text: t.asyncTrace, link: p('/plugins/async-trace') },

@@ -148,4 +148,5 @@ const app = new WebApp({
 
 - 共享 `Caching`、`createRemember`：[缓存](/zh/core/cache)
 - 全站 `Logger`：[日志](/zh/core/logger)
+- 主题生产与消费：[Kafka](/zh/core/kafka)
 - 路由怎么写薄：[接口路由](/zh/web/router)

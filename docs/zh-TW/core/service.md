@@ -148,4 +148,5 @@ const app = new WebApp({
 
 - 共享 `Caching`、`createRemember`：[快取](/zh-TW/core/cache)
 - 全站 `Logger`：[日誌](/zh-TW/core/logger)
+- 主題生產與消費：[Kafka](/zh-TW/core/kafka)
 - 路由怎麼寫薄：[介面路由](/zh-TW/web/router)
