@@ -4,7 +4,7 @@ outline: deep
 
 # 生成OpenAPI
 
-在路由上**声明契约**，再扫成 OpenAPI 3.0：内存里给脚本 / Swagger 用，或经 Console **落盘**成文件给 CI、SDK。生成链路在 `@aomex/openapi-generator`；Swagger / Redoc 只是读这份 JSON 的方式。
+在路由上**声明契约**，再扫成 OpenAPI 3.2：内存里给脚本 / Swagger 用，或经 Console **落盘**成文件给 CI、SDK。生成链路在 `@aomex/openapi-generator`；Swagger / Redoc 只是读这份 JSON 的方式。
 
 没挂 query / body / response 的路由，文档里对应段也会空——运行时照样能跑，只是契约不完整。send / throw 的类型收窄见 [约束响应](/zh/web/response)。
 
@@ -103,6 +103,7 @@ const document = await generateOpenapi({ // [!code focus:11]
   routers: './src/routers',
   app, // [!code highlight]
   docs: {
+    openapi: '3.2.1',
     info: { title: 'My API', version: '1.0.0' },
   },
   fix: (doc) => {
@@ -172,8 +173,10 @@ export const openapiBinaryFile = middleware.web({ // [!code focus:18]
 | --- | --- |
 | `routers` | 必填；与 Web 扫路由同一 glob |
 | `app` | 与线上同一 `WebApp` 实例（带出 mount、envelope） |
-| `docs` | `info.title` / `version` / `description` |
+| `docs` | 必填；`openapi` 选导出版本，`info` 填标题、版本、说明等 |
 | `fix` | 补 `servers`、联系人、厂商扩展；单条响应优先在路由上 `response()` |
+
+导出版本由 `docs.openapi` 决定。推荐用 `3.2.1`，或按工具兼容性选择 `3.2.0`、`3.1.2`、`3.1.1`、`3.1.0`；生成器会保留主要文档结构并在必要时降级到目标 3.1 版本。省略 `docs.openapi` 已不能通过类型检查。
 
 运行时动态吐规范（自建 `/openapi.json`）：
 
@@ -186,6 +189,7 @@ router.get('/openapi.json', {
     const document = await generateOpenapi({ // [!code highlight]
       routers: './src/routers',
       app,
+      docs: { openapi: '3.2.1' },
     });
     ctx.send(document);
   },
@@ -220,6 +224,7 @@ new ConsoleApp({
       app, // [!code highlight]
       saveToFile: 'openapi.json',
       docs: {
+        openapi: '3.2.1',
         info: {
           title: 'My API',
           version: '1.0.0',
@@ -258,6 +263,7 @@ openapi({
   app,
   saveToFile: 'artifacts/openapi.json', // [!code highlight]
   docs: {
+    openapi: '3.2.1',
     info: { title: 'My API', version: '1.0.0' },
   },
 });

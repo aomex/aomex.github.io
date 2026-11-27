@@ -4,7 +4,7 @@ outline: deep
 
 # 生成OpenAPI
 
-在路由上**宣告契約**，再掃成 OpenAPI 3.0：記憶體裡給指令碼 / Swagger 用，或經 Console **落盤**成檔案給 CI、SDK。生成鏈路在 `@aomex/openapi-generator`；Swagger / Redoc 只是讀這份 JSON 的方式。
+在路由上**宣告契約**，再掃成 OpenAPI 3.2：記憶體裡給指令碼 / Swagger 用，或經 Console **落盤**成檔案給 CI、SDK。生成鏈路在 `@aomex/openapi-generator`；Swagger / Redoc 只是讀這份 JSON 的方式。
 
 沒掛 query / body / response 的路由，文件裡對應段也會空——執行時照樣能跑，只是契約不完整。send / throw 的型別收窄見 [約束響應](/zh-TW/web/response)。
 
@@ -103,6 +103,7 @@ const document = await generateOpenapi({ // [!code focus:11]
   routers: './src/routers',
   app, // [!code highlight]
   docs: {
+    openapi: '3.2.1',
     info: { title: 'My API', version: '1.0.0' },
   },
   fix: (doc) => {
@@ -172,8 +173,10 @@ export const openapiBinaryFile = middleware.web({ // [!code focus:18]
 | --- | --- |
 | `routers` | 必填；與 Web 掃路由同一 glob |
 | `app` | 與線上同一 `WebApp` 實例（帶出 mount、envelope） |
-| `docs` | `info.title` / `version` / `description` |
+| `docs` | 必填；`openapi` 選匯出版本，`info` 填標題、版本、說明等 |
 | `fix` | 補 `servers`、聯絡人、廠商擴充套件；單條響應優先在路由上 `response()` |
+
+匯出版本由 `docs.openapi` 決定。推薦用 `3.2.1`，或按工具相容性選擇 `3.2.0`、`3.1.2`、`3.1.1`、`3.1.0`；生成器會保留主要文件結構並在必要時降級到目標 3.1 版本。省略 `docs.openapi` 已無法通過型別檢查。
 
 執行時動態吐規範（自建 `/openapi.json`）：
 
@@ -186,6 +189,7 @@ router.get('/openapi.json', {
     const document = await generateOpenapi({ // [!code highlight]
       routers: './src/routers',
       app,
+      docs: { openapi: '3.2.1' },
     });
     ctx.send(document);
   },
@@ -220,6 +224,7 @@ new ConsoleApp({
       app, // [!code highlight]
       saveToFile: 'openapi.json',
       docs: {
+        openapi: '3.2.1',
         info: {
           title: 'My API',
           version: '1.0.0',
@@ -258,6 +263,7 @@ openapi({
   app,
   saveToFile: 'artifacts/openapi.json', // [!code highlight]
   docs: {
+    openapi: '3.2.1',
     info: { title: 'My API', version: '1.0.0' },
   },
 });

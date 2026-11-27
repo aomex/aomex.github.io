@@ -20,6 +20,7 @@ await generateOpenapi({
   routers: './src/routers',
   app,
   docs: { // [!code focus:18]
+    openapi: '3.2.1',
     info: {
       title: 'My API',
       version: '1.0.0',

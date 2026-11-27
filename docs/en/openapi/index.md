@@ -4,7 +4,7 @@ outline: deep
 
 # Generate OpenAPI
 
-**Declare contracts on routes**, then scan them into OpenAPI 3.0: in memory for scripts / Swagger, or **write to disk** via Console for CI and SDKs. The generation pipeline lives in `@aomex/openapi-generator`; Swagger / Redoc are only ways to read that JSON.
+**Declare contracts on routes**, then scan them into OpenAPI 3.2: in memory for scripts / Swagger, or **write to disk** via Console for CI and SDKs. The generation pipeline lives in `@aomex/openapi-generator`; Swagger / Redoc are only ways to read that JSON.
 
 Routes without mounted `query` / `body` / `response` leave the corresponding sections empty in the doc—runtime still works, but the contract is incomplete. Type narrowing for `send` / `throw`: [Constrain responses](/en/web/response).
 
@@ -103,6 +103,7 @@ const document = await generateOpenapi({ // [!code focus:11]
   routers: './src/routers',
   app, // [!code highlight]
   docs: {
+    openapi: '3.2.1',
     info: { title: 'My API', version: '1.0.0' },
   },
   fix: (doc) => {
@@ -172,8 +173,10 @@ export const openapiBinaryFile = middleware.web({ // [!code focus:18]
 | --- | --- |
 | `routers` | Required; same glob as Web route scan |
 | `app` | Same `WebApp` instance as production (carries `mount`, `envelope`) |
-| `docs` | `info.title` / `version` / `description` |
+| `docs` | Required; `openapi` selects the export version; `info` carries title, version, description, and more |
 | `fix` | Add `servers`, contacts, vendor extensions; prefer route-level `response()` for single responses |
+
+The export version is set by `docs.openapi`. Prefer `3.2.1`, or choose `3.2.0`, `3.1.2`, `3.1.1`, or `3.1.0` for downstream compatibility. The generator preserves the document structure and downgrades to the requested 3.1 version when needed. Omitting `docs.openapi` no longer passes the type check.
 
 Serve the spec dynamically at runtime (custom `/openapi.json`):
 
@@ -186,6 +189,7 @@ router.get('/openapi.json', {
     const document = await generateOpenapi({ // [!code highlight]
       routers: './src/routers',
       app,
+      docs: { openapi: '3.2.1' },
     });
     ctx.send(document);
   },
@@ -220,6 +224,7 @@ new ConsoleApp({
       app, // [!code highlight]
       saveToFile: 'openapi.json',
       docs: {
+        openapi: '3.2.1',
         info: {
           title: 'My API',
           version: '1.0.0',
@@ -258,6 +263,7 @@ openapi({
   app,
   saveToFile: 'artifacts/openapi.json', // [!code highlight]
   docs: {
+    openapi: '3.2.1',
     info: { title: 'My API', version: '1.0.0' },
   },
 });

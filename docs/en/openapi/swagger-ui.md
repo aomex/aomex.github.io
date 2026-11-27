@@ -43,6 +43,7 @@ mount: [ // [!code focus:12]
       return generateOpenapi({
         routers: './src/routers',
         app,
+        docs: { openapi: '3.2.1' },
       });
     },
   }),
